@@ -1,0 +1,53 @@
+name: Update ECMWF ENS data
+
+# Menjalankan pipeline di cloud GitHub 2x/hari lalu commit ecmwf_ens.js.
+# GitHub Pages otomatis re-deploy setiap ada commit baru ke branch utama.
+#
+# Jadwal (UTC): 09:30 -> setelah run ECMWF 00 UTC mendarat
+#               21:30 -> setelah run ECMWF 12 UTC mendarat
+# (Cron GitHub kadang telat beberapa menit — itu normal.)
+
+on:
+  schedule:
+    - cron: "30 9 * * *"
+    - cron: "30 21 * * *"
+  workflow_dispatch: {}          # tombol "Run workflow" manual
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ecmwf-ens
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Run pipeline
+        # --max-members 25 supaya unduhan ~2-3 GB (muat di runner & cepat).
+        # Naikkan/turunkan sesuai kebutuhan. --force = selalu tulis ulang.
+        run: python pipeline/ingest_ecmwf_ens.py --source aws --max-members 25 --force
+
+      - name: Commit hasil
+        run: |
+          git config user.name "bdma-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ecmwf_ens.js
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan data."
+          else
+            git commit -m "data: ECMWF ENS $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi

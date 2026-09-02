@@ -1,0 +1,13 @@
+# Pipeline ECMWF IFS ENS -> ecmwf_ens.js
+# Python 3.9+  (diuji di 3.10, Windows 11)
+#
+#   pip install -r requirements.txt
+#
+# 'eccodes' membawa binari ecCodes (tidak perlu conda / instal terpisah di Windows).
+# Cek: python -m cfgrib selfcheck   -> harus "PASS"
+
+ecmwf-opendata>=0.3.3
+eccodes>=2.31
+cfgrib>=0.9.10
+xarray>=2023.1
+numpy>=1.23

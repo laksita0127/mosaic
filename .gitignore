@@ -1,0 +1,7 @@
+# cache pipeline (jangan di-commit)
+pipeline/grib_cache/
+pipeline/__pycache__/
+pipeline/last_run.txt
+pipeline/ingest.log
+*.grib2
+*.idx

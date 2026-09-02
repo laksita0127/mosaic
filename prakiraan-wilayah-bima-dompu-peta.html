@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BDMA — Bima–Dompu Multi-Model Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f7f9; --panel:#ffffff; --panel-alt:#eef1f4; --border:#d7dde3;
+    --text:#1b2530; --text-dim:#57626d; --text-faint:#8994a0;
+    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --accent:#2b6cb0;
+    --good:#5fbf8f; --warn:#e2984a; --bad:#d9705f;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;padding:28px 20px 60px;}
+  .wrap{max-width:1040px;margin:0 auto;}
+  .masthead{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
+  .masthead-logo{width:46px;height:46px;object-fit:contain;flex:none;}
+  .masthead-logo-fallback{
+    width:46px;height:46px;flex:none;border-radius:6px;background:var(--panel-alt);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--text-dim);letter-spacing:0.5px;
+  }
+  .masthead-text{min-width:0;}
+  .masthead h1{font-size:20px;font-weight:700;margin:0 0 4px;letter-spacing:0.3px;}
+  .masthead-sup{font-size:12.5px;font-weight:500;color:var(--text-dim);margin-left:8px;letter-spacing:0;}
+  .masthead .sub{font-size:12.5px;color:var(--text-dim);}
+  .masthead-unit{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+  .status{font-size:13px;color:var(--text-dim);padding:12px 0;}
+  .status.err{color:var(--bad);}
+
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
+  .field select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .field.grow{flex:1;min-width:160px;}
+  .search-box{position:relative;}
+  .search-box input{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;z-index:1000;display:none;}
+  .search-results div{padding:8px 10px;font-size:12.5px;cursor:pointer;}
+  .search-results div:hover{background:var(--border);}
+
+  .map-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}
+  #map{height:500px;width:100%;background:var(--panel);}
+  .legend-bar{padding:12px 14px;border-top:1px solid var(--border);}
+  .legend-title{font-family:'IBM Plex Mono',monospace;color:var(--text-dim);font-size:11.5px;margin-bottom:8px;}
+  .legend-scale{position:relative;max-width:520px;}
+  .legend-grad{display:flex;height:20px;border-radius:3px;overflow:hidden;border:1px solid var(--border);}
+  .legend-grad span{flex:1;height:100%;}
+  .legend-ticks{position:relative;height:16px;margin-top:3px;}
+  .legend-tick{position:absolute;transform:translateX(-50%);font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-faint);white-space:nowrap;}
+  .legend-note{color:var(--text-faint);font-size:10.5px;margin-top:8px;display:block;}
+
+  .run-info{
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:9px 14px;margin-bottom:12px;font-size:11.5px;color:var(--text-dim);
+  }
+  .run-info .sep{color:var(--border);}
+  .run-info b{color:var(--text);font-weight:600;}
+  .day-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .day-tabs button{
+    background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
+    padding:8px 13px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;cursor:pointer;text-align:left;
+  }
+  .day-tabs button .d1{display:block;font-weight:600;color:var(--text);line-height:1.3;}
+  .day-tabs button .d2{display:block;font-size:11px;color:var(--text-faint);line-height:1.3;margin-top:1px;}
+  .day-tabs button.active{border-color:var(--text-dim);background:var(--panel-alt);}
+  .day-tabs button.active .d1{color:var(--accent);}
+  .refresh-btn{
+    margin-left:auto;background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);
+    width:28px;height:28px;border-radius:var(--radius);cursor:pointer;font-size:14px;flex:none;
+  }
+  .refresh-btn:hover{color:var(--text);}
+  .refresh-btn:disabled{opacity:0.5;cursor:default;}
+  .legend-note{color:var(--text-faint);margin-left:auto;font-size:10.5px;}
+
+  .time-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;}
+  .time-readout{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .time-readout .now{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
+  .time-readout .rel{font-size:12px;color:var(--text-dim);}
+  .slider-row{display:flex;align-items:center;gap:10px;}
+  .play-btn{background:var(--accent);border:none;color:#ffffff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;}
+  input[type=range]{flex:1;accent-color:var(--accent);}
+  .step-btn{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:var(--radius);cursor:pointer;flex:none;}
+  .day-ticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-faint);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+
+  .selected-note{font-size:12.5px;color:var(--text-dim);margin-bottom:14px;}
+  .selected-note b{color:var(--text);}
+  section{margin-bottom:26px;}
+  .sec-title{font-size:11.5px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-faint);margin:0 0 10px;}
+
+  .agree-banner{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);margin-bottom:14px;}
+  .agree-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+  .model-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  .mcard{background:var(--panel);border:1px solid var(--border);border-top:2px solid var(--mclr);border-radius:var(--radius);padding:12px 14px;}
+  .mcard .mname{font-size:12px;font-weight:600;color:var(--mclr);margin-bottom:8px;}
+  .mrow{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--text-dim);}
+  .mrow span.v{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+
+  form.logform{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  form.logform .full{grid-column:1/-1;}
+  form.logform label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;}
+  form.logform input,form.logform textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 9px;border-radius:var(--radius);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  form.logform textarea{font-family:'IBM Plex Sans',sans-serif;resize:vertical;min-height:44px;}
+  form.logform button{grid-column:1/-1;justify-self:start;background:var(--ecmwf);color:#ffffff;border:none;padding:9px 20px;border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:2px;}
+  form.logform button:hover{filter:brightness(1.08);}
+  .form-hint{grid-column:1/-1;font-size:11.5px;color:var(--text-faint);margin-top:-4px;}
+
+  table{border-collapse:collapse;width:100%;}
+  th,td{padding:6px 10px;text-align:right;font-size:12px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  th{color:var(--text-faint);font-weight:500;border-bottom:1px solid var(--border);}
+  th:first-child,td:first-child{text-align:left;color:var(--text-dim);font-family:'IBM Plex Sans',sans-serif;}
+  tbody tr:nth-child(odd){background:rgba(255,255,255,0.015);}
+  .diff-good{color:var(--good);} .diff-warn{color:var(--warn);} .diff-bad{color:var(--bad);}
+  .del-btn{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:11px;text-decoration:underline;padding:0;}
+  .del-btn:hover{color:var(--bad);}
+  .empty-log{color:var(--text-faint);font-size:12.5px;padding:14px 0;}
+  .param-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;}
+
+  footer{margin-top:24px;font-size:11.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:14px;}
+
+  @media (max-width:640px){ #map{height:400px;} .model-cards{grid-template-columns:1fr 1fr;} form.logform{grid-template-columns:1fr 1fr;} }
+  .avgcol{color:var(--text);font-weight:600;background:rgba(43,108,176,0.06);}
+  .ens-bar-wrap{display:flex;flex-direction:row;align-items:center;gap:9px;cursor:help;}
+  .ens-bar-track{position:relative;width:110px;height:9px;background:var(--panel-alt);border:1px solid var(--border);border-radius:5px;}
+  .ens-table{width:auto;}
+  .ens-table td, .ens-table th{padding-right:28px;}
+  .ens-bar-fill{position:absolute;top:0;height:100%;border-radius:5px;opacity:0.65;}
+  .ens-bar-mean{position:absolute;top:-2px;width:2px;height:13px;background:var(--text);}
+  .ens-bar-label{font-size:10.5px;color:var(--text);white-space:nowrap;}
+
+  /* --- Ringkasan bahasa sederhana --- */
+  .summary-card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--accent);
+    border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;}
+  .summary-head{font-size:11.5px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);margin-bottom:10px;}
+  .summary-head b{color:var(--text);text-transform:none;letter-spacing:0;font-size:13px;}
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .summary-item{display:flex;flex-direction:column;gap:3px;}
+  .summary-item .si-key{font-size:11px;color:var(--text-faint);display:flex;align-items:center;gap:5px;}
+  .summary-item .si-val{font-size:15px;font-weight:600;color:var(--text);line-height:1.25;}
+  .summary-item .si-sub{font-size:11.5px;color:var(--text-dim);line-height:1.35;}
+  .si-chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;}
+  .si-chip.c-good{background:rgba(95,191,143,0.18);color:#2f7d5a;}
+  .si-chip.c-warn{background:rgba(226,152,74,0.18);color:#a5661f;}
+  .si-chip.c-bad{background:rgba(217,112,95,0.2);color:#b0402f;}
+  .si-chip.c-neutral{background:var(--panel-alt);color:var(--text-dim);}
+  .help-details{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    margin-bottom:16px;font-size:12.5px;}
+  .help-details summary{cursor:pointer;padding:10px 14px;font-weight:600;color:var(--text-dim);list-style:none;}
+  .help-details summary::-webkit-details-marker{display:none;}
+  .help-details summary::before{content:"▸ ";color:var(--text-faint);}
+  .help-details[open] summary::before{content:"▾ ";}
+  .help-details .help-body{padding:0 14px 14px;color:var(--text-dim);line-height:1.6;}
+  .help-details .help-body li{margin-bottom:5px;}
+  @media (max-width:640px){ .summary-grid{grid-template-columns:1fr 1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="masthead">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/e/e6/Logo_baru_BMKG.png" alt="Logo BMKG" class="masthead-logo"
+      onerror="this.style.display='none'; document.getElementById('logoFallback').style.display='flex';">
+    <div id="logoFallback" class="masthead-logo-fallback" style="display:none;">BMKG</div>
+    <div class="masthead-text">
+      <h1>BDMA <span class="masthead-sup">Bima–Dompu Multi-Model Analysis</span></h1>
+      <div class="sub" id="mastheadSub">32 titik kecamatan/bandara + grid — hujan, suhu, angin, kelembapan — geser waktu per 3 jam</div>
+      <div class="masthead-unit">Stasiun Meteorologi Kelas II Sultan Muhammad Salahuddin — Bima</div>
+    </div>
+  </div>
+
+  <div id="status" class="status">Memuat data model untuk 32 titik…</div>
+
+  <div id="content" style="display:none;">
+    <details class="help-details">
+      <summary>Cara baca halaman ini</summary>
+      <div class="help-body">
+        <ul style="margin:0;padding-left:18px;">
+          <li><b>Peta warna</b> = perkiraan (hujan/suhu/angin/kelembapan) pada jam yang dipilih di penggeser waktu. Warna dihaluskan antar 32 titik kecamatan — bukan grid model asli.</li>
+          <li><b>Penggeser waktu</b> bergerak <b>per 3 jam</b>, dari sekarang (H+0) sampai 7 hari ke depan (H+7).</li>
+          <li><b>Kartu model</b> (ECMWF, GFS, ICON) = 3 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
+          <li><b>Ensemble / "skenario"</b> = satu model dijalankan puluhan kali dengan sedikit variasi kondisi awal, menghasilkan <b>rentang</b> kemungkinan, bukan satu angka. "Peluang hujan 70%" artinya 70% dari skenario menghasilkan hujan.</li>
+          <li><b>Kotak "Ringkasan"</b> di bawah menerjemahkan semua itu jadi satu kalimat untuk titik &amp; jam yang dipilih.</li>
+          <li>Halaman ini alat bantu analisis internal — <b>bukan produk prakiraan resmi BMKG</b>.</li>
+        </ul>
+      </div>
+    </details>
+    <div class="controls">
+      <div class="field">
+        <label>Parameter</label>
+        <select id="paramSel">
+          <option value="hujan">Curah hujan (3 jam)</option>
+          <option value="hujan24">Curah hujan (akumulasi 24 jam)</option>
+          <option value="suhu">Suhu</option>
+          <option value="angin">Angin</option>
+          <option value="rh">Kelembapan</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <select id="modelSel">
+          <option value="avg">Rata-rata 3 model</option>
+          <option value="ecmwf">ECMWF</option>
+          <option value="gfs">GFS</option>
+          <option value="icon">ICON</option>
+        </select>
+      </div>
+      <div class="field grow search-box">
+        <label>Cari kecamatan</label>
+        <input type="text" id="searchInput" placeholder="mis. Sape, Woja, Tambora…" autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
+
+    <div class="run-info" id="runInfo"></div>
+
+    <div class="map-panel">
+      <div id="map"></div>
+      <div class="legend-bar">
+        <div class="legend-title" id="legendTitle"></div>
+        <div class="legend-scale">
+          <div class="legend-grad" id="legendGradBar"></div>
+          <div class="legend-ticks" id="legendTicks"></div>
+        </div>
+        <span class="legend-note">medan diinterpolasi antar 32 titik — bukan grid model asli</span>
+      </div>
+    </div>
+
+    <div class="time-panel">
+      <div class="time-readout">
+        <span class="now" id="timeNow">—</span>
+        <span class="rel" id="timeRel">—</span>
+      </div>
+      <div class="slider-row">
+        <button class="step-btn" id="prevBtn">‹</button>
+        <button class="play-btn" id="playBtn">▶</button>
+        <input type="range" id="timeSlider" min="0" max="23" step="1" value="0">
+        <button class="step-btn" id="nextBtn">›</button>
+      </div>
+      <div class="day-ticks"><span>H+0</span><span>H+1</span><span>H+2</span><span>H+3</span><span>H+4</span><span>H+5</span><span>H+6</span><span>H+7</span></div>
+    </div>
+
+    <div class="selected-note" id="selectedNote"></div>
+
+    <div class="summary-card" id="summaryCard"></div>
+
+    <section>
+      <div class="sec-title">Rincian per model</div>
+      <div class="agree-banner" id="agreeBanner"></div>
+      <div class="model-cards" id="modelCards"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Detail titik terpilih — H+0 s/d H+7, tiap 3 jam</div>
+      <div class="day-tabs" id="detailDayTabs"></div>
+      <div class="param-panel" id="detailTable"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
+        Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
+        <br><b>ECMWF (51 skenario)</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.
+      </div>
+      <div id="ecmwfEnsInfo" style="font-size:11.5px;color:var(--text-faint);margin-bottom:8px;"></div>
+      <div class="param-panel" id="ecmwfEnsTable" style="margin-bottom:14px;"></div>
+      <button class="step-btn" id="loadEnsembleBtn" style="width:auto;padding:8px 16px;">Muat GFS + ICON ensemble untuk titik ini</button>
+      <span id="ensembleStatus" style="font-size:12px;color:var(--text-faint);margin-left:10px;"></span>
+      <div class="param-panel" id="ensembleTable" style="margin-top:10px;display:none;"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Log verifikasi — catat kejadian aktual di titik &amp; waktu terpilih</div>
+      <form class="logform" id="logForm">
+        <div class="form-hint">Mencatat untuk <b id="logTargetLabel">—</b>.</div>
+        <div><label>Curah hujan aktual (mm)</label><input type="number" step="0.1" id="fHujan" required></div>
+        <div><label>Angin dominan</label><input type="text" id="fAngin" placeholder="mis. Timur 15 km/j" required></div>
+        <div><label>Suhu aktual (°C)</label><input type="number" step="0.1" id="fSuhu" required></div>
+        <div><label>Kelembapan aktual (%)</label><input type="number" step="1" id="fRH" required></div>
+        <div class="full"><label>Catatan</label><textarea id="fCatatan" placeholder="observasi tambahan (opsional)"></textarea></div>
+        <button type="submit">Simpan ke log</button>
+      </form>
+    </section>
+
+    <section>
+      <div class="sec-title">Riwayat verifikasi (semua titik)</div>
+      <div id="histWrap"></div>
+    </section>
+  </div>
+
+  <footer>
+    Data model deterministik + ensemble GFS/ICON: Open-Meteo (ECMWF IFS · NOAA GFS · DWD ICON). <b>Ensemble ECMWF IFS ENS (51 member)</b> ditarik terpisah dari ECMWF Open Data (lisensi CC-BY-4.0) lewat <code>pipeline/ingest_ecmwf_ens.py</code> dan dibaca dari <code>ecmwf_ens.js</code> di folder yang sama — bukan produk resmi BMKG. Curah hujan = akumulasi 3 jam ke depan dari waktu terpilih; suhu/kelembapan/angin bersifat sesaat. Log verifikasi memakai penyimpanan yang sama dengan versi sebelumnya.
+  </footer>
+</div>
+
+<!-- Ensemble ECMWF IFS ENS (51 member) — dihasilkan oleh pipeline/ingest_ecmwf_ens.py.
+     Dimuat lewat <script src> supaya jalan langsung dari file:// (tanpa server).
+     Kalau file tidak ada, panel ECMWF ENS otomatis disembunyikan. -->
+<script src="ecmwf_ens.js" onerror="window.__ecmwfEnsMissing=true;"></script>
+
+<script>
+const STATION_POINTS = [
+  { id:'asakota',  name:'Asakota (Kota Bima)',       lat:-8.4384574, lon:118.7340556 },
+  { id:'mpunda',   name:'Mpunda (Kota Bima)',        lat:-8.4583951, lon:118.7468712 },
+  { id:'raba',     name:'Raba (Kota Bima)',          lat:-8.4666508, lon:118.7578140 },
+  { id:'rasanaeb', name:'Rasanae Barat (Kota Bima)', lat:-8.4540632, lon:118.7241865 },
+  { id:'rasanaet', name:'Rasanae Timur (Kota Bima)', lat:-8.4848559, lon:118.7712912 },
+  { id:'ambalawi', name:'Ambalawi (Kab. Bima)', lat:-8.3264522, lon:118.7764962 },
+  { id:'belo',     name:'Belo (Kab. Bima)',     lat:-8.6222979, lon:118.7248796 },
+  { id:'bolo',     name:'Bolo (Kab. Bima)',     lat:-8.5064752, lon:118.6223796 },
+  { id:'donggo',   name:'Donggo (Kab. Bima)',   lat:-8.4208895, lon:118.5966613 },
+  { id:'langgudu', name:'Langgudu (Kab. Bima)', lat:-8.6949798, lon:118.8326843 },
+  { id:'lambitu',  name:'Lambitu (Kab. Bima)',  lat:-8.5649700, lon:118.7899569 },
+  { id:'lambu',    name:'Lambu (Kab. Bima)',    lat:-8.6983459, lon:119.0227159 },
+  { id:'madapangga',name:'Madapangga (Kab. Bima)',lat:-8.5122620, lon:118.5877133 },
+  { id:'monta',    name:'Monta (Kab. Bima)',    lat:-8.6899290, lon:118.6689537 },
+  { id:'palibelo', name:'Palibelo (Kab. Bima)', lat:-8.5373439, lon:118.7375113 },
+  { id:'parado',   name:'Parado (Kab. Bima)',   lat:-8.7638288, lon:118.5542359 },
+  { id:'sanggar',  name:'Sanggar (Kab. Bima)',  lat:-8.3732956, lon:118.2954806 },
+  { id:'soromandi',name:'Soromandi (Kab. Bima)',lat:-8.3811867, lon:118.6901139 },
+  { id:'tambora',  name:'Tambora (Kab. Bima)',  lat:-8.1709744, lon:117.9717606 },
+  { id:'wawo',     name:'Wawo (Kab. Bima)',     lat:-8.5607035, lon:118.8638881 },
+  { id:'wera',     name:'Wera (Kab. Bima)',     lat:-8.3387749, lon:118.9232124 },
+  { id:'woha',     name:'Woha (Kab. Bima)',     lat:-8.5581257, lon:118.6964438 },
+  { id:'sape',     name:'Sape (Kab. Bima)',     lat:-8.5664773, lon:118.9834956 },
+  { id:'dompu',      name:'Dompu (Kab. Dompu)',      lat:-8.5401250, lon:118.4647211 },
+  { id:'huu',        name:"Hu'u (Kab. Dompu)",       lat:-8.7399358, lon:118.4365634 },
+  { id:'kempo',      name:'Kempo (Kab. Dompu)',      lat:-8.5396910, lon:118.2496396 },
+  { id:'kilo',       name:'Kilo (Kab. Dompu)',       lat:-8.3098905, lon:118.3947476 },
+  { id:'manggelewa', name:'Manggelewa (Kab. Dompu)', lat:-8.5188164, lon:118.3190713 },
+  { id:'pajo',       name:'Pajo (Kab. Dompu)',       lat:-8.6081784, lon:118.4913610 },
+  { id:'pekat',      name:'Pekat (Kab. Dompu)',      lat:-8.2605896, lon:117.7970165 },
+  { id:'woja',       name:'Woja (Kab. Dompu)',       lat:-8.5470487, lon:118.4317451 },
+  { id:'bandara', name:'Bandara WADB', lat:-8.5418159, lon:118.6921890 }
+];
+// Grid tambahan (bukan nama tempat) untuk memperhalus medan interpolasi —
+// tiap titik ditanyakan langsung ke model (bukan ditebak dari titik lain).
+function generateGrid(spacing){
+  const lats = STATION_POINTS.map(p=>p.lat), lons = STATION_POINTS.map(p=>p.lon);
+  const minLat=Math.min(...lats)-0.06, maxLat=Math.max(...lats)+0.06;
+  const minLon=Math.min(...lons)-0.06, maxLon=Math.max(...lons)+0.06;
+  const pts = [];
+  let gi = 0;
+  for(let lat=minLat; lat<=maxLat; lat+=spacing){
+    for(let lon=minLon; lon<=maxLon; lon+=spacing){
+      pts.push({ id:'g'+(gi++), name:null, lat:+lat.toFixed(4), lon:+lon.toFixed(4) });
+    }
+  }
+  return pts;
+}
+const GRID_POINTS = generateGrid(0.15);
+const POINTS = STATION_POINTS.concat(GRID_POINTS);
+const STATION_COUNT = STATION_POINTS.length;
+const MODELS = [
+  { key:'ecmwf', param:'ecmwf_ifs025', label:'ECMWF', cls:'ecmwf' },
+  { key:'gfs',   param:'gfs_seamless', label:'GFS',   cls:'gfs' },
+  { key:'icon',  param:'icon_seamless',label:'ICON',  cls:'icon' }
+];
+// True ensemble (many perturbed members per model), fetched separately/on-demand — heavier than the
+// multi-model deterministic set above. Model identifiers per Open-Meteo's ensemble API.
+// ECMWF excluded here: the free ensemble endpoint only returns its single control run (no real
+// members) at a coarser resolution than the ECMWF used in the main table — showing it here was
+// more confusing than useful.
+const ENSEMBLE_MODELS = [
+  { key:'gfs',   param:'gfs_seamless', label:'GFS (GEFS)', cls:'gfs' },
+  { key:'icon',  param:'icon_seamless',label:'ICON (EPS)', cls:'icon' }
+];
+const HOURS_SHOWN = [0,3,6,9,12,15,18,21];
+const KMH_TO_KT = 1/1.852;
+
+// --- ECMWF IFS ENS (51 member), praproses per 3 jam oleh pipeline, dibaca dari ecmwf_ens.js ---
+const ECMWF_ENS = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
+function isStationIdx(pointIdx){ return pointIdx < STATION_COUNT; }
+// Nilai ECMWF ENS untuk satu stasiun pada satu langkah waktu (string sama dg state.steps[].time).
+function ecmwfEnsAt(stationId, stepTime){
+  if(!ECMWF_ENS) return null;
+  const p = ECMWF_ENS.points[stationId];
+  if(!p) return null;
+  const si = ECMWF_ENS.steps.indexOf(stepTime);
+  if(si < 0) return null;
+  const at = (o,k)=> (o && o[k]!=null && o[k][si]!=null) ? o[k][si] : null;
+  const poe = {};
+  (ECMWF_ENS.thresholds_mm||[]).forEach(t=>{
+    const row = p.precip3.poe ? p.precip3.poe[String(t)] : null;
+    poe[t] = row ? row[si] : null;
+  });
+  return {
+    si,
+    precip: { mean:at(p.precip3,'mean'), min:at(p.precip3,'min'), max:at(p.precip3,'max'),
+              p10:at(p.precip3,'p10'), p25:at(p.precip3,'p25'), p50:at(p.precip3,'p50'),
+              p75:at(p.precip3,'p75'), p90:at(p.precip3,'p90'), poe,
+              members: p.precip3.members ? p.precip3.members.map(r=>r[si]) : null },
+    temp:  { mean:at(p.temp,'mean'), min:at(p.temp,'min'), max:at(p.temp,'max'),
+             p10:at(p.temp,'p10'), p50:at(p.temp,'p50'), p90:at(p.temp,'p90') },
+    wind:  { mean:at(p.wind_speed,'mean'), min:at(p.wind_speed,'min'), max:at(p.wind_speed,'max'),
+             p10:at(p.wind_speed,'p10'), p50:at(p.wind_speed,'p50'), p90:at(p.wind_speed,'p90'),
+             dir:at(p.wind_dir,'mean') }
+  };
+}
+// nilai ECMWF ENS sesuai parameter aktif -> {min,max,mean, extra} dalam satuan tampilan
+function ecmwfEnsParam(stationId, stepTime, param){
+  const e = ecmwfEnsAt(stationId, stepTime);
+  if(!e) return null;
+  if(param==='hujan' || param==='hujan24')
+    return { min:e.precip.min, max:e.precip.max, mean:e.precip.mean,
+             p10:e.precip.p10, p90:e.precip.p90, poe:e.precip.poe };
+  if(param==='suhu')
+    return { min:e.temp.min, max:e.temp.max, mean:e.temp.mean, p10:e.temp.p10, p90:e.temp.p90 };
+  if(param==='angin'){
+    const k=KMH_TO_KT;
+    return { min:e.wind.min==null?null:e.wind.min*k, max:e.wind.max==null?null:e.wind.max*k,
+             mean:e.wind.mean==null?null:e.wind.mean*k,
+             p10:e.wind.p10==null?null:e.wind.p10*k, p90:e.wind.p90==null?null:e.wind.p90*k, dir:e.wind.dir };
+  }
+  return null; // rh: ECMWF ENS open-data tidak menyediakan
+}
+
+const PARAM_DEF = {
+  hujan:{ label:'Curah hujan 3 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
+  hujan24:{ label:'Curah hujan 24 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
+  suhu: { label:'Suhu', unit:'°C', stops:[[20,'#5b9bd5'],[24,'#a9d2ee'],[27,'#6fcf97'],[30,'#e2c93f'],[33,'#e2984a'],[36,'#d9453f']] },
+  angin:{ label:'Kec. angin', unit:'kt', stops:[[0,'#ffffff'],[5,'#cfe9f5'],[10,'#a9dced'],[15,'#bfe6b0'],[20,'#8fd17a'],[25,'#d7d878'],[34,'#f5c542'],[48,'#f0943f'],[64,'#e0573f']] },
+  rh:   { label:'Kelembapan', unit:'%', stops:[[40,'#e2984a'],[55,'#e2c93f'],[70,'#ffffff'],[85,'#6fcf97'],[95,'#4fbfae'],[100,'#5b9bd5']] }
+};
+
+let state = { pointsData:[], steps:[], stepIdx:0, param:'hujan', modelSel:'avg', selectedIdx:0, playing:false, timer:null, detailDayIdx:0, ensembleCache:{} };
+let map, arrowMarkers=[], gridMarkers=[], overlayLayer=null, bbox;
+
+function degToCompass(deg){ const dirs=['U','TL','T','TG','S','BD','B','BL']; return dirs[Math.round(deg/45)%8]; }
+function pointDisplayName(point){
+  return point.name || `Titik grid (${point.lat.toFixed(3)}, ${point.lon.toFixed(3)})`;
+}
+function hexToRgb(hex){ const h=hex.replace('#',''); return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}; }
+function interpColor(value, stops){
+  if(value<=stops[0][0]) return hexToRgb(stops[0][1]);
+  if(value>=stops[stops.length-1][0]) return hexToRgb(stops[stops.length-1][1]);
+  for(let i=0;i<stops.length-1;i++){
+    const [v0,c0]=stops[i],[v1,c1]=stops[i+1];
+    if(value>=v0&&value<=v1){
+      const t=(value-v0)/(v1-v0), p0=hexToRgb(c0), p1=hexToRgb(c1);
+      return {r:p0.r+(p1.r-p0.r)*t, g:p0.g+(p1.g-p0.g)*t, b:p0.b+(p1.b-p0.b)*t};
+    }
+  }
+  return hexToRgb(stops[stops.length-1][1]);
+}
+
+async function fetchAll(){
+  const lats = POINTS.map(p=>p.lat).join(',');
+  const lons = POINTS.map(p=>p.lon).join(',');
+  const modelsParam = MODELS.map(m=>m.param).join(',');
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
+    `&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m` +
+    `&models=${modelsParam}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const json = await res.json();
+  const arr = Array.isArray(json) ? json : [json];
+  return arr.map((entry,i)=>({ point:POINTS[i], hours:parseResponse(entry) }));
+}
+function parseResponse(json){
+  const time = json.hourly.time;
+  return time.map((t,i)=>{
+    const rec = { time:t, hour:parseInt(t.slice(11,13),10), date:t.slice(0,10) };
+    MODELS.forEach(m=>{
+      rec[m.key] = {
+        temp: json.hourly['temperature_2m_'+m.param]?.[i],
+        rh: json.hourly['relative_humidity_2m_'+m.param]?.[i],
+        precip: json.hourly['precipitation_'+m.param]?.[i],
+        speed: json.hourly['wind_speed_10m_'+m.param]?.[i],
+        dir: json.hourly['wind_direction_10m_'+m.param]?.[i]
+      };
+    });
+    return rec;
+  });
+}
+
+function buildSteps(){
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  const forwardDates = dates.slice(0,8);
+  const idxByTime = {};
+  state.pointsData[0].hours.forEach((h,i)=>{ idxByTime[h.time]=i; });
+  const steps = [];
+  forwardDates.forEach(date=>{
+    HOURS_SHOWN.forEach(hr=>{
+      const t = `${date}T${String(hr).padStart(2,'0')}:00`;
+      if(idxByTime[t]!=null) steps.push({ time:t, date, hour:hr, idx:idxByTime[t] });
+    });
+  });
+  state.steps = steps;
+}
+
+// per-model reading for a point at a given step: precip is 3h sum, others instantaneous
+function modelReading(pointIdx, step, modelKey){
+  const hours = state.pointsData[pointIdx].hours;
+  const h0 = hours[step.idx];
+  if(!h0 || !h0[modelKey]) return null;
+  let precip3 = 0, n=0;
+  for(let k=0;k<3;k++){
+    const h = hours[step.idx+k];
+    if(h && h[modelKey] && h[modelKey].precip!=null){ precip3 += h[modelKey].precip; n++; }
+  }
+  const base = h0[modelKey];
+  return { temp:base.temp, rh:base.rh, precip3: n?precip3:null, speed:base.speed, dir:base.dir };
+}
+function ensembleReading(pointIdx, step){
+  const parts = MODELS.map(m=>modelReading(pointIdx, step, m.key)).filter(Boolean);
+  if(!parts.length) return null;
+  const avg = k => parts.reduce((s,p)=>s+(p[k]||0),0)/parts.length;
+  let sx=0,sy=0;
+  parts.forEach(p=>{ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); });
+  let dir = Math.atan2(sx,sy)*180/Math.PI; if(dir<0) dir+=360;
+  return { temp:avg('temp'), rh:avg('rh'), precip3:avg('precip3'), speed:avg('speed'), dir };
+}
+function readingFor(pointIdx, step){
+  return state.modelSel==='avg' ? ensembleReading(pointIdx, step) : modelReading(pointIdx, step, state.modelSel);
+}
+function dailyTotalPrecip(pointIdx, date, modelKey){
+  const hours = state.pointsData[pointIdx].hours.filter(h=>h.date===date);
+  return hours.reduce((s,h)=> s + (h[modelKey] && h[modelKey].precip!=null ? h[modelKey].precip : 0), 0);
+}
+function dailyTotalPrecipFor(pointIdx, date){
+  if(state.modelSel!=='avg') return dailyTotalPrecip(pointIdx, date, state.modelSel);
+  const vals = MODELS.map(m=>dailyTotalPrecip(pointIdx, date, m.key));
+  return vals.reduce((s,v)=>s+v,0)/vals.length;
+}
+function paramValueForPoint(pointIdx, step){
+  if(state.param==='hujan24') return dailyTotalPrecipFor(pointIdx, step.date);
+  return paramValue(readingFor(pointIdx, step));
+}
+function paramValue(reading){
+  if(!reading) return null;
+  if(state.param==='hujan') return reading.precip3;
+  if(state.param==='suhu') return reading.temp;
+  if(state.param==='rh') return reading.rh;
+  if(state.param==='angin') return reading.speed*KMH_TO_KT;
+  return null;
+}
+
+function computeBbox(){
+  const pad=0.10, lats=POINTS.map(p=>p.lat), lons=POINTS.map(p=>p.lon);
+  bbox = { minLat:Math.min(...lats)-pad, maxLat:Math.max(...lats)+pad, minLon:Math.min(...lons)-pad, maxLon:Math.max(...lons)+pad };
+}
+function buildFieldCanvas(step){
+  const W=340, H=Math.round(W*(bbox.maxLat-bbox.minLat)/(bbox.maxLon-bbox.minLon));
+  const canvas=document.createElement('canvas'); canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext('2d'); const img=ctx.createImageData(W,H);
+  const def = PARAM_DEF[state.param];
+  const vals = POINTS.map((p,i)=> paramValueForPoint(i, step));
+  for(let y=0;y<H;y++){
+    const lat=bbox.maxLat-(y/(H-1))*(bbox.maxLat-bbox.minLat);
+    for(let x=0;x<W;x++){
+      const lon=bbox.minLon+(x/(W-1))*(bbox.maxLon-bbox.minLon);
+      let wsum=0,vsum=0;
+      for(let i=0;i<POINTS.length;i++){
+        if(vals[i]==null) continue;
+        const dLat=lat-POINTS[i].lat, dLon=lon-POINTS[i].lon, d2=dLat*dLat+dLon*dLon;
+        const w=1/(d2*22+0.0006);
+        wsum+=w; vsum+=w*vals[i];
+      }
+      const val = wsum>0 ? vsum/wsum : def.stops[0][0];
+      const c=interpColor(val, def.stops);
+      const idx=(y*W+x)*4;
+      const isRain = (state.param==='hujan'||state.param==='hujan24');
+      const alpha = isRain ? Math.round(235 * Math.max(0, Math.min(1, val/def.stops[1][0]))) : 235;
+      img.data[idx]=c.r; img.data[idx+1]=c.g; img.data[idx+2]=c.b; img.data[idx+3]=alpha;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return canvas.toDataURL();
+}
+
+function arrowIcon(dirDeg, selected){
+  const rot = (dirDeg+180)%360;
+  const s = selected? 30:22;
+  return L.divIcon({
+    className:'',
+    html:`<svg width="${s}" height="${s}" viewBox="0 0 26 26" style="transform:rotate(${rot}deg)">
+      <line x1="13" y1="21" x2="13" y2="6" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+      <line x1="13" y1="21" x2="13" y2="6" stroke="${selected?'#e2984a':'#12202e'}" stroke-width="2" stroke-linecap="round"/>
+      <polygon points="13,1.5 7,10.5 19,10.5" fill="#ffffff"/>
+      <polygon points="13,3.2 8.6,9.8 17.4,9.8" fill="${selected?'#e2984a':'#12202e'}"/>
+    </svg>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
+function dotIcon(selected){
+  const s = selected?16:9;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${s}px;height:${s}px;border-radius:50%;background:${selected?'#e2984a':'#12202e'};border:${selected?2.5:1.4}px solid #ffffff;box-shadow:0 0 0 1px rgba(0,0,0,0.4);"></div>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
+
+function initMap(){
+  computeBbox();
+  map = L.map('map',{ scrollWheelZoom:false }).setView([-8.53,118.55], 9);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
+    attribution:'Tiles &copy; Esri', maxZoom:14
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:14
+  }).addTo(map);
+  const bounds=[[bbox.minLat,bbox.minLon],[bbox.maxLat,bbox.maxLon]];
+  overlayLayer = L.imageOverlay(buildFieldCanvas(state.steps[0]), bounds, { opacity:0.82, interactive:false }).addTo(map);
+
+  STATION_POINTS.forEach((p,i)=>{
+    const marker = L.marker([p.lat,p.lon], { icon: dotIcon(i===state.selectedIdx) }).addTo(map);
+    marker.bindTooltip('', { direction:'top', offset:[0,-6] });
+    marker.on('click', ()=>{ state.selectedIdx=i; state.detailDayIdx=Math.floor(state.stepIdx/8); render(); });
+    arrowMarkers.push(marker);
+  });
+
+  GRID_POINTS.forEach((gp,gi)=>{
+    const pointIdx = STATION_COUNT + gi;
+    const marker = L.circleMarker([gp.lat, gp.lon], {
+      radius:3, weight:1, color:'#94a3b0', fillColor:'#c3cdd6', fillOpacity:0.6
+    }).addTo(map);
+    marker.bindTooltip('', { direction:'top', offset:[0,-4] });
+    marker.on('click', ()=>{
+      state.selectedIdx = pointIdx;
+      state.detailDayIdx = Math.floor(state.stepIdx/8);
+      render();
+      map.panTo([gp.lat, gp.lon]);
+    });
+    gridMarkers.push(marker);
+  });
+
+  map.on('click', (e)=>{
+    const step = state.steps[state.stepIdx];
+    const def = PARAM_DEF[state.param];
+    const val = idwValueAt(e.latlng.lat, e.latlng.lng, step);
+    const decimals = (state.param==='hujan'||state.param==='hujan24') ? 1 : 0;
+    const valTxt = val!=null ? val.toFixed(decimals)+' '+def.unit : 'tidak tersedia';
+    L.popup({ maxWidth:240 })
+      .setLatLng(e.latlng)
+      .setContent(
+        `<div style="font-family:'IBM Plex Sans',sans-serif;">` +
+        `<div style="font-weight:600;font-size:12.5px;margin-bottom:3px;">${def.label}: ${valTxt}</div>` +
+        `<div style="font-size:11px;color:#8fa0b3;line-height:1.4;">Estimasi interpolasi dari titik-titik kecamatan terdekat — bukan hasil model langsung di lokasi ini. Klik titik bulat/panah terdekat untuk rincian per model.</div>` +
+        `</div>`
+      )
+      .openOn(map);
+  });
+}
+
+function idwValueAt(lat, lon, step){
+  const vals = POINTS.map((p,i)=> paramValueForPoint(i, step));
+  let wsum=0, vsum=0;
+  for(let i=0;i<POINTS.length;i++){
+    if(vals[i]==null) continue;
+    const dLat=lat-POINTS[i].lat, dLon=lon-POINTS[i].lon, d2=dLat*dLat+dLon*dLon;
+    const w=1/(d2*22+0.0006);
+    wsum+=w; vsum+=w*vals[i];
+  }
+  return wsum>0 ? vsum/wsum : null;
+}
+
+function fmtParamValue(pointIdx, step){
+  const def = PARAM_DEF[state.param];
+  const v = paramValueForPoint(pointIdx, step);
+  if(v==null) return '—';
+  const decimals = (state.param==='hujan'||state.param==='hujan24') ? 1 : 0;
+  return v.toFixed(decimals)+' '+def.unit;
+}
+function updateMarkers(step){
+  const def = PARAM_DEF[state.param];
+  STATION_POINTS.forEach((p,i)=>{
+    const isSel = i===state.selectedIdx;
+    if(state.param==='angin'){
+      const r = readingFor(i, step);
+      arrowMarkers[i].setIcon(arrowIcon(r?r.dir:0, isSel));
+    } else {
+      arrowMarkers[i].setIcon(dotIcon(isSel));
+    }
+    arrowMarkers[i].setTooltipContent(`<b>${p.name}</b><br>${def.label}: ${fmtParamValue(i, step)}`);
+  });
+  GRID_POINTS.forEach((gp,gi)=>{
+    const pointIdx = STATION_COUNT + gi;
+    const isSel = pointIdx===state.selectedIdx;
+    gridMarkers[gi].setStyle({
+      radius: isSel?7:3, weight: isSel?2.5:1,
+      color: isSel?'#e2984a':'#94a3b0', fillColor: isSel?'#e2984a':'#c3cdd6'
+    });
+    gridMarkers[gi].setTooltipContent(`Titik grid<br>${def.label}: ${fmtParamValue(pointIdx, step)}<br><span style="font-size:10px;opacity:.7;">klik untuk detail lengkap</span>`);
+  });
+}
+
+function fmtTimeLabel(step){
+  const d = new Date(step.time+':00');
+  if(state.param==='hujan24'){
+    return d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'}) + ' — akumulasi 24 jam (00:00–24:00 WITA)';
+  }
+  const base = d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'}) + ' — ' + String(step.hour).padStart(2,'0')+':00 WITA';
+  if(state.param==='hujan'){
+    const endHour = (step.hour+3)%24;
+    return base + ` (akumulasi hujan s/d ${String(endHour).padStart(2,'0')}:00)`;
+  }
+  return base;
+}
+function stepGranularity(){
+  return state.param==='hujan24' ? 8 : 1;
+}
+function fmtRel(idx){
+  const dayNum = Math.floor(idx/8);
+  if(state.param==='hujan24') return 'H+'+dayNum;
+  return 'H+'+dayNum+', langkah '+((idx%8)+1)+'/8';
+}
+function fmtDateShort(dateStr){ const d=new Date(dateStr+'T00:00:00'); return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}); }
+
+function updateLegend(){
+  const def = PARAM_DEF[state.param];
+  document.getElementById('legendTitle').textContent = def.label+' ('+def.unit+')';
+  // discrete evenly-spaced blocks (like a categorical met legend), not value-proportional —
+  // proportional spacing washes out when values are skewed toward the low end (e.g. dry-season rain).
+  const n = def.stops.length - 1;
+  const gradEl = document.getElementById('legendGradBar');
+  gradEl.innerHTML = def.stops.slice(0,-1).map((s,i)=>`<span style="background:${s[1]}"></span>`).join('');
+  const ticksEl = document.getElementById('legendTicks');
+  ticksEl.innerHTML = '';
+  def.stops.forEach((s,i)=>{
+    const pct = (i/n)*100;
+    const tick = document.createElement('span');
+    tick.className='legend-tick';
+    tick.style.left = pct+'%';
+    tick.textContent = s[0];
+    ticksEl.appendChild(tick);
+  });
+}
+
+// Kategori hujan untuk akumulasi 3 jam (pendekatan, mengacu longgar ke skala BMKG).
+function rainCat3h(mm){
+  if(mm==null)      return { txt:'—', cls:'c-neutral' };
+  if(mm < 0.5)      return { txt:'Tanpa hujan', cls:'c-neutral' };
+  if(mm < 3)        return { txt:'Hujan ringan', cls:'c-good' };
+  if(mm < 10)       return { txt:'Hujan sedang', cls:'c-warn' };
+  if(mm < 20)       return { txt:'Hujan lebat', cls:'c-bad' };
+  return { txt:'Hujan sangat lebat', cls:'c-bad' };
+}
+
+function renderSummaryCard(p, step, avg, spread){
+  const el = document.getElementById('summaryCard');
+  if(!el) return;
+  const when = fmtTimeLabel(step);
+  if(!avg){
+    el.innerHTML = `<div class="summary-head">Ringkasan — <b>${pointDisplayName(p)}</b></div>
+      <div class="si-sub">Data model belum tersedia untuk titik/jam ini.</div>`;
+    return;
+  }
+  const endHour = String((step.hour+3)%24).padStart(2,'0');
+  const e = isStationIdx(state.selectedIdx) ? ecmwfEnsAt(p.id, step.time) : null;
+  const hasEns = !!(e && e.precip && e.precip.mean!=null);
+
+  // Hujan & peluang diambil dari SATU sumber supaya konsisten:
+  // ECMWF (51 skenario) bila tersedia untuk titik+jam ini, kalau tidak → rata-rata 3 model.
+  let rain, popSrc, pop;
+  if(hasEns){
+    rain = e.precip.mean;
+    pop  = (e.precip.poe && e.precip.poe['1']!=null) ? Math.round(e.precip.poe['1']*100) : null;
+    popSrc = '51 skenario ECMWF';
+  } else {
+    rain = avg.precip3;
+    const n = MODELS.length;
+    const hit = MODELS.reduce((s,m)=>{ const r=modelReading(state.selectedIdx, step, m.key); return s + ((r && (r.precip3||0) >= 0.2) ? 1 : 0); }, 0);
+    pop = Math.round(hit/n*100); popSrc = 'kesepakatan 3 model';
+  }
+  const cat = rainCat3h(rain);
+  const popCls = pop==null ? 'c-neutral' : pop>=70 ? 'c-bad' : pop>=40 ? 'c-warn' : 'c-good';
+  const rainDetail = (rain==null) ? '—'
+    : (rain < 0.5) ? 'hampir tidak ada (~0 mm)'
+    : `≈ ${rain.toFixed(1)} mm hingga ${endHour}:00`;
+
+  // Suhu: pakai rentang ECMWF ENS bila ada
+  let tempTxt;
+  if(e && e.temp && e.temp.p10!=null && e.temp.p90!=null)
+    tempTxt = `${e.temp.p10.toFixed(0)}–${e.temp.p90.toFixed(0)} °C`;
+  else
+    tempTxt = `${avg.temp.toFixed(0)} °C`;
+
+  // Keyakinan dari selisih antar model
+  let conf, confCls, confSub;
+  if(spread < 1){ conf='Tinggi'; confCls='c-good'; confSub='3 model hampir sama'; }
+  else if(spread < 4){ conf='Sedang'; confCls='c-warn'; confSub=`model agak beda (±${spread.toFixed(1)} mm)`; }
+  else { conf='Rendah'; confCls='c-bad'; confSub=`model jauh beda (±${spread.toFixed(1)} mm)`; }
+
+  const windTxt = `${degToCompass(avg.dir)} ${(avg.speed*KMH_TO_KT).toFixed(0)} kt`;
+
+  el.innerHTML = `
+    <div class="summary-head">Ringkasan — <b>${pointDisplayName(p)}</b> · ${when}</div>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="si-key">☔ Hujan (3 jam)</div>
+        <div class="si-val"><span class="si-chip ${cat.cls}">${cat.txt}</span></div>
+        <div class="si-sub">${rainDetail}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🌧️ Peluang hujan</div>
+        <div class="si-val"><span class="si-chip ${popCls}">${pop==null?'—':pop+'%'}</span></div>
+        <div class="si-sub">${pop==null?'ECMWF di luar jangkauan':'dari '+popSrc}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🌡️ Suhu &nbsp;·&nbsp; 💨 Angin</div>
+        <div class="si-val">${tempTxt}</div>
+        <div class="si-sub">Angin ${windTxt}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🎯 Keyakinan perkiraan</div>
+        <div class="si-val"><span class="si-chip ${confCls}">${conf}</span></div>
+        <div class="si-sub">${confSub}</div>
+      </div>
+    </div>`;
+}
+
+function render(){
+  const step = state.steps[state.stepIdx];
+  overlayLayer.setUrl(buildFieldCanvas(step));
+  updateMarkers(step);
+  updateLegend();
+
+  document.getElementById('timeNow').textContent = fmtTimeLabel(step);
+  document.getElementById('timeRel').textContent = fmtRel(state.stepIdx);
+  document.getElementById('timeSlider').value = state.stepIdx;
+
+  const p = POINTS[state.selectedIdx];
+  document.getElementById('selectedNote').innerHTML = `Titik terpilih: <b>${pointDisplayName(p)}</b> — klik titik lain pada peta atau cari lewat kotak pencarian.`;
+
+  const modelReadings = {};
+  MODELS.forEach(m=>{ modelReadings[m.key] = modelReading(state.selectedIdx, step, m.key); });
+
+  const precipVals = MODELS.map(m=>modelReadings[m.key]?.precip3||0);
+  const spread = Math.max(...precipVals) - Math.min(...precipVals);
+  const banner = document.getElementById('agreeBanner');
+  let dotColor, msg;
+  if(spread < 1){ dotColor='var(--good)'; msg='Model sepakat pada perkiraan hujan 3-jam di titik &amp; waktu ini.'; }
+  else if(spread < 4){ dotColor='var(--warn)'; msg='Model cukup berbeda (selisih '+spread.toFixed(1)+' mm/3jam) — pertimbangkan observasi aktual.'; }
+  else { dotColor='var(--bad)'; msg='Model berselisih besar (selisih '+spread.toFixed(1)+' mm/3jam) — confidence rendah.'; }
+  banner.innerHTML = `<span class="agree-dot" style="background:${dotColor}"></span><span>${msg}</span>`;
+
+  renderSummaryCard(p, step, ensembleReading(state.selectedIdx, step), spread);
+
+  const cardsWrap = document.getElementById('modelCards');
+  cardsWrap.innerHTML = '';
+  MODELS.forEach(m=>{
+    const r = modelReadings[m.key];
+    const card = document.createElement('div');
+    card.className = 'mcard';
+    card.style.setProperty('--mclr', `var(--${m.cls})`);
+    if(!r){ card.innerHTML = `<div class="mname">${m.label}</div><div class="mrow">Data tidak tersedia</div>`; }
+    else {
+      const total24 = dailyTotalPrecip(state.selectedIdx, step.date, m.key);
+      card.innerHTML = `
+        <div class="mname">${m.label}</div>
+        <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(r.precip3??0).toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24.toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Suhu</span><span class="v">${r.temp.toFixed(1)} °C</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${degToCompass(r.dir)} ${(r.speed*KMH_TO_KT).toFixed(0)} kt</span></div>
+        <div class="mrow"><span>Kelembapan</span><span class="v">${r.rh.toFixed(0)} %</span></div>
+      `;
+    }
+    cardsWrap.appendChild(card);
+  });
+
+  const avgReading = ensembleReading(state.selectedIdx, step);
+  const avgCard = document.createElement('div');
+  avgCard.className = 'mcard';
+  avgCard.style.setProperty('--mclr', 'var(--accent)');
+  if(!avgReading){ avgCard.innerHTML = `<div class="mname">Rata-rata 3 model</div><div class="mrow">Data tidak tersedia</div>`; }
+  else {
+    const total24Avg = dailyTotalPrecipFor(state.selectedIdx, step.date);
+    avgCard.innerHTML = `
+      <div class="mname">Rata-rata 3 model</div>
+      <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(avgReading.precip3??0).toFixed(1)} mm</span></div>
+      <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24Avg.toFixed(1)} mm</span></div>
+      <div class="mrow"><span>Suhu</span><span class="v">${avgReading.temp.toFixed(1)} °C</span></div>
+      <div class="mrow"><span>Angin</span><span class="v">${degToCompass(avgReading.dir)} ${(avgReading.speed*KMH_TO_KT).toFixed(0)} kt</span></div>
+      <div class="mrow"><span>Kelembapan</span><span class="v">${avgReading.rh.toFixed(0)} %</span></div>
+    `;
+  }
+  cardsWrap.appendChild(avgCard);
+
+  // --- Kartu ECMWF IFS ENS (51 member) — probabilistik, dari pipeline ---
+  const ensCard = document.createElement('div');
+  ensCard.className = 'mcard';
+  ensCard.style.setProperty('--mclr', '#7c5cbf');
+  const nMem = ECMWF_ENS ? (ECMWF_ENS.n_members||51) : 51;
+  const ensTitle = `ECMWF · ${nMem} skenario`;
+  const mock = ECMWF_ENS && ECMWF_ENS.mock ? ' <span style="color:var(--warn)">(CONTOH)</span>' : '';
+  if(!ECMWF_ENS){
+    ensCard.innerHTML = `<div class="mname">ECMWF ensemble</div><div class="mrow" style="line-height:1.45">Belum aktif — data ensemble ECMWF belum termuat.</div>`;
+  } else if(!isStationIdx(state.selectedIdx)){
+    ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Hanya untuk titik kecamatan/bandara. Pilih titik bernama pada peta.</div>`;
+  } else {
+    const e = ecmwfEnsAt(p.id, step.time);
+    if(!e){
+      ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Jam ini di luar jangkauan data ECMWF terakhir (${(ECMWF_ENS.run||'').replace('T',' ').replace('Z',' UTC')}).</div>`;
+    } else {
+      const pr = e.precip, poe = pr.poe||{};
+      const pctTxt = v => v==null ? '—' : Math.round(v*100)+'%';
+      const rng = (a,b,u)=> (a==null||b==null) ? '—' : `${a.toFixed(1)}–${b.toFixed(1)} ${u}`;
+      ensCard.innerHTML = `
+        <div class="mname">${ensTitle}${mock}</div>
+        <div class="mrow"><span>Hujan 3j — perkiraan tengah</span><span class="v">${pr.mean==null?'—':pr.mean.toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Kisaran wajar (8 dr 10 skenario)</span><span class="v">${rng(pr.p10,pr.p90,'mm')}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 1 mm</span><span class="v">${pctTxt(poe['1'])}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 10 mm</span><span class="v">${pctTxt(poe['10'])}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 20 mm</span><span class="v">${pctTxt(poe['20'])}</span></div>
+        <div class="mrow"><span>Suhu (kisaran wajar)</span><span class="v">${e.temp.mean==null?'—':e.temp.mean.toFixed(0)}° &nbsp;(${rng(e.temp.p10,e.temp.p90,'°')})</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${e.wind.mean==null?'—':(e.wind.mean*KMH_TO_KT).toFixed(0)} kt${e.wind.dir==null?'':' '+degToCompass(e.wind.dir)}</span></div>
+      `;
+    }
+  }
+  cardsWrap.appendChild(ensCard);
+
+  document.getElementById('logTargetLabel').textContent = `${pointDisplayName(p)}, ${fmtTimeLabel(step)}`;
+  renderDetailTable();
+  renderHistory();
+}
+
+function renderDetailTable(){
+  const pd = state.pointsData[state.selectedIdx];
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  if(state.detailDayIdx >= dates.length) state.detailDayIdx = 0;
+  const tabsEl = document.getElementById('detailDayTabs');
+  tabsEl.innerHTML = '';
+  dates.forEach((date,i)=>{
+    const btn = document.createElement('button');
+    btn.className = i===state.detailDayIdx ? 'active' : '';
+    btn.innerHTML = `<span class="d1">H+${i}</span><span class="d2">${fmtDateShort(date)}</span>`;
+    btn.onclick = ()=>{ state.detailDayIdx=i; renderDetailTable(); };
+    tabsEl.appendChild(btn);
+  });
+  const date = dates[state.detailDayIdx];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  const totals = MODELS.map(m=>`<span class="${m.cls}">${m.label} ${dailyTotalPrecip(state.selectedIdx,date,m.key).toFixed(1)} mm</span>`).join(' &middot; ');
+  const avgTotal = dailyTotalPrecipFor(state.selectedIdx, date);
+  const totalsWithAvg = totals + ` &middot; <span class="avgcol"><b>Rata-rata ${avgTotal.toFixed(1)} mm</b></span>`;
+
+  const rowFmt = (step, modelKey) => {
+    const r = modelReading(state.selectedIdx, step, modelKey);
+    if(!r) return '—';
+    if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
+    if(state.param==='suhu') return r.temp.toFixed(1);
+    if(state.param==='rh') return r.rh.toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+(r.speed*KMH_TO_KT).toFixed(0);
+    return '—';
+  };
+  const rowFmtAvg = (step) => {
+    const r = ensembleReading(state.selectedIdx, step);
+    if(!r) return '—';
+    if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
+    if(state.param==='suhu') return r.temp.toFixed(1);
+    if(state.param==='rh') return r.rh.toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+(r.speed*KMH_TO_KT).toFixed(0);
+    return '—';
+  };
+  const rows = daySteps.map(s=>{
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>` +
+      MODELS.map(m=>`<td class="${m.cls}">${rowFmt(s,m.key)}</td>`).join('') +
+      `<td class="avgcol"><b>${rowFmtAvg(s)}</b></td>` +
+      `</tr>`;
+  }).join('');
+  const unit = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].unit;
+
+  document.getElementById('detailTable').innerHTML = `
+    <div class="param-head">Akumulasi hujan 24 jam (${fmtDateShort(date)}): ${totalsWithAvg}</div>
+    <table>
+      <thead><tr><th>Jam</th>${MODELS.map(m=>`<th>${m.label} (${unit})</th>`).join('')}<th class="avgcol">Rata-rata (${unit})</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  renderEcmwfEns();
+  renderEnsembleTable();
+}
+
+// --- Tabel ECMWF IFS ENS per 3 jam untuk stasiun + hari terpilih ---
+function renderEcmwfEns(){
+  const infoEl = document.getElementById('ecmwfEnsInfo');
+  const wrap = document.getElementById('ecmwfEnsTable');
+  if(!infoEl || !wrap) return;
+
+  if(!ECMWF_ENS){
+    infoEl.innerHTML = 'ECMWF ENS belum aktif — jalankan <code>pipeline/ingest_ecmwf_ens.py</code>, taruh <code>ecmwf_ens.js</code> di folder ini, lalu muat ulang.';
+    wrap.style.display = 'none';
+    return;
+  }
+  const nMem = ECMWF_ENS.n_members || 51;
+  const runTxt = (ECMWF_ENS.run||'').replace('T',' ').replace('Z',' UTC');
+  const genTxt = (ECMWF_ENS.generated||'').replace('T',' ').replace('Z',' UTC');
+  const mockTxt = ECMWF_ENS.mock ? ' <b style="color:var(--warn)">— DATA CONTOH (sintetis), bukan prakiraan asli</b>' : '';
+  infoEl.innerHTML = `ECMWF · <b>${nMem} skenario</b> · data terakhir <b>${runTxt}</b> · diperbarui ${genTxt}${mockTxt}`;
+
+  const point = POINTS[state.selectedIdx];
+  if(!isStationIdx(state.selectedIdx)){
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">ECMWF ENS hanya tersedia untuk ${STATION_COUNT} titik kecamatan/bandara. Pilih titik bernama (bukan titik grid).</div>`;
+    return;
+  }
+  if(state.param === 'rh'){
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Kelembapan tidak tersedia di ECMWF IFS ENS open-data. Untuk sebaran RH pakai GFS/ICON di tabel bawah.</div>`;
+    return;
+  }
+  const param = (state.param === 'hujan24') ? 'hujan' : state.param;
+  const isRain = (param === 'hujan');
+  const unit = PARAM_DEF[param].unit;
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  let any = false;
+  const rows = daySteps.map(s=>{
+    const e = ecmwfEnsParam(point.id, s.time, param);
+    if(!e || e.mean==null){
+      return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td><td colspan="2" style="color:var(--text-faint)">di luar jangkauan run</td></tr>`;
+    }
+    any = true;
+    const lo = e.p10!=null ? e.p10 : e.min;
+    const hi = e.p90!=null ? e.p90 : e.max;
+    const rowMax = Math.max(isRain?0.6:1, e.max!=null?e.max:hi);
+    const rowMin = isRain ? 0 : Math.min(e.min!=null?e.min:lo, lo);
+    const span = Math.max(rowMax - rowMin, 0.001);
+    const pL = ((lo - rowMin)/span*100).toFixed(1);
+    const pW = Math.max((hi - lo)/span*100, 1.5).toFixed(1);
+    const pM = ((e.mean - rowMin)/span*100).toFixed(1);
+    const pMinT = e.min!=null ? ((e.min - rowMin)/span*100).toFixed(1) : null;
+    const pMaxT = e.max!=null ? ((e.max - rowMin)/span*100).toFixed(1) : null;
+    const d = isRain ? 1 : 1;
+    const title = `Kisaran wajar (8 dari 10 skenario): ${lo.toFixed(d)}–${hi.toFixed(d)} ${unit} · perkiraan tengah: ${e.mean.toFixed(d)} ${unit}`
+      + (e.min!=null?` · paling kering–paling basah: ${e.min.toFixed(d)}–${e.max.toFixed(d)}`:'');
+    let poeTxt = '';
+    if(isRain && e.poe){
+      const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+      poeTxt = `<div class="ens-bar-label" style="margin-top:2px;color:var(--text-faint)">`
+        + `Peluang hujan: ≥1mm ${pct(e.poe['1'])} · ≥10mm ${pct(e.poe['10'])} · ≥20mm ${pct(e.poe['20'])}</div>`;
+    }
+    return `<tr>
+      <td>${String(s.hour).padStart(2,'0')}:00</td>
+      <td style="min-width:170px">
+        <div class="ens-bar-wrap" title="${title}">
+          <div class="ens-bar-track" style="width:150px">
+            ${pMinT!=null?`<div class="ens-bar-mean" style="left:${pMinT}%;background:var(--text-faint);height:9px;top:0"></div>`:''}
+            ${pMaxT!=null?`<div class="ens-bar-mean" style="left:${pMaxT}%;background:var(--text-faint);height:9px;top:0"></div>`:''}
+            <div class="ens-bar-fill" style="left:${pL}%;width:${pW}%;background:#7c5cbf"></div>
+            <div class="ens-bar-mean" style="left:${pM}%"></div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:left">
+        <span class="ens-bar-label">${lo.toFixed(d)}–${hi.toFixed(d)} ${unit} <span style="color:var(--text-faint)">(rata² ${e.mean.toFixed(d)})</span></span>
+        ${poeTxt}
+      </td>
+    </tr>`;
+  }).join('');
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="param-head">ECMWF ${nMem} skenario — ${PARAM_DEF[param].label} (${unit}) per 3 jam · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">Batang ungu = kisaran wajar (8 dari 10 skenario); garis tegak tengah = perkiraan tengah; dua garis abu tipis = skenario paling kering & paling basah. Panjang batang tidak dibandingkan lurus antar baris (skala per baris).</div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th><th>Kisaran wajar</th><th>Nilai</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${any?'':'<div style="padding:12px 14px;font-size:12px;color:var(--text-faint)">Belum ada jam pada hari ini yang tercakup data ECMWF terakhir. Coba hari berikutnya.</div>'}`;
+}
+
+async function fetchEnsembleForPoint(point){
+  const modelsParam = ENSEMBLE_MODELS.map(m=>m.param).join(',');
+  const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${point.lat}&longitude=${point.lon}` +
+    `&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m` +
+    `&models=${modelsParam}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const json = await res.json();
+  const parsed = parseEnsembleResponse(json);
+  parsed.rawKeys = Object.keys(json.hourly || {});
+  return parsed;
+}
+function isEnsembleEmpty(ensData){
+  return !ENSEMBLE_MODELS.some(m => ensData.byModel[m.key] && Object.keys(ensData.byModel[m.key]).length>0);
+}
+
+function parseEnsembleResponse(json){
+  const time = json.hourly.time;
+  const varNames = ['temperature_2m','relative_humidity_2m','precipitation','wind_speed_10m','wind_direction_10m'];
+  const byModel = {};
+  ENSEMBLE_MODELS.forEach(m=>{ byModel[m.key] = {}; });
+  const suffixToModelKey = (suffix) => {
+    const s = suffix.toLowerCase();
+    if(s.includes('ecmwf')) return 'ecmwf';
+    if(s.includes('gefs') || s.includes('gfs')) return 'gfs';
+    if(s.includes('icon')) return 'icon';
+    return null;
+  };
+  Object.keys(json.hourly).forEach(key=>{
+    if(key==='time') return;
+    const varName = varNames.find(v=> key===v || key.startsWith(v+'_'));
+    if(!varName) return;
+    const rest = key.slice(varName.length).replace(/^_/,''); // "member01_ncep_gefs_seamless" or "ecmwf_ifs04" (control, no member)
+    const memberMatch = rest.match(/^member(\d+)_(.+)$/);
+    let modelKey, memberIdx;
+    if(memberMatch){
+      memberIdx = parseInt(memberMatch[1],10);
+      modelKey = suffixToModelKey(memberMatch[2]);
+    } else {
+      // control/deterministic-only column (no per-member suffix) — treat as one sample (member 0)
+      modelKey = suffixToModelKey(rest);
+      memberIdx = 0;
+    }
+    if(!modelKey || !byModel[modelKey]) return;
+    if(!byModel[modelKey][varName]) byModel[modelKey][varName] = {};
+    byModel[modelKey][varName][memberIdx] = json.hourly[key];
+  });
+  return { time, byModel };
+}
+
+function statsForHours(ensData, modelKey, varName, hourIdxs, sumMode){
+  const memberSeries = ensData.byModel[modelKey] && ensData.byModel[modelKey][varName];
+  if(!memberSeries) return null;
+  const memberIdxs = Object.keys(memberSeries);
+  if(!memberIdxs.length) return null;
+  const values = memberIdxs.map(mi=>{
+    const arr = memberSeries[mi];
+    if(sumMode){
+      return hourIdxs.reduce((s,hi)=> s + (hi!=null && arr[hi]!=null ? arr[hi] : 0), 0);
+    }
+    const hi = hourIdxs[0];
+    return hi!=null ? arr[hi] : null;
+  }).filter(v=>v!=null && !isNaN(v));
+  if(!values.length) return null;
+  return { min:Math.min(...values), max:Math.max(...values), mean:values.reduce((s,v)=>s+v,0)/values.length, n:values.length };
+}
+
+function renderEnsembleTable(){
+  const point = POINTS[state.selectedIdx];
+  const ensData = state.ensembleCache[point.id];
+  const wrap = document.getElementById('ensembleTable');
+  if(!ensData){ wrap.style.display='none'; document.getElementById('ensembleStatus').textContent=''; return; }
+  wrap.style.display='block';
+
+  const idxByTime = {};
+  ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
+
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  const varMap = { hujan:'precipitation', hujan24:'precipitation', suhu:'temperature_2m', rh:'relative_humidity_2m', angin:'wind_speed_10m' };
+  const varName = varMap[state.param];
+  const sumMode = (state.param==='hujan'||state.param==='hujan24');
+  const decimals = sumMode ? 1 : (state.param==='rh' ? 0 : 1);
+  const unit = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].unit;
+  const label = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].label;
+
+  const rows = daySteps.map(s=>{
+    let hourIdxs = [];
+    for(let k=0;k<3;k++){
+      const hh = String((s.hour+k)%24).padStart(2,'0');
+      const t = `${s.date}T${hh}:00`;
+      if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]);
+    }
+    if(!hourIdxs.length) hourIdxs = [idxByTime[s.time]];
+    const stByModel = ENSEMBLE_MODELS.map(m=> statsForHours(ensData, m.key, varName, hourIdxs, sumMode));
+    const rowMax = Math.max(0.4, ...stByModel.filter(Boolean).map(st=>st.max));
+    const cells = ENSEMBLE_MODELS.map((m,mi)=>{
+      const st = stByModel[mi];
+      if(!st) return `<td>—</td>`;
+      const leftPct = (st.min/rowMax*100).toFixed(1);
+      const widthPct = Math.max(((st.max-st.min)/rowMax*100), 1.5).toFixed(1);
+      const meanPct = (st.mean/rowMax*100).toFixed(1);
+      const title = `Rentang antar ${st.n} member: ${st.min.toFixed(decimals)}–${st.max.toFixed(decimals)} ${unit}. Rata-rata: ${st.mean.toFixed(decimals)} ${unit}. Garis tegak pada batang = posisi rata-rata.`;
+      return `<td>
+        <div class="ens-bar-wrap" title="${title}">
+          <div class="ens-bar-track">
+            <div class="ens-bar-fill" style="left:${leftPct}%;width:${widthPct}%;background:var(--${m.cls})"></div>
+            <div class="ens-bar-mean" style="left:${meanPct}%"></div>
+          </div>
+          <div class="ens-bar-label">${st.min.toFixed(decimals)}–${st.max.toFixed(decimals)} <span style="color:var(--text-faint)">(rata² ${st.mean.toFixed(decimals)}, n=${st.n})</span></div>
+        </div>
+      </td>`;
+    }).join('');
+    // kolom ECMWF ENS (data pra-proses per 3 jam dari pipeline)
+    let ecmwfCell = '<td>—</td>';
+    const ep = ecmwfEnsParam(POINTS[state.selectedIdx].id, s.time, state.param==='hujan24'?'hujan':state.param);
+    if(ep && ep.mean!=null){
+      const lo = ep.p10!=null?ep.p10:ep.min, hi = ep.p90!=null?ep.p90:ep.max;
+      const emax = Math.max(0.4, ep.max!=null?ep.max:hi);
+      const L=(lo/emax*100).toFixed(1), W=Math.max((hi-lo)/emax*100,1.5).toFixed(1), M=(ep.mean/emax*100).toFixed(1);
+      ecmwfCell = `<td>
+        <div class="ens-bar-wrap" title="P10–P90: ${lo.toFixed(decimals)}–${hi.toFixed(decimals)} ${unit}; rata²: ${ep.mean.toFixed(decimals)} ${unit}">
+          <div class="ens-bar-track">
+            <div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:#7c5cbf"></div>
+            <div class="ens-bar-mean" style="left:${M}%"></div>
+          </div>
+          <div class="ens-bar-label">${lo.toFixed(decimals)}–${hi.toFixed(decimals)} <span style="color:var(--text-faint)">(rata² ${ep.mean.toFixed(decimals)})</span></div>
+        </div>
+      </td>`;
+    }
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>${cells}${ecmwfCell}</tr>`;
+  }).join('');
+
+  const ecmwfHead = ECMWF_ENS ? `<th>ECMWF (${ECMWF_ENS.n_members||51} skenario)<br><span style="font-weight:400;color:var(--text-faint)">kisaran wajar</span></th>` : '';
+  wrap.innerHTML = `
+    <div class="param-head">Sebaran skenario antar model — ${label} (${unit}), ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">GFS/ICON: batang = skenario terendah–tertinggi. ECMWF: batang ungu = kisaran wajar (8 dari 10 skenario). Garis tegak = perkiraan tengah. Skala per baris — panjang batang tidak dibandingkan lurus antar baris.</div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th>${ENSEMBLE_MODELS.map(m=>`<th>${m.label}</th>`).join('')}${ecmwfHead}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+document.getElementById('loadEnsembleBtn').addEventListener('click', async ()=>{
+  const point = POINTS[state.selectedIdx];
+  const btn = document.getElementById('loadEnsembleBtn');
+  const statusEl = document.getElementById('ensembleStatus');
+  btn.disabled = true;
+  statusEl.textContent = 'Memuat data ensemble untuk '+pointDisplayName(point)+'…';
+  try{
+    const data = await fetchEnsembleForPoint(point);
+    state.ensembleCache[point.id] = data;
+    if(isEnsembleEmpty(data)){
+      statusEl.innerHTML = `Data termuat tapi format kolomnya tidak cocok dugaan saya. Nama kolom asli dari API: <br><code style="font-size:10.5px;word-break:break-all;">${data.rawKeys.join(', ')}</code><br>Tolong salin baris kode di atas dan kirim ke saya biar parsernya saya perbaiki.`;
+    } else {
+      statusEl.textContent = 'Dimuat untuk '+pointDisplayName(point)+' (klik lagi untuk titik lain setelah pindah).';
+    }
+    renderEnsembleTable();
+  }catch(err){
+    statusEl.textContent = 'Gagal memuat data ensemble: '+err.message+'. Beri tahu saya kalau ini muncul terus, kemungkinan nama parameter model ensemble perlu disesuaikan.';
+  }
+  btn.disabled = false;
+});
+
+// Log verifikasi disimpan di localStorage (per-browser) supaya jalan di hosting
+// statis biasa. Kalau halaman dibuka di host lama yang punya window.storage,
+// datanya ikut dibaca sekali lalu dipindah ke localStorage.
+const LOG_KEY = 'verifikasi-log-peta';
+async function loadLog(){
+  try{ const v = localStorage.getItem(LOG_KEY); if(v) return JSON.parse(v); }catch(e){}
+  try{
+    if(window.storage && window.storage.get){
+      const r = await window.storage.get(LOG_KEY, false);
+      if(r && r.value){
+        try{ localStorage.setItem(LOG_KEY, r.value); }catch(_){}
+        return JSON.parse(r.value);
+      }
+    }
+  }catch(e){}
+  return [];
+}
+async function saveLog(entries){
+  const s = JSON.stringify(entries);
+  try{ localStorage.setItem(LOG_KEY, s); }
+  catch(e){ console.error('Gagal menyimpan log', e); }
+  try{ if(window.storage && window.storage.set) await window.storage.set(LOG_KEY, s, false); }catch(e){}
+}
+function diffClass(absDiff, scale){
+  const ratio = absDiff/scale;
+  if(ratio < 0.5) return 'diff-good';
+  if(ratio < 1.2) return 'diff-warn';
+  return 'diff-bad';
+}
+async function renderHistory(){
+  const wrap = document.getElementById('histWrap');
+  const log = await loadLog();
+  if(!log.length){
+    wrap.innerHTML = '<div class="empty-log">Belum ada entri. Isi form di atas setelah kejadian aktual diketahui.</div>';
+    return;
+  }
+  const sorted = [...log].sort((a,b)=> b.date.localeCompare(a.date));
+  let rows = sorted.map(e=>{
+    const origIdx = log.indexOf(e);
+    const cells = MODELS.map(m=>{
+      const f = e.forecasts[m.key];
+      if(!f) return `<td>—</td>`;
+      const fv = f.precipTotal!=null ? f.precipTotal : f.precip3;
+      const d = Math.abs((fv||0) - e.actual.hujan);
+      return `<td class="${diffClass(d,5)}">${d.toFixed(1)} mm</td>`;
+    }).join('');
+    return `<tr>
+      <td>${fmtDateShort(e.date)}</td><td>${e.pointName}</td>
+      <td>${e.actual.hujan} mm</td><td>${e.actual.suhu}°C</td><td>${e.actual.rh}%</td><td>${e.actual.angin}</td>
+      ${cells}
+      <td><button class="del-btn" data-idx="${origIdx}">hapus</button></td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<div class="param-panel"><table>
+    <thead><tr><th style="text-align:left">Tgl</th><th style="text-align:left">Titik</th>
+      <th>Hujan akt.</th><th>Suhu akt.</th><th>RH akt.</th><th style="text-align:left">Angin akt.</th>
+      <th>Δ ECMWF</th><th>Δ GFS</th><th>Δ ICON</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+  wrap.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('Hapus entri log ini?')) return;
+      const i = parseInt(btn.dataset.idx,10);
+      const current = await loadLog();
+      current.splice(i,1);
+      await saveLog(current);
+      renderHistory();
+    };
+  });
+}
+
+document.getElementById('logForm').addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  const step = state.steps[state.stepIdx];
+  const forecasts = {};
+  MODELS.forEach(m=>{ forecasts[m.key] = modelReading(state.selectedIdx, step, m.key); });
+  const entry = {
+    date: step.date,
+    pointId: POINTS[state.selectedIdx].id,
+    pointName: pointDisplayName(POINTS[state.selectedIdx]),
+    actual: {
+      hujan: parseFloat(document.getElementById('fHujan').value),
+      angin: document.getElementById('fAngin').value,
+      suhu: parseFloat(document.getElementById('fSuhu').value),
+      rh: parseFloat(document.getElementById('fRH').value),
+      catatan: document.getElementById('fCatatan').value
+    },
+    forecasts
+  };
+  const log = await loadLog();
+  log.push(entry);
+  await saveLog(log);
+  ev.target.reset();
+  renderHistory();
+});
+
+document.getElementById('paramSel').addEventListener('change', e=>{
+  state.param = e.target.value;
+  const g = stepGranularity();
+  document.getElementById('timeSlider').step = g;
+  state.stepIdx = Math.floor(state.stepIdx / g) * g;
+  render();
+});
+document.getElementById('modelSel').addEventListener('change', e=>{ state.modelSel=e.target.value; render(); });
+document.getElementById('timeSlider').addEventListener('input', e=>{ state.stepIdx=parseInt(e.target.value,10); render(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ const g=stepGranularity(); state.stepIdx=Math.max(0,state.stepIdx-g); render(); });
+document.getElementById('nextBtn').addEventListener('click', ()=>{ const g=stepGranularity(); state.stepIdx=Math.min(state.steps.length-1,state.stepIdx+g); render(); });
+document.getElementById('playBtn').addEventListener('click', (e)=>{
+  state.playing = !state.playing;
+  e.target.textContent = state.playing ? '❚❚' : '▶';
+  if(state.playing){
+    state.timer = setInterval(()=>{
+      const g = stepGranularity();
+      state.stepIdx = (state.stepIdx+g) % state.steps.length;
+      render();
+    }, 900);
+  } else { clearInterval(state.timer); }
+});
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.style.display='none'; return; }
+  const matches = STATION_POINTS.map((p,i)=>({p,i})).filter(o=>o.p.name.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){ searchResults.style.display='none'; return; }
+  searchResults.innerHTML = matches.map(o=>`<div data-idx="${o.i}">${o.p.name}</div>`).join('');
+  searchResults.style.display = 'block';
+  searchResults.querySelectorAll('div').forEach(div=>{
+    div.onclick = ()=>{
+      state.selectedIdx = parseInt(div.dataset.idx,10);
+      map.panTo([POINTS[state.selectedIdx].lat, POINTS[state.selectedIdx].lon]);
+      searchInput.value=''; searchResults.style.display='none';
+      render();
+    };
+  });
+});
+document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-box')) searchResults.style.display='none'; });
+
+const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], icon:[0,6,12,18] };
+const RUN_LAG_HOURS = { ecmwf:8, gfs:5, icon:3 };
+function estimateLatestRun(modelKey){
+  const now = new Date();
+  const avail = new Date(now.getTime() - RUN_LAG_HOURS[modelKey]*3600000);
+  const schedule = RUN_SCHEDULE[modelKey];
+  const dayStart = Date.UTC(avail.getUTCFullYear(), avail.getUTCMonth(), avail.getUTCDate());
+  const candidates = schedule.filter(h=>h<=avail.getUTCHours());
+  if(candidates.length){
+    return new Date(dayStart + Math.max(...candidates)*3600000);
+  }
+  return new Date(dayStart - 86400000 + Math.max(...schedule)*3600000);
+}
+function renderRunInfo(){
+  const el = document.getElementById('runInfo');
+  const fetchedAt = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+  const runLines = MODELS.map(m=>{
+    const r = estimateLatestRun(m.key);
+    const lab = r.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
+    return `<b>${m.label}</b> ~${lab} UTC`;
+  }).join(' <span class="sep">·</span> ');
+  el.innerHTML = `<span>Data ditarik: <b>${fetchedAt}</b></span><span class="sep">|</span><span>Perkiraan run terpakai: ${runLines}</span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru">⟳</button>`;
+  document.getElementById('refreshBtn').onclick = refreshData;
+}
+async function refreshData(){
+  const btn = document.getElementById('refreshBtn');
+  if(btn){ btn.disabled = true; btn.textContent='…'; }
+  try{
+    state.pointsData = await fetchAll();
+    buildSteps();
+    document.getElementById('timeSlider').max = state.steps.length-1;
+    if(state.stepIdx > state.steps.length-1) state.stepIdx = 0;
+    renderRunInfo();
+    render();
+  }catch(err){
+    alert('Gagal memuat ulang data: '+err.message);
+  }
+  if(btn){ btn.disabled=false; btn.textContent='⟳'; }
+}
+
+async function init(){
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = `Memuat data model untuk ${POINTS.length} titik (${STATION_COUNT} kecamatan/bandara + ${GRID_POINTS.length} grid)…`;
+  try{
+    state.pointsData = await fetchAll();
+    buildSteps();
+    document.getElementById('timeSlider').max = state.steps.length-1;
+    statusEl.style.display='none';
+    document.getElementById('content').style.display='block';
+    document.getElementById('mastheadSub').textContent =
+      `${STATION_COUNT} titik kecamatan/bandara + ${GRID_POINTS.length} titik grid (~11km) = ${POINTS.length} sumber data — geser waktu per 3 jam`;
+    initMap();
+    renderRunInfo();
+    render();
+  }catch(err){
+    statusEl.textContent = 'Gagal memuat data model: '+err.message+'. Periksa koneksi internet dan muat ulang.';
+    statusEl.classList.add('err');
+  }
+}
+init();
+</script>
+</body>
+</html>
