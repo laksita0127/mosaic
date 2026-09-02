@@ -159,6 +159,44 @@
   .help-details .help-body{padding:0 14px 14px;color:var(--text-dim);line-height:1.6;}
   .help-details .help-body li{margin-bottom:5px;}
   @media (max-width:640px){ .summary-grid{grid-template-columns:1fr 1fr;} }
+
+  /* --- Tabel produk format BMKG --- */
+  .produk-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;}
+  .produk-controls .field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px;}
+  .produk-controls select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .produk-btn{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);padding:8px 14px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;cursor:pointer;}
+  .produk-btn:hover{color:var(--text);}
+  .produk-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);}
+  table.produk{border-collapse:collapse;width:100%;font-size:11.5px;}
+  table.produk th,table.produk td{border:1px solid var(--border);padding:4px 6px;text-align:center;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;}
+  table.produk thead th{background:var(--panel-alt);color:var(--text-dim);font-weight:600;position:sticky;top:0;}
+  table.produk td.kec{text-align:left;font-weight:600;color:var(--text);position:sticky;left:0;background:var(--panel);}
+  table.produk tr.grp td{background:var(--panel-alt);text-align:left;font-weight:700;color:var(--accent);letter-spacing:0.5px;font-size:11px;}
+  table.produk td.num{font-family:'IBM Plex Mono',monospace;}
+  .wx{display:inline-flex;align-items:center;gap:4px;}
+  .wx .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .wx-0{color:var(--text-faint);}          /* cerah */
+  .wx-1{color:var(--text-dim);}            /* cerah berawan */
+  .wx-2{color:var(--text);}                /* berawan */
+  .wx-3{color:#2f7d5a;font-weight:600;}    /* hujan ringan/lokal */
+  .wx-4{color:#a5661f;font-weight:600;}    /* hujan sedang */
+  .wx-5{color:#b0402f;font-weight:700;}    /* hujan lebat / petir */
+  td.disagree{box-shadow:inset 3px 0 0 var(--warn);}
+  td.disagree::after{content:" *";color:var(--warn);font-weight:700;}
+  .produk-legend{font-size:11px;color:var(--text-faint);margin-top:8px;line-height:1.6;}
+  .produk-legend b{color:var(--text-dim);}
+
+  @media print{
+    body{padding:0;background:#fff;}
+    .wrap>*:not(#produkSection){display:none !important;}
+    #produkSection{margin:0;}
+    #produkSection .sec-title,.produk-controls,.produk-legend{display:none !important;}
+    #produkPrintHead{display:block !important;}
+    table.produk{font-size:9px;}
+    table.produk th,table.produk td{padding:2px 3px;}
+    .produk-wrap{border:none;overflow:visible;}
+  }
+  #produkPrintHead{display:none;}
 </style>
 </head>
 <body>
@@ -249,8 +287,35 @@
 
     <div class="summary-card" id="summaryCard"></div>
 
+    <section id="produkSection">
+      <div class="sec-title">Tabel produk — format prakiraan BMKG (semua kecamatan sekaligus)</div>
+      <div class="produk-controls">
+        <div class="field">
+          <label>Sumber data</label>
+          <select id="produkSrc">
+            <option value="avg">Kesepakatan (rata-rata 3 model)</option>
+            <option value="ecmwf">ECMWF</option>
+            <option value="gfs">GFS</option>
+            <option value="icon">ICON</option>
+            <option value="ens">Ensemble ECMWF (rata-rata 51 skenario)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Hari</label>
+          <select id="produkDay"></select>
+        </div>
+        <button class="produk-btn" id="produkCopy">Salin tabel (TSV)</button>
+        <button class="produk-btn" id="produkPrint">Cetak</button>
+      </div>
+      <div id="produkPrintHead"></div>
+      <div class="produk-wrap">
+        <table class="produk" id="produkTable"></table>
+      </div>
+      <div class="produk-legend" id="produkLegend"></div>
+    </section>
+
     <section>
-      <div class="sec-title">Rincian per model</div>
+      <div class="sec-title">Rincian per model — titik terpilih</div>
       <div class="agree-banner" id="agreeBanner"></div>
       <div class="model-cards" id="modelCards"></div>
     </section>
@@ -454,7 +519,7 @@ async function fetchAll(){
   const lons = POINTS.map(p=>p.lon).join(',');
   const modelsParam = MODELS.map(m=>m.param).join(',');
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
-    `&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m` +
+    `&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m` +
     `&models=${modelsParam}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
   const res = await fetch(url);
   if(!res.ok) throw new Error('HTTP '+res.status);
@@ -471,6 +536,7 @@ function parseResponse(json){
         temp: json.hourly['temperature_2m_'+m.param]?.[i],
         rh: json.hourly['relative_humidity_2m_'+m.param]?.[i],
         precip: json.hourly['precipitation_'+m.param]?.[i],
+        wcode: json.hourly['weather_code_'+m.param]?.[i],
         speed: json.hourly['wind_speed_10m_'+m.param]?.[i],
         dir: json.hourly['wind_direction_10m_'+m.param]?.[i]
       };
@@ -816,6 +882,243 @@ function renderSummaryCard(p, step, avg, spread){
     </div>`;
 }
 
+/* ==========================================================================
+   TABEL PRODUK — format prakiraan BMKG (semua kecamatan sekaligus)
+   ========================================================================== */
+const PRODUK_SLOTS = [2,5,8,11,14,17,20,23];
+const COMPASS16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+function deg16(deg){ return COMPASS16[Math.round((((deg%360)+360)%360)/22.5)%16]; }
+function addDays(dateStr,n){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n);
+  return dt.toISOString().slice(0,10);
+}
+const WX_CATS = {
+  cerah:          {txt:'Cerah',             rank:0, cls:'wx-0'},
+  cerahberawan:   {txt:'Cerah Berawan',     rank:1, cls:'wx-1'},
+  berawan:        {txt:'Berawan',           rank:2, cls:'wx-2'},
+  berawantebal:   {txt:'Berawan Tebal',     rank:3, cls:'wx-2'},
+  hujanlokal:     {txt:'Hujan Lokal',       rank:4, cls:'wx-3'},
+  hujanringan:    {txt:'Hujan Ringan',      rank:5, cls:'wx-3'},
+  hujansedang:    {txt:'Hujan Sedang',      rank:6, cls:'wx-4'},
+  hujanlebat:     {txt:'Hujan Lebat',       rank:7, cls:'wx-5'},
+  hujanpetir:     {txt:'Hujan Petir',       rank:8, cls:'wx-5'},
+  hujanlebatpetir:{txt:'Hujan Lebat+Petir', rank:9, cls:'wx-5'},
+};
+function wxFromCode(c){
+  if(c==null) return null;
+  if(c===0) return WX_CATS.cerah;
+  if(c===1||c===2) return WX_CATS.cerahberawan;
+  if(c===3) return WX_CATS.berawan;
+  if(c===45||c===48) return WX_CATS.berawan;
+  if(c>=51&&c<=57) return WX_CATS.hujanlokal;
+  if(c===61||c===80) return WX_CATS.hujanringan;
+  if(c===63||c===81||c===66) return WX_CATS.hujansedang;
+  if(c===65||c===82||c===67) return WX_CATS.hujanlebat;
+  if(c>=95) return WX_CATS.hujanpetir;
+  return WX_CATS.berawan;
+}
+function wxFromPrecip3(mm){
+  if(mm==null || mm<0.5) return null;
+  if(mm<2)  return WX_CATS.hujanlokal;
+  if(mm<10) return WX_CATS.hujanringan;
+  if(mm<20) return WX_CATS.hujansedang;
+  return WX_CATS.hujanlebat;
+}
+function worseCode(c1,c2){
+  const r = c => c!=null ? (wxFromCode(c)||{rank:-1}).rank : -1;
+  return r(c1) >= r(c2) ? c1 : c2;
+}
+function wxCombine(codeCat, precipCat, mm){
+  let cc = codeCat;
+  // kode model kadang bilang "hujan/gerimis" padahal curah hujan ~0 — jangan over-call
+  if(mm!=null && mm < 0.2 && cc && cc.rank >= 4 && cc.rank <= 6) cc = WX_CATS.berawan;
+  let best = null;
+  [cc, precipCat].forEach(x=>{ if(x && (!best || x.rank>best.rank)) best = x; });
+  if(!best) best = WX_CATS.berawan;
+  if(best.rank>=8 && mm!=null && mm>=20) return WX_CATS.hujanlebatpetir;
+  return best;
+}
+function stationGroup(name){
+  if(/Kota Bima/i.test(name)) return 'KOTA BIMA';
+  if(/Kab\. Bima/i.test(name)) return 'KABUPATEN BIMA';
+  if(/Kab\. Dompu/i.test(name)) return 'KABUPATEN DOMPU';
+  return 'BANDARA / LAINNYA';
+}
+function shortKec(name){ return name.replace(/\s*\((Kota|Kab\.)[^)]*\)\s*/,'').trim(); }
+
+function buildHourIndex(){
+  return STATION_POINTS.map((_,i)=>{
+    const m = new Map();
+    (state.pointsData[i]?.hours||[]).forEach(h=> m.set(h.time, h));
+    return m;
+  });
+}
+// nilai satu sumber pada satu jam
+function srcHour(rec, src){
+  if(!rec) return null;
+  if(src==='ecmwf'||src==='gfs'||src==='icon') return rec[src] || null;
+  if(src==='avg'){
+    const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
+    if(!parts.length) return null;
+    const mean = k => { const v=parts.map(p=>p[k]).filter(x=>x!=null); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; };
+    let sx=0,sy=0,nd=0, wc=null;
+    parts.forEach(p=>{
+      if(p.dir!=null){ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nd++; }
+      wc = worseCode(wc, p.wcode);
+    });
+    return { temp:mean('temp'), rh:mean('rh'), precip:mean('precip'), wcode:wc,
+             speed:mean('speed'), dir: nd? (Math.atan2(sx,sy)*180/Math.PI+360)%360 : null };
+  }
+  return null;
+}
+function ensSlot(stationId, dateStr, slotHour){
+  if(!ECMWF_ENS) return null;
+  let h = Math.round((slotHour+1.5)/3)*3, d = dateStr;
+  if(h>=24){ h-=24; d = addDays(dateStr,1); }
+  return ecmwfEnsAt(stationId, `${d}T${String(h).padStart(2,'0')}:00`);
+}
+function slotAgg(pi, hidx, dateStr, slotHour, src){
+  if(src==='ens'){
+    const e = ensSlot(STATION_POINTS[pi].id, dateStr, slotHour);
+    if(!e) return null;
+    const mm = e.precip ? e.precip.mean : null;
+    return { precip3:mm, wcat: wxFromPrecip3(mm) || WX_CATS.berawan,
+             temp: e.temp?e.temp.mean:null, speed: e.wind?e.wind.mean:null, dir: e.wind?e.wind.dir:null };
+  }
+  let precip3=0, pn=0, temp=null, speed=null, dir=null, wcode=null;
+  for(let k=0;k<3;k++){
+    let hh=slotHour+k, dd=dateStr;
+    if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
+    const s = srcHour(hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`), src);
+    if(!s) continue;
+    if(s.precip!=null){ precip3+=s.precip; pn++; }
+    if(k===1 || temp==null){ temp=s.temp; speed=s.speed; dir=s.dir; }
+    wcode = worseCode(wcode, s.wcode);
+  }
+  if(pn===0 && temp==null) return null;
+  const mm = pn?precip3:null;
+  return { precip3:mm, wcat: wxCombine(wxFromCode(wcode), wxFromPrecip3(mm), mm), temp, speed, dir };
+}
+function slotDisagree(pi, hidx, dateStr, slotHour){
+  const sums = MODELS.map(m=>{
+    let s=0,n=0;
+    for(let k=0;k<3;k++){
+      let hh=slotHour+k, dd=dateStr;
+      if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
+      const rec = hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`);
+      const v = rec && rec[m.key] && rec[m.key].precip;
+      if(v!=null){ s+=v; n++; }
+    }
+    return n?s:null;
+  }).filter(v=>v!=null);
+  if(sums.length<2) return false;
+  const wet = sums.filter(v=>v>=0.5).length;
+  return wet>0 && wet<sums.length;
+}
+function dayExtent(pi, hidx, dateStr, src){
+  let tmin=Infinity,tmax=-Infinity,rmin=Infinity,rmax=-Infinity,spdMax=0,sx=0,sy=0,nW=0,haveT=false,haveR=false;
+  if(src==='ens'){
+    PRODUK_SLOTS.forEach(sh=>{
+      const e = ensSlot(STATION_POINTS[pi].id, dateStr, sh);
+      if(e && e.temp && e.temp.mean!=null){ tmin=Math.min(tmin,e.temp.mean); tmax=Math.max(tmax,e.temp.mean); haveT=true; }
+      if(e && e.wind && e.wind.mean!=null) spdMax=Math.max(spdMax,e.wind.mean);
+      if(e && e.wind && e.wind.dir!=null){ const r=e.wind.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nW++; }
+    });
+    return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null, rmin:null, rmax:null,
+             arah: nW? deg16(Math.atan2(sx,sy)*180/Math.PI):'—', kts: spdMax?Math.round(spdMax*KMH_TO_KT):null };
+  }
+  const day = (state.pointsData[pi]?.hours||[]).filter(h=>h.date===dateStr);
+  day.forEach(h=>{
+    const s = srcHour(h, src); if(!s) return;
+    if(s.temp!=null){ tmin=Math.min(tmin,s.temp); tmax=Math.max(tmax,s.temp); haveT=true; }
+    if(s.rh!=null){ rmin=Math.min(rmin,s.rh); rmax=Math.max(rmax,s.rh); haveR=true; }
+    if(s.speed!=null) spdMax=Math.max(spdMax,s.speed);
+    if(s.dir!=null){ const r=s.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nW++; }
+  });
+  let arah='—';
+  if(nW){ const R = Math.hypot(sx,sy)/nW; arah = R<0.35 ? 'VRB' : deg16(Math.atan2(sx,sy)*180/Math.PI); }
+  return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null,
+           rmin:haveR?Math.round(rmin):null, rmax:haveR?Math.round(rmax):null,
+           arah, kts: spdMax?Math.round(spdMax*KMH_TO_KT):null };
+}
+
+function renderProdukTable(){
+  const tbl = document.getElementById('produkTable');
+  if(!tbl || !state.pointsData.length) return;
+  const srcSel = document.getElementById('produkSrc');
+  const daySel = document.getElementById('produkDay');
+  const src = srcSel.value;
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  if(daySel.options.length !== dates.length){
+    daySel.innerHTML = dates.map((d,i)=>{
+      const dd = new Date(d+'T00:00:00');
+      return `<option value="${d}">Hari ${i+1} — ${dd.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}</option>`;
+    }).join('');
+  }
+  const date = daySel.value || dates[0];
+  const hidx = buildHourIndex();
+  const groups = ['KOTA BIMA','KABUPATEN BIMA','KABUPATEN DOMPU','BANDARA / LAINNYA'];
+  const byGrp = {}; groups.forEach(g=>byGrp[g]=[]);
+  STATION_POINTS.forEach((p,i)=> byGrp[stationGroup(p.name)].push(i));
+
+  const head = `<thead>
+    <tr><th rowspan="2">Kecamatan</th><th colspan="8">Kondisi Cuaca (WITA)</th>
+        <th colspan="2">Suhu (°C)</th><th colspan="2">RH (%)</th><th colspan="2">Angin</th></tr>
+    <tr>${PRODUK_SLOTS.map(h=>`<th>${String(h).padStart(2,'0')}.00</th>`).join('')}
+        <th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Arah</th><th>Kts</th></tr></thead>`;
+
+  let body = '';
+  groups.forEach(g=>{
+    if(!byGrp[g].length) return;
+    body += `<tr class="grp"><td colspan="15">► ${g}</td></tr>`;
+    byGrp[g].forEach(pi=>{
+      const ext = dayExtent(pi, hidx, date, src);
+      const cells = PRODUK_SLOTS.map(sh=>{
+        const a = slotAgg(pi, hidx, date, sh, src);
+        if(!a) return `<td>—</td>`;
+        const dis = (src==='avg') && slotDisagree(pi, hidx, date, sh);
+        const w = a.wcat || WX_CATS.berawan;
+        const tip = (dis?'3 model tidak sepakat soal hujan':'') + (a.precip3!=null?` | hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+        return `<td class="${dis?'disagree':''}" title="${tip.replace(/^ \| /,'')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span></td>`;
+      }).join('');
+      body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
+        `<td class="num">${ext.tmin??'—'}</td><td class="num">${ext.tmax??'—'}</td>` +
+        `<td class="num">${ext.rmin??'—'}</td><td class="num">${ext.rmax??'—'}</td>` +
+        `<td>${ext.arah}</td><td class="num">${ext.kts??'—'}</td></tr>`;
+    });
+  });
+  tbl.innerHTML = head + '<tbody>' + body + '</tbody>';
+
+  const srcName = srcSel.selectedOptions[0].textContent;
+  document.getElementById('produkLegend').innerHTML =
+    `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin Kts</b> = kecepatan maksimum harian (knot); <b>VRB</b> = arah berubah-ubah. `
+    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat ada/tidaknya hujan pada jam itu — perlu penilaian prakirawan. ' : '')
+    + (src==='ens' ? '<br>Slot ENS didekatkan ke langkah 3-jaman terdekat (00,03,…,21 WITA) — jam bisa geser ±1 jam; RH tidak tersedia di ENS. ' : '')
+    + '<br>Kategori dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.';
+
+  document.getElementById('produkPrintHead').innerHTML =
+    `<div style="font-weight:700">PRAKIRAAN CUACA KOTA BIMA, KABUPATEN BIMA, DAN KABUPATEN DOMPU</div>` +
+    `<div style="font-size:11px">Olahan model: ${srcName} — ${new Date(date+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — dicetak ${new Date().toLocaleString('id-ID')}</div>`;
+}
+function produkTSV(){
+  return [...document.querySelectorAll('#produkTable tr')].map(tr =>
+    [...tr.children].map(td => td.textContent.replace(/\s+/g,' ').trim()).join('\t')
+  ).join('\n');
+}
+function flashBtn(id,msg){ const b=document.getElementById(id); if(!b) return; const o=b.dataset.o||b.textContent; b.dataset.o=o; b.textContent=msg; setTimeout(()=>{ b.textContent=o; },1500); }
+function initProdukControls(){
+  const s = document.getElementById('produkSrc');
+  if(!ECMWF_ENS){ const opt=[...s.options].find(o=>o.value==='ens'); if(opt){ opt.disabled=true; opt.textContent+=' — belum aktif'; } }
+  s.addEventListener('change', renderProdukTable);
+  document.getElementById('produkDay').addEventListener('change', renderProdukTable);
+  document.getElementById('produkCopy').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(produkTSV()); flashBtn('produkCopy','Tersalin ✓'); }
+    catch(e){ flashBtn('produkCopy','Clipboard diblokir'); }
+  });
+  document.getElementById('produkPrint').addEventListener('click', ()=> window.print());
+}
+
 function render(){
   const step = state.steps[state.stepIdx];
   overlayLayer.setUrl(buildFieldCanvas(step));
@@ -917,6 +1220,7 @@ function render(){
   cardsWrap.appendChild(ensCard);
 
   document.getElementById('logTargetLabel').textContent = `${pointDisplayName(p)}, ${fmtTimeLabel(step)}`;
+  renderProdukTable();
   renderDetailTable();
   renderHistory();
 }
@@ -1425,6 +1729,7 @@ async function init(){
     document.getElementById('mastheadSub').textContent =
       `${STATION_COUNT} titik kecamatan/bandara + ${GRID_POINTS.length} titik grid (~11km) = ${POINTS.length} sumber data — geser waktu per 3 jam`;
     initMap();
+    initProdukControls();
     renderRunInfo();
     render();
   }catch(err){
