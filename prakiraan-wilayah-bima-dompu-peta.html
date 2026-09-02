@@ -892,34 +892,33 @@ function addDays(dateStr,n){
   const dt = new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n);
   return dt.toISOString().slice(0,10);
 }
+// Kategori cuaca mengikuti legenda produk BMKG stasiun (8 kategori, sesuai PDF).
 const WX_CATS = {
   cerah:          {txt:'Cerah',             rank:0, cls:'wx-0'},
   cerahberawan:   {txt:'Cerah Berawan',     rank:1, cls:'wx-1'},
   berawan:        {txt:'Berawan',           rank:2, cls:'wx-2'},
   berawantebal:   {txt:'Berawan Tebal',     rank:3, cls:'wx-2'},
-  hujanlokal:     {txt:'Hujan Lokal',       rank:4, cls:'wx-3'},
-  hujanringan:    {txt:'Hujan Ringan',      rank:5, cls:'wx-3'},
-  hujansedang:    {txt:'Hujan Sedang',      rank:6, cls:'wx-4'},
-  hujanlebat:     {txt:'Hujan Lebat',       rank:7, cls:'wx-5'},
-  hujanpetir:     {txt:'Hujan Petir',       rank:8, cls:'wx-5'},
-  hujanlebatpetir:{txt:'Hujan Lebat+Petir', rank:9, cls:'wx-5'},
+  hujanringan:    {txt:'Hujan Ringan',      rank:4, cls:'wx-3'},
+  hujansedang:    {txt:'Hujan Sedang',      rank:5, cls:'wx-4'},
+  hujanlebat:     {txt:'Hujan Lebat',       rank:6, cls:'wx-5'},
+  hujanlebatpetir:{txt:'Hujan Lebat+Petir', rank:7, cls:'wx-5'},
 };
+const WX_LEGEND = 'Cerah · Cerah Berawan · Berawan · Berawan Tebal · Hujan Ringan · Hujan Sedang · Hujan Lebat · Hujan Lebat+Petir';
 function wxFromCode(c){
   if(c==null) return null;
   if(c===0) return WX_CATS.cerah;
   if(c===1||c===2) return WX_CATS.cerahberawan;
   if(c===3) return WX_CATS.berawan;
   if(c===45||c===48) return WX_CATS.berawan;
-  if(c>=51&&c<=57) return WX_CATS.hujanlokal;
-  if(c===61||c===80) return WX_CATS.hujanringan;
-  if(c===63||c===81||c===66) return WX_CATS.hujansedang;
-  if(c===65||c===82||c===67) return WX_CATS.hujanlebat;
-  if(c>=95) return WX_CATS.hujanpetir;
+  if(c>=51&&c<=67) return (c>=63) ? WX_CATS.hujansedang : WX_CATS.hujanringan;   // gerimis & hujan ringan → Hujan Ringan
+  if(c===80) return WX_CATS.hujanringan;
+  if(c===81) return WX_CATS.hujansedang;
+  if(c===82) return WX_CATS.hujanlebat;
+  if(c>=95) return WX_CATS.hujanlebatpetir;
   return WX_CATS.berawan;
 }
 function wxFromPrecip3(mm){
   if(mm==null || mm<0.5) return null;
-  if(mm<2)  return WX_CATS.hujanlokal;
   if(mm<10) return WX_CATS.hujanringan;
   if(mm<20) return WX_CATS.hujansedang;
   return WX_CATS.hujanlebat;
@@ -931,7 +930,7 @@ function worseCode(c1,c2){
 function wxCombine(codeCat, precipCat, mm){
   let cc = codeCat;
   // kode model kadang bilang "hujan/gerimis" padahal curah hujan ~0 — jangan over-call
-  if(mm!=null && mm < 0.2 && cc && cc.rank >= 4 && cc.rank <= 6) cc = WX_CATS.berawan;
+  if(mm!=null && mm < 0.2 && cc && cc.rank >= 4 && cc.rank <= 5) cc = WX_CATS.berawan;
   let best = null;
   [cc, precipCat].forEach(x=>{ if(x && (!best || x.rank>best.rank)) best = x; });
   if(!best) best = WX_CATS.berawan;
@@ -1094,7 +1093,7 @@ function renderProdukTable(){
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
     + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat ada/tidaknya hujan pada jam itu — perlu penilaian prakirawan. ' : '')
     + (src==='ens' ? '<br>Slot ENS didekatkan ke langkah 3-jaman terdekat (00,03,…,21 WITA) — jam bisa geser ±1 jam; RH tidak tersedia di ENS. ' : '')
-    + '<br>Kategori dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.';
+    + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
   document.getElementById('produkPrintHead').innerHTML =
     `<div style="font-weight:700">PRAKIRAAN CUACA KOTA BIMA, KABUPATEN BIMA, DAN KABUPATEN DOMPU</div>` +
