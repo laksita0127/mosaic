@@ -436,7 +436,7 @@ const ENSEMBLE_MODELS = [
   { key:'icon',  param:'icon_seamless',label:'ICON (EPS)', cls:'icon' }
 ];
 const HOURS_SHOWN = [0,3,6,9,12,15,18,21];
-const KMH_TO_KT = 1/1.852;
+// (angin ditampilkan dalam km/jam — data Open-Meteo sudah km/jam)
 
 // --- ECMWF IFS ENS (51 member), praproses per 3 jam oleh pipeline, dibaca dari ecmwf_ens.js ---
 const ECMWF_ENS = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
@@ -477,10 +477,9 @@ function ecmwfEnsParam(stationId, stepTime, param){
   if(param==='suhu')
     return { min:e.temp.min, max:e.temp.max, mean:e.temp.mean, p10:e.temp.p10, p90:e.temp.p90 };
   if(param==='angin'){
-    const k=KMH_TO_KT;
-    return { min:e.wind.min==null?null:e.wind.min*k, max:e.wind.max==null?null:e.wind.max*k,
-             mean:e.wind.mean==null?null:e.wind.mean*k,
-             p10:e.wind.p10==null?null:e.wind.p10*k, p90:e.wind.p90==null?null:e.wind.p90*k, dir:e.wind.dir };
+    // data angin sudah dalam km/jam
+    return { min:e.wind.min, max:e.wind.max, mean:e.wind.mean,
+             p10:e.wind.p10, p90:e.wind.p90, dir:e.wind.dir };
   }
   return null; // rh: ECMWF ENS open-data tidak menyediakan
 }
@@ -489,7 +488,7 @@ const PARAM_DEF = {
   hujan:{ label:'Curah hujan 3 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
   hujan24:{ label:'Curah hujan 24 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
   suhu: { label:'Suhu', unit:'°C', stops:[[20,'#5b9bd5'],[24,'#a9d2ee'],[27,'#6fcf97'],[30,'#e2c93f'],[33,'#e2984a'],[36,'#d9453f']] },
-  angin:{ label:'Kec. angin', unit:'kt', stops:[[0,'#ffffff'],[5,'#cfe9f5'],[10,'#a9dced'],[15,'#bfe6b0'],[20,'#8fd17a'],[25,'#d7d878'],[34,'#f5c542'],[48,'#f0943f'],[64,'#e0573f']] },
+  angin:{ label:'Kec. angin', unit:'km/j', stops:[[0,'#ffffff'],[10,'#cfe9f5'],[20,'#a9dced'],[30,'#bfe6b0'],[40,'#8fd17a'],[50,'#d7d878'],[65,'#f5c542'],[90,'#f0943f'],[120,'#e0573f']] },
   rh:   { label:'Kelembapan', unit:'%', stops:[[40,'#e2984a'],[55,'#e2c93f'],[70,'#ffffff'],[85,'#6fcf97'],[95,'#4fbfae'],[100,'#5b9bd5']] }
 };
 
@@ -603,7 +602,7 @@ function paramValue(reading){
   if(state.param==='hujan') return reading.precip3;
   if(state.param==='suhu') return reading.temp;
   if(state.param==='rh') return reading.rh;
-  if(state.param==='angin') return reading.speed*KMH_TO_KT;
+  if(state.param==='angin') return reading.speed;
   return null;
 }
 
@@ -854,7 +853,7 @@ function renderSummaryCard(p, step, avg, spread){
   else if(spread < 4){ conf='Sedang'; confCls='c-warn'; confSub=`model agak beda (±${spread.toFixed(1)} mm)`; }
   else { conf='Rendah'; confCls='c-bad'; confSub=`model jauh beda (±${spread.toFixed(1)} mm)`; }
 
-  const windTxt = `${degToCompass(avg.dir)} ${(avg.speed*KMH_TO_KT).toFixed(0)} kt`;
+  const windTxt = `${degToCompass(avg.dir)} ${avg.speed.toFixed(0)} km/j`;
 
   el.innerHTML = `
     <div class="summary-head">Ringkasan — <b>${pointDisplayName(p)}</b> · ${when}</div>
@@ -1026,7 +1025,7 @@ function dayExtent(pi, hidx, dateStr, src){
       if(e && e.wind && e.wind.dir!=null){ const r=e.wind.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nW++; }
     });
     return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null, rmin:null, rmax:null,
-             arah: nW? deg16(Math.atan2(sx,sy)*180/Math.PI):'—', kts: spdMax?Math.round(spdMax*KMH_TO_KT):null };
+             arah: nW? deg16(Math.atan2(sx,sy)*180/Math.PI):'—', kts: spdMax?Math.round(spdMax):null };
   }
   const day = (state.pointsData[pi]?.hours||[]).filter(h=>h.date===dateStr);
   day.forEach(h=>{
@@ -1040,7 +1039,7 @@ function dayExtent(pi, hidx, dateStr, src){
   if(nW){ const R = Math.hypot(sx,sy)/nW; arah = R<0.35 ? 'VRB' : deg16(Math.atan2(sx,sy)*180/Math.PI); }
   return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null,
            rmin:haveR?Math.round(rmin):null, rmax:haveR?Math.round(rmax):null,
-           arah, kts: spdMax?Math.round(spdMax*KMH_TO_KT):null };
+           arah, kts: spdMax?Math.round(spdMax):null };
 }
 
 function renderProdukTable(){
@@ -1066,7 +1065,7 @@ function renderProdukTable(){
     <tr><th rowspan="2">Kecamatan</th><th colspan="8">Kondisi Cuaca (WITA)</th>
         <th colspan="2">Suhu (°C)</th><th colspan="2">RH (%)</th><th colspan="2">Angin</th></tr>
     <tr>${PRODUK_SLOTS.map(h=>`<th>${String(h).padStart(2,'0')}.00</th>`).join('')}
-        <th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Arah</th><th>Kts</th></tr></thead>`;
+        <th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Arah</th><th>km/j</th></tr></thead>`;
 
   let body = '';
   groups.forEach(g=>{
@@ -1092,7 +1091,7 @@ function renderProdukTable(){
 
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
-    `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin Kts</b> = kecepatan maksimum harian (knot); <b>VRB</b> = arah berubah-ubah. `
+    `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
     + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat ada/tidaknya hujan pada jam itu — perlu penilaian prakirawan. ' : '')
     + (src==='ens' ? '<br>Slot ENS didekatkan ke langkah 3-jaman terdekat (00,03,…,21 WITA) — jam bisa geser ±1 jam; RH tidak tersedia di ENS. ' : '')
     + '<br>Kategori dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.';
@@ -1161,7 +1160,7 @@ function render(){
         <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(r.precip3??0).toFixed(1)} mm</span></div>
         <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24.toFixed(1)} mm</span></div>
         <div class="mrow"><span>Suhu</span><span class="v">${r.temp.toFixed(1)} °C</span></div>
-        <div class="mrow"><span>Angin</span><span class="v">${degToCompass(r.dir)} ${(r.speed*KMH_TO_KT).toFixed(0)} kt</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${degToCompass(r.dir)} ${r.speed.toFixed(0)} km/j</span></div>
         <div class="mrow"><span>Kelembapan</span><span class="v">${r.rh.toFixed(0)} %</span></div>
       `;
     }
@@ -1180,7 +1179,7 @@ function render(){
       <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(avgReading.precip3??0).toFixed(1)} mm</span></div>
       <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24Avg.toFixed(1)} mm</span></div>
       <div class="mrow"><span>Suhu</span><span class="v">${avgReading.temp.toFixed(1)} °C</span></div>
-      <div class="mrow"><span>Angin</span><span class="v">${degToCompass(avgReading.dir)} ${(avgReading.speed*KMH_TO_KT).toFixed(0)} kt</span></div>
+      <div class="mrow"><span>Angin</span><span class="v">${degToCompass(avgReading.dir)} ${avgReading.speed.toFixed(0)} km/j</span></div>
       <div class="mrow"><span>Kelembapan</span><span class="v">${avgReading.rh.toFixed(0)} %</span></div>
     `;
   }
@@ -1213,7 +1212,7 @@ function render(){
         <div class="mrow"><span>Peluang hujan ≥ 10 mm</span><span class="v">${pctTxt(poe['10'])}</span></div>
         <div class="mrow"><span>Peluang hujan ≥ 20 mm</span><span class="v">${pctTxt(poe['20'])}</span></div>
         <div class="mrow"><span>Suhu (kisaran wajar)</span><span class="v">${e.temp.mean==null?'—':e.temp.mean.toFixed(0)}° &nbsp;(${rng(e.temp.p10,e.temp.p90,'°')})</span></div>
-        <div class="mrow"><span>Angin</span><span class="v">${e.wind.mean==null?'—':(e.wind.mean*KMH_TO_KT).toFixed(0)} kt${e.wind.dir==null?'':' '+degToCompass(e.wind.dir)}</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${e.wind.mean==null?'—':e.wind.mean.toFixed(0)} km/j${e.wind.dir==null?'':' '+degToCompass(e.wind.dir)}</span></div>
       `;
     }
   }
@@ -1251,7 +1250,7 @@ function renderDetailTable(){
     if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
     if(state.param==='suhu') return r.temp.toFixed(1);
     if(state.param==='rh') return r.rh.toFixed(0);
-    if(state.param==='angin') return degToCompass(r.dir)+' '+(r.speed*KMH_TO_KT).toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+r.speed.toFixed(0);
     return '—';
   };
   const rowFmtAvg = (step) => {
@@ -1260,7 +1259,7 @@ function renderDetailTable(){
     if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
     if(state.param==='suhu') return r.temp.toFixed(1);
     if(state.param==='rh') return r.rh.toFixed(0);
-    if(state.param==='angin') return degToCompass(r.dir)+' '+(r.speed*KMH_TO_KT).toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+r.speed.toFixed(0);
     return '—';
   };
   const rows = daySteps.map(s=>{
