@@ -60,6 +60,21 @@ Selesai. Setelah itu tidak ada lagi yang perlu disentuh.
 | Jam update | baris `cron:` di workflow yang sama (format UTC) |
 | Titik / parameter / langkah waktu | `pipeline/config.py` |
 
+## Mengirim perubahan ke web setelah setup
+
+Perubahan file di PC **tidak otomatis** naik ke GitHub. Dobel-klik **`push.bat`**
+(di folder ini) — ia otomatis: ambil dulu commit dari Actions → `git add` semua
+perubahan → `commit` → `push`. Atau dari terminal: `push.bat "keterangan"`.
+
+Manual setara:
+```bash
+git pull --rebase --autostash
+git add -A && git commit -m "keterangan" && git push
+```
+
+> Wajib `git pull` dulu karena GitHub Actions menulis `ecmwf_ens.js` sendiri
+> 2x/hari, jadi versi di GitHub sering lebih baru dari PC-mu.
+
 ## Kalau mau versi 50 member penuh
 
 Actions dibatasi ~2–3 GB unduhan biar aman. Untuk 50 member penuh (~5–6 GB),
