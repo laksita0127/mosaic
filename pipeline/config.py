@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Konfigurasi pipeline ECMWF IFS ENS untuk BDMA (Bima-Dompu Multi-Model Analysis).
+Konfigurasi pipeline ECMWF IFS ENS untuk MOSAIC
+(Multi-model Output Spatial Analysis, Interactive Comparison) - Wilayah Bima-Dompu.
 
 Semua angka yang mungkin ingin kamu ubah ada di file ini. Titik stasiun WAJIB
 identik dengan STATION_POINTS di prakiraan-wilayah-bima-dompu-peta.html supaya

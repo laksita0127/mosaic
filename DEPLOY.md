@@ -1,4 +1,4 @@
-# Menaikkan BDMA ke web (GitHub Pages + Actions)
+# Menaikkan MOSAIC ke web (GitHub Pages + Actions)
 
 Hasil akhir: satu URL `https://<user>.github.io/<repo>/` yang bisa dibuka
 prakirawan dari mana saja, dengan data ECMWF ensemble yang **update sendiri

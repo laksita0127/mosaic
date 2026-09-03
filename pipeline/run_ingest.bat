@@ -1,6 +1,6 @@
 @echo off
 REM ==========================================================================
-REM  BDMA - ambil ECMWF IFS ENS terbaru dan tulis ecmwf_ens.js
+REM  MOSAIC - ambil ECMWF IFS ENS terbaru dan tulis ecmwf_ens.js
 REM  Jadwalkan lewat Task Scheduler ~2x sehari:
 REM    - 15:30 WITA  (setelah run 00 UTC mendarat)
 REM    - 03:30 WITA  (setelah run 12 UTC mendarat)

@@ -1,4 +1,4 @@
-# Pipeline ECMWF IFS ENS untuk BDMA
+# Pipeline ECMWF IFS ENS untuk MOSAIC
 
 Menambahkan **ensemble ECMWF asli (50–51 member)** ke tool
 `prakiraan-wilayah-bima-dompu-peta.html`.
@@ -113,7 +113,7 @@ $script = "D:\LAKSITA\MOSAIC\pipeline\ingest_ecmwf_ens.py"
 $act = New-ScheduledTaskAction -Execute $py -Argument $script -WorkingDirectory "D:\LAKSITA\MOSAIC\pipeline"
 $t1 = New-ScheduledTaskTrigger -Daily -At 15:30
 $t2 = New-ScheduledTaskTrigger -Daily -At 03:30
-Register-ScheduledTask -TaskName "BDMA ECMWF ENS ingest" -Action $act -Trigger $t1,$t2 -RunLevel Limited
+Register-ScheduledTask -TaskName "MOSAIC ECMWF ENS ingest" -Action $act -Trigger $t1,$t2 -RunLevel Limited
 ```
 
 ---
@@ -135,7 +135,7 @@ field global 0.25° (tidak ada subsetting server-side di open-data).
 
 ```js
 window.ECMWF_ENS_DATA = {
-  schema: "bdma-ecmwf-ens/1",
+  schema: "mosaic-ecmwf-ens/1",
   run: "2026-09-02T00:00:00Z",
   generated: "...Z",
   n_members: 51,               // 50 perturbed (+ control kalau tersedia)

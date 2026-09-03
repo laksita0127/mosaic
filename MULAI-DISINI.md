@@ -1,9 +1,9 @@
-# Langkah menaikkan BDMA ke GitHub (dari nol)
+# Langkah menaikkan MOSAIC ke GitHub (dari nol)
 
 Ikuti berurutan. Bagian **terminal** = buka **Git Bash** atau **Command Prompt**
 di folder `D:\LAKSITA\MOSAIC`. Bagian **web** = di browser, github.com.
 
-Ganti `USERNAME` dengan nama akun GitHub-mu. Nama repo di contoh ini: `bdma`.
+Ganti `USERNAME` dengan nama akun GitHub-mu. Nama repo di contoh ini: `mosaic`.
 
 ---
 
@@ -16,7 +16,7 @@ Kalau belum: buka <https://github.com> → **Sign up** (gratis). Catat username-
 ## B. Buat repository kosong  (web)
 
 1. Login github.com → klik tombol **+** kanan atas → **New repository**
-2. **Repository name:** `bdma`
+2. **Repository name:** `mosaic`
 3. Pilih **Public**
    *(akun gratis: GitHub Pages hanya untuk repo Public)*
 4. **JANGAN** centang "Add a README", ".gitignore", atau "license"
@@ -36,11 +36,11 @@ cd D:\LAKSITA\MOSAIC
 Sambungkan ke repo GitHub (ganti USERNAME):
 
 ```
-git remote add origin https://github.com/USERNAME/bdma.git
+git remote add origin https://github.com/USERNAME/mosaic.git
 ```
 
 > Kalau muncul `error: remote origin already exists`, pakai ini:
-> `git remote set-url origin https://github.com/USERNAME/bdma.git`
+> `git remote set-url origin https://github.com/USERNAME/mosaic.git`
 
 Pastikan nama branch `main`:
 
@@ -67,8 +67,8 @@ sudah muncul.
 3. **Build and deployment → Source:** pilih **Deploy from a branch**
 4. **Branch:** `main`  ·  folder: **/ (root)**  →  **Save**
 5. Tunggu 1–2 menit, refresh halaman ini. Muncul kotak hijau:
-   **"Your site is live at `https://USERNAME.github.io/bdma/`"**
-6. Buka URL itu → BDMA jalan. (Data ECMWF masih bertanda **CONTOH** untuk saat ini.)
+   **"Your site is live at `https://USERNAME.github.io/mosaic/`"**
+6. Buka URL itu → MOSAIC jalan. (Data ECMWF masih bertanda **CONTOH** untuk saat ini.)
 
 ---
 

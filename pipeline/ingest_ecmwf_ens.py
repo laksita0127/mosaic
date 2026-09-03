@@ -427,7 +427,7 @@ def build_payload(per_param, run_utc, horizon_h):
         points_out[sid] = entry
 
     payload = {
-        "schema": "bdma-ecmwf-ens/1",
+        "schema": "mosaic-ecmwf-ens/1",
         "model": "ECMWF IFS ENS (open data)",
         "license": "CC-BY-4.0 (ECMWF)",
         "run": run_utc.strftime("%Y-%m-%dT%H:00:00Z"),
@@ -494,7 +494,7 @@ def build_mock(run_utc, horizon_h, n_members=51):
             "wind_dir": {"mean": wd},
         }
     return {
-        "schema": "bdma-ecmwf-ens/1",
+        "schema": "mosaic-ecmwf-ens/1",
         "model": "ECMWF IFS ENS (MOCK - data sintetis)",
         "license": "CC-BY-4.0 (ECMWF)",
         "run": run_utc.strftime("%Y-%m-%dT%H:00:00Z"),
@@ -529,7 +529,7 @@ def parse_run_arg(s):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ingest ECMWF IFS ENS -> ecmwf_ens.js untuk BDMA")
+    ap = argparse.ArgumentParser(description="Ingest ECMWF IFS ENS -> ecmwf_ens.js untuk MOSAIC")
     ap.add_argument("--source", default=C.SOURCE, choices=["aws", "ecmwf", "azure"])
     ap.add_argument("--max-members", type=int, default=None, help="batasi jumlah member perturbed")
     ap.add_argument("--run", default=None, help="paksa run tertentu, mis. 20260902/00")

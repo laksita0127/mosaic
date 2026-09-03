@@ -23,7 +23,7 @@ if errorlevel 1 (
 git remote get-url origin >nul 2>&1
 if errorlevel 1 (
   echo [X] Belum ada remote 'origin'. Jalankan dulu satu kali:
-  echo     git remote add origin https://github.com/USERNAME/bdma.git
+  echo     git remote add origin https://github.com/USERNAME/mosaic.git
   echo     git branch -M main
   echo     git push -u origin main
   pause & exit /b 1

@@ -43,7 +43,7 @@ jobs:
 
       - name: Commit hasil
         run: |
-          git config user.name "bdma-bot"
+          git config user.name "mosaic-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add ecmwf_ens.js
           if git diff --staged --quiet; then
