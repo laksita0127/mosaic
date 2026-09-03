@@ -39,7 +39,7 @@ jobs:
         # Ringan: 8 skenario + --fast. --source ecmwf (mirror AWS sering 503 "Slow Down"
         # untuk IP GitHub). --dl-timeout 1500 = gagal cepat kalau tetap di-rate-limit,
         # bukan retry berjam-jam. Pipeline tetap menulis hasil walau suhu/angin gagal.
-        run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 8 --fast --dl-timeout 1500 --force
+        run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 15 --fast --dl-timeout 1500 --force
 
       - name: Commit hasil
         run: |
