@@ -23,7 +23,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +36,10 @@ jobs:
         run: pip install -r pipeline/requirements.txt
 
       - name: Run pipeline
-        # --max-members 25 supaya unduhan ~2-3 GB (muat di runner & cepat).
-        # Naikkan/turunkan sesuai kebutuhan. --force = selalu tulis ulang.
-        run: python pipeline/ingest_ecmwf_ens.py --source aws --max-members 25 --force
+        # Ringan biar andal: 12 skenario + langkah waktu dipangkas (--fast).
+        # Kalau server ECMWF lancar, naikkan --max-members / hapus --fast.
+        # Pipeline tetap menulis hasil walau sebagian parameter (suhu/angin) gagal.
+        run: python pipeline/ingest_ecmwf_ens.py --source aws --max-members 12 --fast --force
 
       - name: Commit hasil
         run: |

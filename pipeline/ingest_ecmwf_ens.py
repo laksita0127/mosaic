@@ -292,21 +292,27 @@ def collect_members(run_kwargs, members, add_control, source, cache_dir, keep_gr
     valid_ref = None
     for param in C.PARAMS:
         log(f"parameter {param}")
-        pf_path, cf_path = download_param(client, run_kwargs, param, members, add_control, cache_dir)
-        vt, mdata = load_param_grid(pf_path, lats, lons)   # member 1..50
-        if cf_path:
-            try:
-                _vt_cf, cf_map = load_param_grid(cf_path, lats, lons)
-                mdata[0] = cf_map[0]                       # control -> member 0
-            except Exception as e:  # noqa
-                log(f"  info: gagal decode control {param}: {str(e)[:120]}")
-        per_param[param] = {mid: (vt, arr) for mid, arr in mdata.items()}
-        valid_ref = valid_ref or vt
-        if not keep_grib:
-            for p in (pf_path, cf_path):
-                if p and os.path.exists(p):
-                    os.remove(p)
-        log(f"  {param}: {len(mdata)} member terkumpul, {len(vt)} langkah native")
+        try:
+            pf_path, cf_path = download_param(client, run_kwargs, param, members, add_control, cache_dir)
+            vt, mdata = load_param_grid(pf_path, lats, lons)   # member 1..50
+            if cf_path:
+                try:
+                    _vt_cf, cf_map = load_param_grid(cf_path, lats, lons)
+                    mdata[0] = cf_map[0]                       # control -> member 0
+                except Exception as e:  # noqa
+                    log(f"  info: gagal decode control {param}: {str(e)[:120]}")
+            per_param[param] = {mid: (vt, arr) for mid, arr in mdata.items()}
+            valid_ref = valid_ref or vt
+            if not keep_grib:
+                for p in (pf_path, cf_path):
+                    if p and os.path.exists(p):
+                        os.remove(p)
+            log(f"  {param}: {len(mdata)} member terkumpul, {len(vt)} langkah native")
+        except Exception as e:  # noqa
+            log(f"  !! parameter {param} GAGAL total ({str(e)[:160]}) - dilewati")
+
+    if "tp" not in per_param:
+        raise RuntimeError("parameter 'tp' (curah hujan) wajib ada tapi gagal diunduh - batalkan")
     return per_param, valid_ref
 
 
@@ -315,8 +321,16 @@ def build_payload(per_param, run_utc, horizon_h):
     step_strs = [fmt_step(t) for t in steps_local]
     nstep = len(steps_local)
 
-    # id member gabungan (irisan semua param)
-    member_ids = sorted(set.intersection(*[set(d.keys()) for d in per_param.values()]))
+    have_temp = "2t" in per_param
+    have_wind = "10u" in per_param and "10v" in per_param
+
+    # id member gabungan (irisan param yang tersedia)
+    avail = [per_param["tp"]]
+    if have_temp:
+        avail.append(per_param["2t"])
+    if have_wind:
+        avail += [per_param["10u"], per_param["10v"]]
+    member_ids = sorted(set.intersection(*[set(d.keys()) for d in avail]))
     n_members = len(member_ids)
 
     points_out = {}
@@ -335,29 +349,36 @@ def build_payload(per_param, run_utc, horizon_h):
 
         # ---- suhu per member (sesaat, interp) ----
         temp_members = []
-        for mid in member_ids:
-            vt, arr = per_param["2t"][mid]
-            k_series = [float(arr[k, pi]) - 273.15 if k < arr.shape[0] else None for k in range(len(vt))]
-            temp_members.append([interp_instant(vt, k_series, t.astimezone(UTC)) for t in steps_local])
+        if have_temp:
+            for mid in member_ids:
+                vt, arr = per_param["2t"][mid]
+                k_series = [float(arr[k, pi]) - 273.15 if k < arr.shape[0] else None for k in range(len(vt))]
+                temp_members.append([interp_instant(vt, k_series, t.astimezone(UTC)) for t in steps_local])
+        else:
+            temp_members = [[None] * nstep]
 
         # ---- angin per member ----
         ws_members, wd_members = [], []
-        for mid in member_ids:
-            vtu, ua = per_param["10u"][mid]
-            vtv, va = per_param["10v"][mid]
-            u_series = [float(ua[k, pi]) if k < ua.shape[0] else None for k in range(len(vtu))]
-            v_series = [float(va[k, pi]) if k < va.shape[0] else None for k in range(len(vtv))]
-            ws_row, wd_row = [], []
-            for t in steps_local:
-                tu = t.astimezone(UTC)
-                u = interp_instant(vtu, u_series, tu)
-                v = interp_instant(vtv, v_series, tu)
-                if u is None or v is None:
-                    ws_row.append(None); wd_row.append(None)
-                else:
-                    s, d = wind_speed_dir(u, v)
-                    ws_row.append(s); wd_row.append(d)
-            ws_members.append(ws_row); wd_members.append(wd_row)
+        if have_wind:
+            for mid in member_ids:
+                vtu, ua = per_param["10u"][mid]
+                vtv, va = per_param["10v"][mid]
+                u_series = [float(ua[k, pi]) if k < ua.shape[0] else None for k in range(len(vtu))]
+                v_series = [float(va[k, pi]) if k < va.shape[0] else None for k in range(len(vtv))]
+                ws_row, wd_row = [], []
+                for t in steps_local:
+                    tu = t.astimezone(UTC)
+                    u = interp_instant(vtu, u_series, tu)
+                    v = interp_instant(vtv, v_series, tu)
+                    if u is None or v is None:
+                        ws_row.append(None); wd_row.append(None)
+                    else:
+                        s, d = wind_speed_dir(u, v)
+                        ws_row.append(s); wd_row.append(d)
+                ws_members.append(ws_row); wd_members.append(wd_row)
+        else:
+            ws_members = [[None] * nstep]
+            wd_members = [[None] * nstep]
 
         # ---- ringkasan per step ----
         def summarize(members_rows, want_minmax=True):
@@ -517,6 +538,8 @@ def main():
     ap.add_argument("--mock", action="store_true", help="data sintetis, tanpa unduh apa pun")
     ap.add_argument("--selftest", action="store_true", help="unduh mini 3 member/2 step lalu berhenti")
     ap.add_argument("--force", action="store_true", help="proses walau run sama dengan sebelumnya")
+    ap.add_argument("--fast", action="store_true",
+                    help="langkah waktu dipangkas: 3-jam s/d H+3, lalu 12-jam s/d H+7 (unduhan jauh lebih ringan)")
     args = ap.parse_args()
 
     run_kwargs, run_utc = parse_run_arg(args.run)
@@ -533,6 +556,10 @@ def main():
     members = list(C.MEMBERS)
     if args.max_members:
         members = members[: args.max_members]
+
+    if args.fast:
+        C.STEP_HOURS[:] = list(range(0, 73, 3)) + [84, 96, 108, 120, 132, 144, 156, 168]
+        log(f"FAST: {len(C.STEP_HOURS)} langkah waktu (dari 53)")
 
     if args.selftest:
         members = members[:3]
