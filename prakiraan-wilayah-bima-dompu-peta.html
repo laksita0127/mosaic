@@ -493,7 +493,7 @@ const PARAM_DEF = {
 };
 
 let state = { pointsData:[], steps:[], stepIdx:0, param:'hujan', modelSel:'avg', selectedIdx:0, playing:false, timer:null, detailDayIdx:0, ensembleCache:{} };
-let map, arrowMarkers=[], gridMarkers=[], overlayLayer=null, bbox;
+let map, arrowMarkers=[], gridMarkers=[], gridArrowMarkers=[], overlayLayer=null, bbox;
 
 function degToCompass(deg){ const dirs=['U','TL','T','TG','S','BD','B','BL']; return dirs[Math.round(deg/45)%8]; }
 function pointDisplayName(point){
@@ -661,6 +661,21 @@ function dotIcon(selected){
     iconSize:[s,s], iconAnchor:[s/2,s/2]
   });
 }
+// panah angin kecil untuk titik grid — bikin medan angin di peta terlihat lebih padat
+function gridArrowIcon(dirDeg){
+  const rot = (dirDeg+180)%360;
+  const s = 15;
+  return L.divIcon({
+    className:'',
+    html:`<svg width="${s}" height="${s}" viewBox="0 0 26 26" style="transform:rotate(${rot}deg);opacity:0.9">
+      <line x1="13" y1="20" x2="13" y2="7" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="13" y1="20" x2="13" y2="7" stroke="#33475b" stroke-width="1.6" stroke-linecap="round"/>
+      <polygon points="13,3 8.5,10.5 17.5,10.5" fill="#ffffff"/>
+      <polygon points="13,4.6 9.7,10 16.3,10" fill="#33475b"/>
+    </svg>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
 
 function initMap(){
   computeBbox();
@@ -694,6 +709,9 @@ function initMap(){
       map.panTo([gp.lat, gp.lon]);
     });
     gridMarkers.push(marker);
+
+    const ga = L.marker([gp.lat, gp.lon], { icon: gridArrowIcon(0), interactive:false, opacity:0, zIndexOffset:-200 }).addTo(map);
+    gridArrowMarkers.push(ga);
   });
 
   map.on('click', (e)=>{
@@ -745,14 +763,23 @@ function updateMarkers(step){
     }
     arrowMarkers[i].setTooltipContent(`<b>${p.name}</b><br>${def.label}: ${fmtParamValue(i, step)}`);
   });
+  const windMode = state.param==='angin';
   GRID_POINTS.forEach((gp,gi)=>{
     const pointIdx = STATION_COUNT + gi;
     const isSel = pointIdx===state.selectedIdx;
     gridMarkers[gi].setStyle({
-      radius: isSel?7:3, weight: isSel?2.5:1,
-      color: isSel?'#e2984a':'#94a3b0', fillColor: isSel?'#e2984a':'#c3cdd6'
+      radius: isSel?7:(windMode?2:3), weight: isSel?2.5:1,
+      color: isSel?'#e2984a':'#94a3b0', fillColor: isSel?'#e2984a':'#c3cdd6',
+      fillOpacity: windMode && !isSel ? 0.25 : 0.6
     });
     gridMarkers[gi].setTooltipContent(`Titik grid<br>${def.label}: ${fmtParamValue(pointIdx, step)}<br><span style="font-size:10px;opacity:.7;">klik untuk detail lengkap</span>`);
+    if(windMode){
+      const r = readingFor(pointIdx, step);
+      gridArrowMarkers[gi].setIcon(gridArrowIcon(r?r.dir:0));
+      gridArrowMarkers[gi].setOpacity(0.9);
+    } else {
+      gridArrowMarkers[gi].setOpacity(0);
+    }
   });
 }
 
