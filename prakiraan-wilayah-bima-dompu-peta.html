@@ -820,11 +820,14 @@ function initMap(){
     const val = idwValueAt(e.latlng.lat, e.latlng.lng, step);
     const decimals = (state.param==='hujan'||state.param==='hujan24') ? 1 : 0;
     const valTxt = val!=null ? val.toFixed(decimals)+' '+def.unit : 'tidak tersedia';
+    const kec = kecAt(e.latlng.lat, e.latlng.lng);
+    const kecTxt = kec ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:3px;">Kecamatan: <b>${kec}</b></div>` : '';
     L.popup({ maxWidth:240 })
       .setLatLng(e.latlng)
       .setContent(
         `<div style="font-family:'IBM Plex Sans',sans-serif;">` +
         `<div style="font-weight:600;font-size:12.5px;margin-bottom:3px;">${def.label}: ${valTxt}</div>` +
+        kecTxt +
         `<div style="font-size:11px;color:#8fa0b3;line-height:1.4;">Estimasi interpolasi dari titik-titik kecamatan terdekat — bukan hasil model langsung di lokasi ini. Klik titik bulat/panah terdekat untuk rincian per model.</div>` +
         `</div>`
       )
@@ -872,7 +875,7 @@ function updateMarkers(step){
       color: isSel?'#e2984a':'#94a3b0', fillColor: isSel?'#e2984a':'#c3cdd6',
       fillOpacity: windMode && !isSel ? 0.25 : 0.6
     });
-    gridMarkers[gi].setTooltipContent(`Titik grid<br>${def.label}: ${fmtParamValue(pointIdx, step)}<br><span style="font-size:10px;opacity:.7;">klik untuk detail lengkap</span>`);
+    gridMarkers[gi].setTooltipContent(`<b>${GRID_LABELS[gi] || 'Titik grid'}</b> <span style="opacity:.6">· grid ~11 km</span><br>${def.label}: ${fmtParamValue(pointIdx, step)}<br><span style="font-size:10px;opacity:.7;">klik untuk detail lengkap</span>`);
     if(windMode){
       const r = readingFor(pointIdx, step);
       gridArrowMarkers[gi].setIcon(gridArrowIcon(r?r.dir:0));
