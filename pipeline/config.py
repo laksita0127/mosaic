@@ -94,3 +94,29 @@ STATION_POINTS = [
     ("woja",      "Woja (Kab. Dompu)",         -8.5470487, 118.4317451),
     ("bandara",   "Bandara WADB",              -8.5418159, 118.6921890),
 ]
+
+# --- Titik grid (~11 km) ------------------------------------------------------
+# Replika PERSIS generateGrid(0.15) di HTML: kotak = bbox stasiun + 0.06,
+# langkah 0.15 derajat, id 'g0','g1',... urut lintang lalu bujur.
+# ECMWF ENS untuk titik grid HANYA disimpan ringkasannya (tanpa member mentah)
+# supaya ecmwf_ens.js tidak membengkak.
+def _generate_grid(spacing=0.15):
+    lats = [s[2] for s in STATION_POINTS]
+    lons = [s[3] for s in STATION_POINTS]
+    min_lat, max_lat = min(lats) - 0.06, max(lats) + 0.06
+    min_lon, max_lon = min(lons) - 0.06, max(lons) + 0.06
+    pts, gi = [], 0
+    lat = min_lat
+    while lat <= max_lat:
+        lon = min_lon
+        while lon <= max_lon:
+            pts.append((f"g{gi}", None, round(lat, 4), round(lon, 4)))
+            gi += 1
+            lon += spacing
+        lat += spacing
+    return pts
+
+INCLUDE_GRID = True                 # False = kembali ke 32 titik saja
+GRID_POINTS = _generate_grid()
+ALL_POINTS = STATION_POINTS + (GRID_POINTS if INCLUDE_GRID else [])
+STATION_IDS = {s[0] for s in STATION_POINTS}   # untuk cek "titik bernama" (simpan member mentah)

@@ -318,8 +318,8 @@ def collect_members(run_kwargs, members, add_control, source, cache_dir, keep_gr
     from ecmwf.opendata import Client
 
     client = Client(source=source)
-    lats = [s[2] for s in C.STATION_POINTS]
-    lons = [s[3] for s in C.STATION_POINTS]
+    lats = [s[2] for s in C.ALL_POINTS]
+    lons = [s[3] for s in C.ALL_POINTS]
 
     per_param = {}
     valid_ref = None
@@ -367,7 +367,8 @@ def build_payload(per_param, run_utc, horizon_h):
     n_members = len(member_ids)
 
     points_out = {}
-    for pi, (sid, sname, slat, slon) in enumerate(C.STATION_POINTS):
+    for pi, (sid, sname, slat, slon) in enumerate(C.ALL_POINTS):
+        is_named = sid in C.STATION_IDS
         # ---- curah hujan 3-jam per member ----
         precip_members = []  # [member][step]
         for mid in member_ids:
@@ -455,7 +456,8 @@ def build_payload(per_param, run_utc, horizon_h):
             "wind_speed": {k: ws_sum[k] for k in ws_sum},
             "wind_dir": {"mean": wd_mean},
         }
-        if C.KEEP_RAW_MEMBERS_PRECIP:
+        # member mentah hanya untuk titik bernama (32) — titik grid cukup ringkasan
+        if C.KEEP_RAW_MEMBERS_PRECIP and is_named:
             entry["precip3"]["members"] = [[r1(x) for x in row] for row in precip_members]
         points_out[sid] = entry
 
@@ -485,7 +487,7 @@ def build_mock(run_utc, horizon_h, n_members=51):
     step_strs = [fmt_step(t) for t in steps_local]
     nstep = len(steps_local)
     points_out = {}
-    for (sid, sname, slat, slon) in C.STATION_POINTS:
+    for (sid, sname, slat, slon) in C.ALL_POINTS:
         base_t = 27.0 + rng.normal(0, 0.6)
         pm = []
         for _m in range(n_members):
@@ -520,7 +522,8 @@ def build_mock(run_utc, horizon_h, n_members=51):
         p_sum["poe"] = {str(thr): [round(float(np.mean(np.array([r[si] for r in pm]) >= thr)), 3)
                                    for si in range(nstep)]
                         for thr in C.PRECIP_POE_THRESHOLDS_MM}
-        p_sum["members"] = pm
+        if sid in C.STATION_IDS:
+            p_sum["members"] = pm
         points_out[sid] = {
             "name": sname, "lat": slat, "lon": slon,
             "precip3": p_sum, "temp": summ(tm), "wind_speed": summ(wm),

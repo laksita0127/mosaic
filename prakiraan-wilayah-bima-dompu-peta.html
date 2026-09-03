@@ -445,6 +445,11 @@ const HOURS_SHOWN = [2,5,8,11,14,17,20,23];  // sama dengan slot tabel produk BM
 // --- ECMWF IFS ENS (51 member), praproses per 3 jam oleh pipeline, dibaca dari ecmwf_ens.js ---
 const ECMWF_ENS = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
 function isStationIdx(pointIdx){ return pointIdx < STATION_COUNT; }
+// ECMWF ENS punya data untuk titik ini? (32 kecamatan + 45 grid kalau pipeline sudah menyertakan)
+function ensHasPoint(pointIdx){
+  const p = POINTS[pointIdx];
+  return !!(ECMWF_ENS && ECMWF_ENS.points && p && ECMWF_ENS.points[p.id]);
+}
 // Nilai ECMWF ENS untuk satu stasiun pada satu langkah waktu (string sama dg state.steps[].time).
 function ecmwfEnsAt(stationId, stepTime){
   if(!ECMWF_ENS) return null;
@@ -859,7 +864,7 @@ function renderSummaryCard(p, step, avg, spread){
     return;
   }
   const endHour = String((step.hour+3)%24).padStart(2,'0');
-  const e = isStationIdx(state.selectedIdx) ? ecmwfEnsAt(p.id, step.time) : null;
+  const e = ensHasPoint(state.selectedIdx) ? ecmwfEnsAt(p.id, step.time) : null;
   const hasEns = !!(e && e.precip && e.precip.mean!=null);
 
   // Hujan & peluang diambil dari SATU sumber supaya konsisten:
@@ -1234,8 +1239,8 @@ function render(){
   const mock = ECMWF_ENS && ECMWF_ENS.mock ? ' <span style="color:var(--warn)">(CONTOH)</span>' : '';
   if(!ECMWF_ENS){
     ensCard.innerHTML = `<div class="mname">ECMWF ensemble</div><div class="mrow" style="line-height:1.45">Belum aktif — data ensemble ECMWF belum termuat.</div>`;
-  } else if(!isStationIdx(state.selectedIdx)){
-    ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Hanya untuk titik kecamatan/bandara. Pilih titik bernama pada peta.</div>`;
+  } else if(!ensHasPoint(state.selectedIdx)){
+    ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Data ECMWF ENS belum ada untuk titik ini. Pilih titik kecamatan/bandara, atau jalankan ulang pipeline (grid).</div>`;
   } else {
     const e = ecmwfEnsAt(p.id, step.time);
     if(!e){
@@ -1326,7 +1331,11 @@ function initEnsembleControls(){
   const ps = document.getElementById('ensPointSel');
   const ds = document.getElementById('ensDaySel');
   if(!ps || !ds) return;
-  ps.innerHTML = STATION_POINTS.map((p,i)=>`<option value="${i}">${shortKec(p.name)}</option>`).join('');
+  const named = '<optgroup label="Kecamatan / bandara">' +
+    STATION_POINTS.map((p,i)=>`<option value="${i}">${shortKec(p.name)}</option>`).join('') + '</optgroup>';
+  const grid = GRID_POINTS.length ? '<optgroup label="Titik grid (~11 km)">' +
+    GRID_POINTS.map((g,gi)=>`<option value="${STATION_COUNT+gi}">grid ${gi} · ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}</option>`).join('') + '</optgroup>' : '';
+  ps.innerHTML = named + grid;
   ps.addEventListener('change', ()=>{
     state.selectedIdx = parseInt(ps.value,10);
     if(map) map.panTo([POINTS[state.selectedIdx].lat, POINTS[state.selectedIdx].lon]);
@@ -1347,7 +1356,7 @@ function syncEnsembleControls(){
       return `<option value="${i}">Hari ${i+1} — ${dd.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}</option>`;
     }).join('');
   }
-  if(isStationIdx(state.selectedIdx)) ps.value = String(state.selectedIdx);
+  ps.value = String(state.selectedIdx);   // cocok untuk kecamatan & titik grid
   ds.value = String(state.detailDayIdx);
 }
 
@@ -1370,9 +1379,9 @@ function renderEcmwfEns(){
   infoEl.innerHTML = `ECMWF · <b>${nMem} skenario</b> · data terakhir <b>${runTxt}</b> · diperbarui ${genTxt}${mockTxt}`;
 
   const point = POINTS[state.selectedIdx];
-  if(!isStationIdx(state.selectedIdx)){
+  if(!ensHasPoint(state.selectedIdx)){
     wrap.style.display = 'block';
-    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">ECMWF ENS hanya tersedia untuk ${STATION_COUNT} titik kecamatan/bandara. Pilih titik bernama (bukan titik grid).</div>`;
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Data ECMWF ENS belum ada untuk titik ini. Titik grid tercakup kalau pipeline dijalankan dengan grid diaktifkan.</div>`;
     return;
   }
   if(state.param === 'rh'){
