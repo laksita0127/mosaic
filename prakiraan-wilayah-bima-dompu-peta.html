@@ -435,7 +435,7 @@ const ENSEMBLE_MODELS = [
   { key:'gfs',   param:'gfs_seamless', label:'GFS (GEFS)', cls:'gfs' },
   { key:'icon',  param:'icon_seamless',label:'ICON (EPS)', cls:'icon' }
 ];
-const HOURS_SHOWN = [0,3,6,9,12,15,18,21];
+const HOURS_SHOWN = [2,5,8,11,14,17,20,23];  // sama dengan slot tabel produk BMKG
 // (angin ditampilkan dalam km/jam — data Open-Meteo sudah km/jam)
 
 // --- ECMWF IFS ENS (51 member), praproses per 3 jam oleh pipeline, dibaca dari ecmwf_ens.js ---
@@ -446,7 +446,17 @@ function ecmwfEnsAt(stationId, stepTime){
   if(!ECMWF_ENS) return null;
   const p = ECMWF_ENS.points[stationId];
   if(!p) return null;
-  const si = ECMWF_ENS.steps.indexOf(stepTime);
+  let si = ECMWF_ENS.steps.indexOf(stepTime);
+  if(si < 0){
+    // cocokkan ke langkah ENS terdekat (maks 90 menit) — jaga-jaga kalau grid
+    // data ENS belum sinkron dengan grid jam halaman (00.. vs 02..)
+    const target = Date.parse(stepTime + ':00');
+    let bestDiff = 91 * 60 * 1000;
+    ECMWF_ENS.steps.forEach((s, i) => {
+      const d = Math.abs(Date.parse(s + ':00') - target);
+      if (d < bestDiff) { bestDiff = d; si = i; }
+    });
+  }
   if(si < 0) return null;
   const at = (o,k)=> (o && o[k]!=null && o[k][si]!=null) ? o[k][si] : null;
   const poe = {};
@@ -999,9 +1009,9 @@ function srcHour(rec, src){
 }
 function ensSlot(stationId, dateStr, slotHour){
   if(!ECMWF_ENS) return null;
-  let h = Math.round((slotHour+1.5)/3)*3, d = dateStr;
-  if(h>=24){ h-=24; d = addDays(dateStr,1); }
-  return ecmwfEnsAt(stationId, `${d}T${String(h).padStart(2,'0')}:00`);
+  // grid ENS kini sama dengan slot tabel (02,05,…,23) — ecmwfEnsAt tetap punya
+  // toleransi kalau ternyata data belum sinkron.
+  return ecmwfEnsAt(stationId, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
 }
 function slotAgg(pi, hidx, dateStr, slotHour, src){
   if(src==='ens'){
@@ -1119,7 +1129,7 @@ function renderProdukTable(){
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
     + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat ada/tidaknya hujan pada jam itu — perlu penilaian prakirawan. ' : '')
-    + (src==='ens' ? '<br>Slot ENS didekatkan ke langkah 3-jaman terdekat (00,03,…,21 WITA) — jam bisa geser ±1 jam; RH tidak tersedia di ENS. ' : '')
+    + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
   document.getElementById('produkPrintHead').innerHTML =

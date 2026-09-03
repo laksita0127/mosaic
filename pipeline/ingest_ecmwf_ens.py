@@ -107,16 +107,17 @@ def r1(x):
 
 
 # ---------------------------------------------------------------------------
-# langkah waktu lokal (harus cocok dengan grid HTML: jam 0,3,...,21 WITA)
+# langkah waktu lokal (harus cocok dengan grid HTML & tabel produk BMKG:
+# jam 2,5,8,11,14,17,20,23 WITA)
 # ---------------------------------------------------------------------------
 def build_local_steps(run_utc: dt.datetime, horizon_h: int):
     """
-    Daftar datetime WITA pada jam kelipatan 3, yang jendela 3-jamnya
-    ([T, T+3h)) berada dalam [run, run+horizon].
+    Daftar datetime WITA pada jam 2,5,8,...,23 (kelipatan 3, offset 2),
+    yang jendela 3-jamnya ([T, T+3h)) berada dalam [run, run+horizon].
     """
     start_local = (run_utc.astimezone(WITA)).replace(minute=0, second=0, microsecond=0)
-    # maju ke slot 3-jam berikutnya
-    while start_local.hour % 3 != 0:
+    # maju ke slot berikutnya yang jam-nya 2,5,8,...,23
+    while start_local.hour % 3 != 2:
         start_local += dt.timedelta(hours=1)
     steps = []
     t = start_local
