@@ -36,10 +36,10 @@ jobs:
         run: pip install -r pipeline/requirements.txt
 
       - name: Run pipeline
-        # Ringan biar andal: 12 skenario + langkah waktu dipangkas (--fast).
-        # Kalau server ECMWF lancar, naikkan --max-members / hapus --fast.
-        # Pipeline tetap menulis hasil walau sebagian parameter (suhu/angin) gagal.
-        run: python pipeline/ingest_ecmwf_ens.py --source aws --max-members 12 --fast --force
+        # Ringan: 8 skenario + --fast. --source ecmwf (mirror AWS sering 503 "Slow Down"
+        # untuk IP GitHub). --dl-timeout 1500 = gagal cepat kalau tetap di-rate-limit,
+        # bukan retry berjam-jam. Pipeline tetap menulis hasil walau suhu/angin gagal.
+        run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 8 --fast --dl-timeout 1500 --force
 
       - name: Commit hasil
         run: |

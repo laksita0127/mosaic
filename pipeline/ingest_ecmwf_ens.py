@@ -42,6 +42,31 @@ import config as C
 WITA = dt.timezone(dt.timedelta(hours=C.TZ_OFFSET_HOURS))
 UTC = dt.timezone.utc
 
+# batas waktu per unduhan parameter (detik); 0 = tanpa batas. Diisi dari --dl-timeout.
+DL_TIMEOUT = 0
+
+
+class DownloadTimeout(Exception):
+    pass
+
+
+def _run_with_timeout(seconds, fn, *args, **kwargs):
+    """Jalankan fn dengan batas waktu (POSIX/SIGALRM). Di Windows: tanpa batas."""
+    import signal
+    if not seconds or not hasattr(signal, "SIGALRM"):
+        return fn(*args, **kwargs)
+
+    def _handler(signum, frame):
+        raise DownloadTimeout(f"unduhan lewat {seconds} detik")
+
+    old = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(int(seconds))
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
 
 # ---------------------------------------------------------------------------
 # util
@@ -173,9 +198,16 @@ def download_param(client, run_kwargs, param, members, add_control, cache_dir):
     for attempt in range(1, 4):
         try:
             if not (os.path.exists(pf_path) and os.path.getsize(pf_path) > 0):
-                log(f"  unduh {param} pf ({len(members)} member) [coba {attempt}]")
-                client.retrieve(type="pf", number=members, target=pf_path, **common)
+                log(f"  unduh {param} pf ({len(members)} member) [coba {attempt}]"
+                    + (f", batas {DL_TIMEOUT}s" if DL_TIMEOUT else ""))
+                _run_with_timeout(DL_TIMEOUT, client.retrieve,
+                                  type="pf", number=members, target=pf_path, **common)
             break
+        except DownloadTimeout as e:
+            log(f"  !! {param} pf timeout ({e}) - server ECMWF membatasi laju")
+            if os.path.exists(pf_path):
+                os.remove(pf_path)
+            raise
         except Exception as e:  # noqa
             log(f"  gagal {param} pf: {str(e)[:160]}")
             if os.path.exists(pf_path):
@@ -540,7 +572,12 @@ def main():
     ap.add_argument("--force", action="store_true", help="proses walau run sama dengan sebelumnya")
     ap.add_argument("--fast", action="store_true",
                     help="langkah waktu dipangkas: 3-jam s/d H+3, lalu 12-jam s/d H+7 (unduhan jauh lebih ringan)")
+    ap.add_argument("--dl-timeout", type=int, default=0,
+                    help="batas detik per unduhan parameter; lewat batas -> gagal cepat (POSIX). 0 = tanpa batas")
     args = ap.parse_args()
+
+    global DL_TIMEOUT
+    DL_TIMEOUT = args.dl_timeout
 
     run_kwargs, run_utc = parse_run_arg(args.run)
 
