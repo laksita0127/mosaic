@@ -330,7 +330,11 @@
       <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
         Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
-        <br><b>ECMWF (51 skenario)</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.
+        <br><b>ECMWF</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.
+      </div>
+      <div class="produk-controls" style="margin-bottom:10px;">
+        <div class="field"><label>Titik</label><select id="ensPointSel"></select></div>
+        <div class="field"><label>Hari</label><select id="ensDaySel"></select></div>
       </div>
       <div id="ecmwfEnsInfo" style="font-size:11.5px;color:var(--text-faint);margin-bottom:8px;"></div>
       <div class="param-panel" id="ecmwfEnsTable" style="margin-bottom:14px;"></div>
@@ -1317,8 +1321,39 @@ function renderDetailTable(){
   renderEnsembleTable();
 }
 
+// Pemilih titik + hari khusus seksi ensemble (biar tidak bergantung pilihan di seksi lain)
+function initEnsembleControls(){
+  const ps = document.getElementById('ensPointSel');
+  const ds = document.getElementById('ensDaySel');
+  if(!ps || !ds) return;
+  ps.innerHTML = STATION_POINTS.map((p,i)=>`<option value="${i}">${shortKec(p.name)}</option>`).join('');
+  ps.addEventListener('change', ()=>{
+    state.selectedIdx = parseInt(ps.value,10);
+    if(map) map.panTo([POINTS[state.selectedIdx].lat, POINTS[state.selectedIdx].lon]);
+    render();
+    // kalau GFS/ICON pernah dimuat, tarik ulang untuk titik baru
+    if(Object.keys(state.ensembleCache).length) document.getElementById('loadEnsembleBtn').click();
+  });
+  ds.addEventListener('change', ()=>{ state.detailDayIdx = parseInt(ds.value,10); renderDetailTable(); });
+}
+function syncEnsembleControls(){
+  const ps = document.getElementById('ensPointSel');
+  const ds = document.getElementById('ensDaySel');
+  if(!ps || !ds || !state.pointsData.length) return;
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  if(ds.options.length !== dates.length){
+    ds.innerHTML = dates.map((d,i)=>{
+      const dd = new Date(d+'T00:00:00');
+      return `<option value="${i}">Hari ${i+1} — ${dd.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}</option>`;
+    }).join('');
+  }
+  if(isStationIdx(state.selectedIdx)) ps.value = String(state.selectedIdx);
+  ds.value = String(state.detailDayIdx);
+}
+
 // --- Tabel ECMWF IFS ENS per 3 jam untuk stasiun + hari terpilih ---
 function renderEcmwfEns(){
+  syncEnsembleControls();
   const infoEl = document.getElementById('ecmwfEnsInfo');
   const wrap = document.getElementById('ecmwfEnsTable');
   if(!infoEl || !wrap) return;
@@ -1765,6 +1800,7 @@ async function init(){
       `Wilayah Bima–Dompu — ${STATION_COUNT} titik kecamatan/bandara + ${GRID_POINTS.length} titik grid (~11km) = ${POINTS.length} sumber data — per 3 jam`;
     initMap();
     initProdukControls();
+    initEnsembleControls();
     renderRunInfo();
     render();
   }catch(err){
