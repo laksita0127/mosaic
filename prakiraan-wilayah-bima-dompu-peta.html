@@ -371,6 +371,9 @@
      Dimuat lewat <script src> supaya jalan langsung dari file:// (tanpa server).
      Kalau file tidak ada, panel ECMWF ENS otomatis disembunyikan. -->
 <script src="ecmwf_ens.js" onerror="window.__ecmwfEnsMissing=true;"></script>
+<!-- Batas kecamatan (Bima, Dompu, Kota Bima) — GADM 4.1, disederhanakan. Dipakai untuk
+     menggambar batas di peta & memberi label titik grid ("Tambora 1", "Tambora 2", …). -->
+<script src="kecamatan.js" onerror="window.__kecGeoMissing=true;"></script>
 
 <script>
 const STATION_POINTS = [
@@ -425,6 +428,61 @@ function generateGrid(spacing){
 const GRID_POINTS = generateGrid(0.15);
 const POINTS = STATION_POINTS.concat(GRID_POINTS);
 const STATION_COUNT = STATION_POINTS.length;
+
+// --- Batas kecamatan: point-in-polygon + label titik grid ("Tambora 1", ...) ---
+const KEC_GEO = (typeof window!=='undefined' && window.KEC_GEO) ? window.KEC_GEO : null;
+function _ringContains(ring, lat, lon){
+  // ray casting; ring = [[lon,lat],...]
+  let inside = false;
+  for(let i=0, j=ring.length-1; i<ring.length; j=i++){
+    const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if(((yi>lat)!==(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+function _polyContains(poly, lat, lon){
+  if(!_ringContains(poly[0], lat, lon)) return false;
+  for(let k=1;k<poly.length;k++){ if(_ringContains(poly[k], lat, lon)) return false; } // hole
+  return true;
+}
+function _kecCentroid(feat){
+  const ring = feat.geometry.coordinates[0][0];
+  let sx=0, sy=0; ring.forEach(p=>{ sx+=p[0]; sy+=p[1]; });
+  return [sy/ring.length, sx/ring.length]; // [lat, lon]
+}
+function kecAt(lat, lon){
+  if(!KEC_GEO) return null;
+  for(const f of KEC_GEO.features){
+    for(const poly of f.geometry.coordinates){
+      if(_polyContains(poly, lat, lon)) return f.properties.name;
+    }
+  }
+  return null;
+}
+function nearestKec(lat, lon){
+  if(!KEC_GEO) return null;
+  let best=null, bd=Infinity;
+  KEC_GEO.features.forEach(f=>{
+    const c=_kecCentroid(f), d=(c[0]-lat)**2+(c[1]-lon)**2;
+    if(d<bd){ bd=d; best=f.properties.name; }
+  });
+  return best;
+}
+// label untuk tiap titik grid: "<Kecamatan> N" (N urut utara->selatan, barat->timur)
+const GRID_LABELS = (function(){
+  const lbl = {};
+  if(!KEC_GEO) return lbl;
+  const byKec = {};
+  GRID_POINTS.forEach((g,gi)=>{
+    const k = kecAt(g.lat, g.lon) || nearestKec(g.lat, g.lon) || 'Luar wilayah';
+    (byKec[k] = byKec[k] || []).push(gi);
+  });
+  Object.keys(byKec).forEach(k=>{
+    byKec[k].sort((a,b)=> GRID_POINTS[b].lat - GRID_POINTS[a].lat || GRID_POINTS[a].lon - GRID_POINTS[b].lon);
+    byKec[k].forEach((gi,idx)=>{ lbl[gi] = `${k} ${idx+1}`; });
+  });
+  return lbl;
+})();
 const MODELS = [
   { key:'ecmwf', param:'ecmwf_ifs025', label:'ECMWF', cls:'ecmwf' },
   { key:'gfs',   param:'gfs_seamless', label:'GFS',   cls:'gfs' },
@@ -516,7 +574,10 @@ let map, arrowMarkers=[], gridMarkers=[], gridArrowMarkers=[], overlayLayer=null
 
 function degToCompass(deg){ const dirs=['U','TL','T','TG','S','BD','B','BL']; return dirs[Math.round(deg/45)%8]; }
 function pointDisplayName(point){
-  return point.name || `Titik grid (${point.lat.toFixed(3)}, ${point.lon.toFixed(3)})`;
+  if(point.name) return point.name;
+  const gi = point.id && point.id[0]==='g' ? parseInt(point.id.slice(1),10) : -1;
+  if(gi>=0 && GRID_LABELS[gi]) return `${GRID_LABELS[gi]} · grid`;
+  return `Titik grid (${point.lat.toFixed(3)}, ${point.lon.toFixed(3)})`;
 }
 function hexToRgb(hex){ const h=hex.replace('#',''); return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}; }
 function interpColor(value, stops){
@@ -707,6 +768,26 @@ function initMap(){
   }).addTo(map);
   const bounds=[[bbox.minLat,bbox.minLon],[bbox.maxLat,bbox.maxLon]];
   overlayLayer = L.imageOverlay(buildFieldCanvas(state.steps[0]), bounds, { opacity:0.82, interactive:false }).addTo(map);
+
+  // batas kecamatan
+  if(KEC_GEO){
+    const kecLayer = L.geoJSON(KEC_GEO, {
+      style:{ color:'#3a4a5a', weight:1, opacity:0.5, fill:false, interactive:false }
+    }).addTo(map);
+    const ctl = L.control({position:'topright'});
+    ctl.onAdd = ()=>{
+      const div = L.DomUtil.create('div','');
+      div.style.cssText = 'background:#fff;border:1px solid var(--border);border-radius:3px;padding:4px 7px;font:12px/1 IBM Plex Sans,sans-serif;cursor:pointer;user-select:none;';
+      div.innerHTML = '☑ Batas kecamatan';
+      L.DomEvent.disableClickPropagation(div);
+      div.onclick = ()=>{
+        if(map.hasLayer(kecLayer)){ map.removeLayer(kecLayer); div.innerHTML='☐ Batas kecamatan'; }
+        else { kecLayer.addTo(map); div.innerHTML='☑ Batas kecamatan'; }
+      };
+      return div;
+    };
+    ctl.addTo(map);
+  }
 
   STATION_POINTS.forEach((p,i)=>{
     const marker = L.marker([p.lat,p.lon], { icon: dotIcon(i===state.selectedIdx) }).addTo(map);
@@ -1333,8 +1414,10 @@ function initEnsembleControls(){
   if(!ps || !ds) return;
   const named = '<optgroup label="Kecamatan / bandara">' +
     STATION_POINTS.map((p,i)=>`<option value="${i}">${shortKec(p.name)}</option>`).join('') + '</optgroup>';
+  const gopt = GRID_POINTS.map((g,gi)=>({gi, lab: GRID_LABELS[gi] || `grid ${gi} · ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`}))
+    .sort((a,b)=> a.lab.localeCompare(b.lab, 'id'));
   const grid = GRID_POINTS.length ? '<optgroup label="Titik grid (~11 km)">' +
-    GRID_POINTS.map((g,gi)=>`<option value="${STATION_COUNT+gi}">grid ${gi} · ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}</option>`).join('') + '</optgroup>' : '';
+    gopt.map(o=>`<option value="${STATION_COUNT+o.gi}">${o.lab}</option>`).join('') + '</optgroup>' : '';
   ps.innerHTML = named + grid;
   ps.addEventListener('change', ()=>{
     state.selectedIdx = parseInt(ps.value,10);
