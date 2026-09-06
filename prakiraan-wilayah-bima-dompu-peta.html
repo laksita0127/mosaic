@@ -1221,21 +1221,24 @@ function openJustModal(pi, sh){
   const ensRow = e && e.precip ? `<tr><td>ECMWF ENS (${ECMWF_ENS?ECMWF_ENS.n_members:'?'})</td>`
       + `<td>rata² ${fmtmm(e.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(e.precip.p10)}–${fmtmm(e.precip.p90)}</span></td>`
       + `<td>Peluang hujan<br>≥1mm ${pct(e.precip.poe?e.precip.poe['1']:null)} · ≥10 ${pct(e.precip.poe?e.precip.poe['10']:null)} · ≥20 ${pct(e.precip.poe?e.precip.poe['20']:null)}</td></tr>`
-    : `<tr><td>ECMWF ENS</td><td colspan="2" style="color:var(--text-faint)">tidak tersedia untuk sel ini</td></tr>`;
-  // GFS/ICON ensemble kalau sudah dimuat
-  const ensData = state.ensembleCache[STATION_POINTS[pi].id];
-  let gfsiconRows = '';
-  if(ensData){
+    : `<tr><td>ECMWF ENS</td><td colspan="2" style="color:var(--text-faint)">${
+        !ECMWF_ENS ? 'belum aktif (file ecmwf_ens.js belum termuat — coba refresh keras Ctrl+Shift+R)'
+        : !ECMWF_ENS.points[STATION_POINTS[pi].id] ? 'titik ini belum ada di data ENS'
+        : 'jam ini di luar jangkauan run ENS terakhir'}</td></tr>`;
+  // GFS/ICON ensemble — ditarik otomatis kalau belum ada
+  const stationId = STATION_POINTS[pi].id;
+  function gfsIconRows(){
+    const ensData = state.ensembleCache[stationId];
+    if(!ensData) return `<tr id="jfGfsIcon"><td>GFS / ICON ensemble</td><td colspan="2" style="color:var(--text-faint)">memuat…</td></tr>`;
     const idxByTime = {}; ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
     const hourIdxs = [];
     for(let k=0;k<3;k++){ const t=`${date}T${String((sh+k)%24).padStart(2,'0')}:00`; if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]); }
-    ENSEMBLE_MODELS.forEach(m=>{
+    return ENSEMBLE_MODELS.map(m=>{
       const st = statsForHours(ensData, m.key, 'precipitation', hourIdxs, true);
-      gfsiconRows += `<tr><td>${m.label}</td><td>${st?`${st.min.toFixed(1)}–${st.max.toFixed(1)} mm`:'—'}</td><td>${st?`rata² ${st.mean.toFixed(1)} (n=${st.n})`:'—'}</td></tr>`;
-    });
-  } else {
-    gfsiconRows = `<tr><td>GFS / ICON ensemble</td><td colspan="2" style="color:var(--text-faint)">belum dimuat — tekan "Muat GFS + ICON" di seksi ensemble</td></tr>`;
+      return `<tr class="jfGfsIcon"><td>${m.label}</td><td>${st?`${st.min.toFixed(1)}–${st.max.toFixed(1)} mm`:'—'}</td><td>${st?`rata² ${st.mean.toFixed(1)} (n=${st.n})`:'—'}</td></tr>`;
+    }).join('');
   }
+  let gfsiconRows = gfsIconRows();
 
   const catOpts = ['(pakai otomatis)'].concat(Object.values(WX_CATS).map(c=>c.txt))
     .map(t=>`<option${jr.kategori===t?' selected':''}>${t}</option>`).join('');
@@ -1281,6 +1284,21 @@ function openJustModal(pi, sh){
                       dasar: das==='(pilih dasar)' ? null : das, catatan: cat, ts: Date.now() };
     saveJust(); close(); renderProdukTable();
   };
+
+  // tarik GFS/ICON ensemble otomatis kalau belum ada, lalu isi barisnya
+  if(!state.ensembleCache[stationId]){
+    fetchEnsembleForPoint(STATION_POINTS[pi]).then(data=>{
+      state.ensembleCache[stationId] = data;
+      const cur = document.getElementById('justOverlay');
+      if(cur && !cur.hidden){
+        const row = cur.querySelector('#jfGfsIcon');
+        if(row) row.outerHTML = gfsIconRows();
+      }
+    }).catch(()=>{
+      const row = document.querySelector('#justOverlay #jfGfsIcon td[colspan]');
+      if(row) row.textContent = 'gagal memuat GFS/ICON ensemble';
+    });
+  }
 }
 
 function renderProdukTable(){
