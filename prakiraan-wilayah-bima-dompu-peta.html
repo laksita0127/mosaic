@@ -183,6 +183,26 @@
   .wx-5{color:#b0402f;font-weight:700;}    /* hujan lebat / petir */
   td.disagree{box-shadow:inset 3px 0 0 var(--warn);}
   td.disagree::after{content:" *";color:var(--warn);font-weight:700;}
+  td.justcell{cursor:pointer;}
+  td.justcell:hover{outline:1px solid var(--accent);outline-offset:-1px;}
+  td.just-set{box-shadow:inset 3px 0 0 var(--accent);background:rgba(43,108,176,0.06);}
+  td.just-set.disagree::after{content:"";}
+  /* modal justifikasi */
+  .just-overlay{position:fixed;inset:0;background:rgba(20,28,38,0.45);z-index:5000;display:flex;align-items:center;justify-content:center;padding:16px;}
+  .just-overlay[hidden]{display:none!important;}
+  .just-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:18px 20px;font-size:13px;}
+  .just-box h3{margin:0 0 4px;font-size:15px;}
+  .just-box .sub{color:var(--text-dim);font-size:12px;margin-bottom:12px;}
+  .just-cmp{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px;}
+  .just-cmp th,.just-cmp td{border:1px solid var(--border);padding:5px 8px;text-align:left;}
+  .just-cmp th{background:var(--panel-alt);color:var(--text-dim);font-weight:600;}
+  .just-form label{display:block;font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;margin:8px 0 3px;}
+  .just-form select,.just-form textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .just-form textarea{resize:vertical;min-height:44px;}
+  .just-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .just-actions button{border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer;background:var(--panel-alt);color:var(--text-dim);}
+  .just-actions button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;}
+  .just-actions button.danger{color:var(--bad);}
   .produk-legend{font-size:11px;color:var(--text-faint);margin-top:8px;line-height:1.6;}
   .produk-legend b{color:var(--text-dim);}
 
@@ -1171,6 +1191,98 @@ function dayExtent(pi, hidx, dateStr, src){
            arah, kts: spdMax?Math.round(spdMax):null };
 }
 
+// --- Justifikasi prakirawan untuk sel yang bertanda * (model tidak sepakat) ---
+const JUST_KEY = 'mosaic-justifikasi';
+function loadJust(){ try{ return JSON.parse(localStorage.getItem(JUST_KEY)||'{}'); }catch(e){ return {}; } }
+function saveJust(){ try{ localStorage.setItem(JUST_KEY, JSON.stringify(JUST)); }catch(e){} }
+function justKey(date, pi, sh){ return `${date}|${pi}|${sh}`; }
+let JUST = loadJust();
+const JUST_DASAR = ['Kesepakatan model','ECMWF','GFS','ICON','Ensemble ECMWF','Nowcasting / radar','Observasi terkini','Klimatologi','Lainnya'];
+
+function openJustModal(pi, sh){
+  const daySel = document.getElementById('produkDay');
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  const date = daySel.value || dates[0];
+  const hidx = buildHourIndex();
+  const kec = shortKec(STATION_POINTS[pi].name);
+  const jk = justKey(date, pi, sh);
+  const jr = JUST[jk] || {};
+  const hh = String(sh).padStart(2,'0');
+  const fmtmm = v => v==null ? '—' : v.toFixed(1)+' mm';
+
+  // baris perbandingan model deterministik
+  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['icon','ICON'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
+    const a = slotAgg(pi, hidx, date, sh, k);
+    return `<tr><td>${lab}</td><td>${a?fmtmm(a.precip3):'—'}</td><td>${a?(a.wcat||WX_CATS.berawan).txt:'—'}</td></tr>`;
+  }).join('');
+  // ECMWF ENS
+  const e = ensSlot(STATION_POINTS[pi].id, date, sh);
+  const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+  const ensRow = e && e.precip ? `<tr><td>ECMWF ENS (${ECMWF_ENS?ECMWF_ENS.n_members:'?'})</td>`
+      + `<td>rata² ${fmtmm(e.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(e.precip.p10)}–${fmtmm(e.precip.p90)}</span></td>`
+      + `<td>Peluang hujan<br>≥1mm ${pct(e.precip.poe?e.precip.poe['1']:null)} · ≥10 ${pct(e.precip.poe?e.precip.poe['10']:null)} · ≥20 ${pct(e.precip.poe?e.precip.poe['20']:null)}</td></tr>`
+    : `<tr><td>ECMWF ENS</td><td colspan="2" style="color:var(--text-faint)">tidak tersedia untuk sel ini</td></tr>`;
+  // GFS/ICON ensemble kalau sudah dimuat
+  const ensData = state.ensembleCache[STATION_POINTS[pi].id];
+  let gfsiconRows = '';
+  if(ensData){
+    const idxByTime = {}; ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
+    const hourIdxs = [];
+    for(let k=0;k<3;k++){ const t=`${date}T${String((sh+k)%24).padStart(2,'0')}:00`; if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]); }
+    ENSEMBLE_MODELS.forEach(m=>{
+      const st = statsForHours(ensData, m.key, 'precipitation', hourIdxs, true);
+      gfsiconRows += `<tr><td>${m.label}</td><td>${st?`${st.min.toFixed(1)}–${st.max.toFixed(1)} mm`:'—'}</td><td>${st?`rata² ${st.mean.toFixed(1)} (n=${st.n})`:'—'}</td></tr>`;
+    });
+  } else {
+    gfsiconRows = `<tr><td>GFS / ICON ensemble</td><td colspan="2" style="color:var(--text-faint)">belum dimuat — tekan "Muat GFS + ICON" di seksi ensemble</td></tr>`;
+  }
+
+  const catOpts = ['(pakai otomatis)'].concat(Object.values(WX_CATS).map(c=>c.txt))
+    .map(t=>`<option${jr.kategori===t?' selected':''}>${t}</option>`).join('');
+  const dasarOpts = ['(pilih dasar)'].concat(JUST_DASAR)
+    .map(t=>`<option${jr.dasar===t?' selected':''}>${t}</option>`).join('');
+
+  let ov = document.getElementById('justOverlay');
+  if(!ov){ ov = document.createElement('div'); ov.id='justOverlay'; ov.className='just-overlay'; document.body.appendChild(ov); }
+  ov.innerHTML = `
+    <div class="just-box">
+      <h3>Justifikasi prakirawan</h3>
+      <div class="sub"><b>${kec}</b> · ${new Date(date+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'})} · jam <b>${hh}.00</b> (3 jam ke depan)</div>
+      <table class="just-cmp">
+        <thead><tr><th>Sumber</th><th>Hujan 3 jam</th><th>Kategori / sebaran</th></tr></thead>
+        <tbody>${detRows}${ensRow}${gfsiconRows}</tbody>
+      </table>
+      <div class="just-form">
+        <label>Kategori final (keputusan prakirawan)</label>
+        <select id="jfKategori">${catOpts}</select>
+        <label>Dasar keputusan</label>
+        <select id="jfDasar">${dasarOpts}</select>
+        <label>Catatan / justifikasi</label>
+        <textarea id="jfCatatan" placeholder="mis. radar menunjukkan sel konvektif bergerak dari selatan; pilih Hujan Sedang">${jr.catatan||''}</textarea>
+      </div>
+      <div class="just-actions">
+        <button class="primary" id="jfSave">Simpan keputusan</button>
+        ${JUST[jk]?'<button class="danger" id="jfDel">Hapus justifikasi</button>':''}
+        <button id="jfCancel">Batal</button>
+      </div>
+    </div>`;
+  ov.hidden = false;
+  const close = ()=>{ ov.hidden = true; ov.innerHTML=''; };
+  ov.onclick = ev=>{ if(ev.target===ov) close(); };
+  document.getElementById('jfCancel').onclick = close;
+  const delBtn = document.getElementById('jfDel');
+  if(delBtn) delBtn.onclick = ()=>{ delete JUST[jk]; saveJust(); close(); renderProdukTable(); };
+  document.getElementById('jfSave').onclick = ()=>{
+    const kat = document.getElementById('jfKategori').value;
+    const das = document.getElementById('jfDasar').value;
+    const cat = document.getElementById('jfCatatan').value.trim();
+    if(kat==='(pakai otomatis)' && !cat){ delete JUST[jk]; }
+    else JUST[jk] = { kategori: kat==='(pakai otomatis)' ? null : kat,
+                      dasar: das==='(pilih dasar)' ? null : das, catatan: cat, ts: Date.now() };
+    saveJust(); close(); renderProdukTable();
+  };
+}
+
 function renderProdukTable(){
   const tbl = document.getElementById('produkTable');
   if(!tbl || !state.pointsData.length) return;
@@ -1206,9 +1318,20 @@ function renderProdukTable(){
         const a = slotAgg(pi, hidx, date, sh, src);
         if(!a) return `<td>—</td>`;
         const dis = (src==='avg') && slotDisagree(pi, hidx, date, sh);
-        const w = a.wcat || WX_CATS.berawan;
-        const tip = (dis?'3 model tidak sepakat soal hujan':'') + (a.precip3!=null?` | hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
-        return `<td class="${dis?'disagree':''}" title="${tip.replace(/^ \| /,'')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span></td>`;
+        const jk = justKey(date, pi, sh);
+        const jr = JUST[jk];
+        let w = a.wcat || WX_CATS.berawan;
+        let cls = dis ? 'disagree' : '', badge = '';
+        if(jr){
+          w = Object.values(WX_CATS).find(c=>c.txt===jr.kategori) || w;
+          cls += ' just-set'; badge = ' <span style="opacity:.7">✎</span>';
+        }
+        const clickable = dis || jr;
+        if(clickable) cls += ' justcell';
+        const tip = jr
+          ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
+          : (dis?'3 model tidak sepakat — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${badge}</td>`;
       }).join('');
       body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
         `<td class="num">${ext.tmin??'—'}</td><td class="num">${ext.tmax??'—'}</td>` +
@@ -1221,7 +1344,7 @@ function renderProdukTable(){
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
-    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat ada/tidaknya hujan pada jam itu — perlu penilaian prakirawan. ' : '')
+    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat soal hujan — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
@@ -1245,6 +1368,11 @@ function initProdukControls(){
     catch(e){ flashBtn('produkCopy','Clipboard diblokir'); }
   });
   document.getElementById('produkPrint').addEventListener('click', ()=> window.print());
+  document.getElementById('produkTable').addEventListener('click', (ev)=>{
+    const td = ev.target.closest('td.justcell');
+    if(!td) return;
+    openJustModal(parseInt(td.dataset.pi,10), parseInt(td.dataset.sh,10));
+  });
 }
 
 function render(){
