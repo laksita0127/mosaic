@@ -1319,6 +1319,20 @@ function renderProdukTable(){
   const groups = ['KOTA BIMA','KABUPATEN BIMA','KABUPATEN DOMPU','BANDARA / LAINNYA'];
   const byGrp = {}; groups.forEach(g=>byGrp[g]=[]);
   STATION_POINTS.forEach((p,i)=> byGrp[stationGroup(p.name)].push(i));
+  // urutan kecamatan dalam tiap grup = persis dokumen produk BMKG
+  const PRODUK_ORDER = {
+    'KOTA BIMA': ['Asakota','Rasanae Barat','Rasanae Timur','Mpunda','Raba'],
+    'KABUPATEN BIMA': ['Ambalawi','Wera','Sape','Lambu','Wawo','Lambitu','Palibelo','Belo','Langgudu','Monta','Woha','Bolo','Madapangga','Soromandi','Tambora','Sanggar','Donggo','Parado'],
+    'KABUPATEN DOMPU': ['Dompu','Pajo',"Hu'u",'Woja','Kilo','Manggelewa','Kempo','Pekat'],
+  };
+  groups.forEach(g=>{
+    const ord = PRODUK_ORDER[g]; if(!ord) return;
+    byGrp[g].sort((a,b)=>{
+      const ia = ord.indexOf(shortKec(STATION_POINTS[a].name));
+      const ib = ord.indexOf(shortKec(STATION_POINTS[b].name));
+      return (ia<0?999:ia) - (ib<0?999:ib);
+    });
+  });
 
   const head = `<thead>
     <tr><th rowspan="2">Kecamatan</th><th colspan="8">Kondisi Cuaca (WITA)</th>
