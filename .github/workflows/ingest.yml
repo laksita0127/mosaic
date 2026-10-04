@@ -36,10 +36,10 @@ jobs:
         run: pip install -r pipeline/requirements.txt
 
       - name: Run pipeline
-        # Ringan: 8 skenario + --fast. --source ecmwf (mirror AWS sering 503 "Slow Down"
+        # 20 skenario + --fast (naik bertahap 8 -> 15 -> 20; plafon cloud ±25). --source ecmwf (mirror AWS sering 503 "Slow Down"
         # untuk IP GitHub). --dl-timeout 1500 = gagal cepat kalau tetap di-rate-limit,
         # bukan retry berjam-jam. Pipeline tetap menulis hasil walau suhu/angin gagal.
-        run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 15 --fast --dl-timeout 1500 --force
+        run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 20 --fast --dl-timeout 1500 --force
 
       - name: Commit hasil
         run: |
@@ -50,5 +50,8 @@ jobs:
             echo "Tidak ada perubahan data."
           else
             git commit -m "data: ECMWF ENS $(date -u +%Y-%m-%dT%H:%MZ)"
-            git push
+            for i in 1 2 3 4; do
+              git pull --rebase origin main && git push && break
+              sleep 15
+            done
           fi

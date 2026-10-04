@@ -183,6 +183,8 @@
   .wx-5{color:#b0402f;font-weight:700;}    /* hujan lebat / petir */
   td.disagree{box-shadow:inset 3px 0 0 var(--warn);}
   td.disagree::after{content:" *";color:var(--warn);font-weight:700;}
+  .stale-banner{background:rgba(217,112,95,0.14);border:1px solid var(--bad);color:#8a3226;border-radius:3px;padding:8px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.45;}
+  .stale-banner[hidden]{display:none;}
   td.justcell{cursor:pointer;}
   td.justcell:hover{outline:1px solid var(--accent);outline-offset:-1px;}
   td.just-set{box-shadow:inset 3px 0 0 var(--accent);background:rgba(43,108,176,0.06);}
@@ -276,6 +278,7 @@
     </div>
 
     <div class="run-info" id="runInfo"></div>
+    <div id="ensStaleBanner" class="stale-banner" hidden></div>
 
     <div class="map-panel">
       <div id="map"></div>
@@ -350,7 +353,7 @@
       <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
         Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
-        <br><b>ECMWF</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.
+        <br><span id="ensBlurbTail"><b>ECMWF</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.</span>
       </div>
       <div class="produk-controls" style="margin-bottom:10px;">
         <div class="field"><label>Titik</label><select id="ensPointSel"></select></div>
@@ -391,6 +394,8 @@
      Dimuat lewat <script src> supaya jalan langsung dari file:// (tanpa server).
      Kalau file tidak ada, panel ECMWF ENS otomatis disembunyikan. -->
 <script src="ecmwf_ens.js" onerror="window.__ecmwfEnsMissing=true;"></script>
+<!-- Ensemble multi-model (ECMWF IFS 51 · AIFS 51 · GEFS 31 · ICON-EPS 40) — pipeline/ingest_openmeteo_ens.py -->
+<script src="ens_multi.js" onerror="window.__ensMultiMissing=true;"></script>
 <!-- Batas kecamatan (Bima, Dompu, Kota Bima) — GADM 4.1, disederhanakan. Dipakai untuk
      menggambar batas di peta & memberi label titik grid ("Tambora 1", "Tambora 2", …). -->
 <script src="kecamatan.js" onerror="window.__kecGeoMissing=true;"></script>
@@ -520,26 +525,97 @@ const ENSEMBLE_MODELS = [
 const HOURS_SHOWN = [2,5,8,11,14,17,20,23];  // sama dengan slot tabel produk BMKG
 // (angin ditampilkan dalam km/jam — data Open-Meteo sudah km/jam)
 
-// --- ECMWF IFS ENS (51 member), praproses per 3 jam oleh pipeline, dibaca dari ecmwf_ens.js ---
-const ECMWF_ENS = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
+// --- Ensemble: dua sumber data praproses (dibaca dari file .js di folder yang sama) ---
+//  * ens_multi.js  : ECMWF IFS ENS (51) + AIFS ENS (51) + GEFS (31) + ICON-EPS (40) via Open-Meteo,
+//                    77 titik, dihitung pipeline/ingest_openmeteo_ens.py
+//  * ecmwf_ens.js  : ECMWF IFS ENS langsung dari ECMWF Open Data (GRIB), pipeline/ingest_ecmwf_ens.py
+const ENS_MULTI = (typeof window!=='undefined' && window.ENS_MULTI && window.ENS_MULTI.models) ? window.ENS_MULTI : null;
+const ENS_ORDER = ['ecmwf','aifs','gefs','icon'];
+const ENS_CLR = { ecmwf:'#7c5cbf', aifs:'#1f9d8a', gefs:'#c9702a', icon:'#2f9e6e', pooled:'#3a4a5a' };
+// ECMWF ENS yang dipakai seluruh halaman = yang run-nya LEBIH BARU. Open-Meteo (51 skenario) baru
+// muncul ±12 jam setelah run, GRIB langsung dari ECMWF ±8 jam — jadi kadang GRIB (lebih sedikit
+// skenario tapi lebih segar) yang dipakai. Kalau run sama → Open-Meteo (skenario lebih banyak).
+const ECMWF_ENS = (function(){
+  const g = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
+  const m = ENS_MULTI && ENS_MULTI.models.ecmwf ? ENS_MULTI.models.ecmwf : null;
+  const fromMulti = m ? { schema:'multi', model:'ECMWF IFS ENS', run:m.run, generated:ENS_MULTI.generated,
+      n_members:m.n_members, steps:ENS_MULTI.steps, thresholds_mm:ENS_MULTI.thresholds_mm,
+      points:m.points, source:'Open-Meteo', stale:!!m.stale } : null;
+  const fromGrib = g ? Object.assign({source:'ECMWF Open Data'}, g) : null;
+  if(fromMulti && fromGrib && !fromGrib.mock && fromGrib.run && fromMulti.run && fromGrib.run > fromMulti.run) return fromGrib;
+  return fromMulti || fromGrib;
+})();
+const ECMWF_GRIB = (typeof window!=='undefined' && window.ECMWF_ENS_DATA && !window.ECMWF_ENS_DATA.mock) ? window.ECMWF_ENS_DATA : null;
 function isStationIdx(pointIdx){ return pointIdx < STATION_COUNT; }
+// ringkasan satu model ensemble multi-model untuk satu titik & langkah (null kalau tak ada)
+function ensModelAt(key, pointId, stepTime){
+  const M = ENS_MULTI && ENS_MULTI.models[key]; if(!M) return null;
+  const p = M.points[pointId]; if(!p) return null;
+  const si = ENS_MULTI.steps.indexOf(stepTime); if(si < 0) return null;
+  const at = (o,k)=> (o && o[k] && o[k][si]!=null) ? o[k][si] : null;
+  const poe = {};
+  (ENS_MULTI.thresholds_mm||[]).forEach(t=>{
+    const row = p.precip3 && p.precip3.poe ? p.precip3.poe[String(t)] : null;
+    poe[t] = row ? row[si] : null;
+  });
+  const stat = o => ({ mean:at(o,'mean'), min:at(o,'min'), max:at(o,'max'), p10:at(o,'p10'), p90:at(o,'p90') });
+  return { si, n:M.n_members, stale:!!M.stale, run:M.run,
+    precip:Object.assign(stat(p.precip3), {poe}),
+    temp:stat(p.temp),
+    wind:Object.assign(stat(p.wind_speed), {dir:at(p.wind_dir,'mean')}) };
+}
+function ensModelParam(key, pointId, stepTime, param){
+  const e = ensModelAt(key, pointId, stepTime); if(!e) return null;
+  if(param==='hujan'||param==='hujan24') return Object.assign({n:e.n}, e.precip);
+  if(param==='suhu') return Object.assign({n:e.n}, e.temp);
+  if(param==='angin') return Object.assign({n:e.n, dir:e.wind.dir}, e.wind);
+  return null;
+}
+// gabungan semua model (bobot sama per model) — hanya curah hujan 3-jam
+function ensPooledAt(pointId, stepTime){
+  const P = ENS_MULTI && ENS_MULTI.pooled && ENS_MULTI.pooled.points && ENS_MULTI.pooled.points[pointId];
+  if(!P) return null;
+  const si = ENS_MULTI.steps.indexOf(stepTime); if(si < 0) return null;
+  const q = P.precip3, at = k => (q[k] && q[k][si]!=null) ? q[k][si] : null;
+  const poe = {};
+  (ENS_MULTI.thresholds_mm||[]).forEach(t=>{ poe[t] = q.poe && q.poe[String(t)] ? q.poe[String(t)][si] : null; });
+  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe };
+}
+function ensTotalMembers(){
+  let n = 0;
+  if(ENS_MULTI) ENS_ORDER.forEach(k=>{ const M = ENS_MULTI.models[k]; if(M && !M.stale) n += M.n_members; });
+  return n;
+}
+function fmtRunTag(iso){
+  if(!iso) return 'run ?';
+  const d = new Date(iso);
+  const bln = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return `${String(d.getUTCDate()).padStart(2,'0')} ${bln[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2,'0')}Z`;
+}
+// umur data ensemble (jam) berdasarkan waktu file terakhir ditulis pipeline
+function ensAgeHours(){
+  const t = [ENS_MULTI && ENS_MULTI.generated, window.ECMWF_ENS_DATA && window.ECMWF_ENS_DATA.generated]
+    .filter(Boolean).map(s=>Date.parse(s)).filter(x=>!isNaN(x));
+  if(!t.length) return null;
+  return (Date.now() - Math.max(...t)) / 3600000;
+}
 // ECMWF ENS punya data untuk titik ini? (32 kecamatan + 45 grid kalau pipeline sudah menyertakan)
 function ensHasPoint(pointIdx){
-  const p = POINTS[pointIdx];
-  return !!(ECMWF_ENS && ECMWF_ENS.points && p && ECMWF_ENS.points[p.id]);
+  const p = POINTS[pointIdx]; if(!p) return false;
+  return !!((ECMWF_ENS && ECMWF_ENS.points && ECMWF_ENS.points[p.id]) || (ECMWF_GRIB && ECMWF_GRIB.points && ECMWF_GRIB.points[p.id]));
 }
 // Nilai ECMWF ENS untuk satu stasiun pada satu langkah waktu (string sama dg state.steps[].time).
-function ecmwfEnsAt(stationId, stepTime){
-  if(!ECMWF_ENS) return null;
-  const p = ECMWF_ENS.points[stationId];
+function _ensAtFrom(ds, stationId, stepTime){
+  if(!ds) return null;
+  const p = ds.points[stationId];
   if(!p) return null;
-  let si = ECMWF_ENS.steps.indexOf(stepTime);
+  let si = ds.steps.indexOf(stepTime);
   if(si < 0){
     // cocokkan ke langkah ENS terdekat (maks 90 menit) — jaga-jaga kalau grid
     // data ENS belum sinkron dengan grid jam halaman (00.. vs 02..)
     const target = Date.parse(stepTime + ':00');
     let bestDiff = 91 * 60 * 1000;
-    ECMWF_ENS.steps.forEach((s, i) => {
+    ds.steps.forEach((s, i) => {
       const d = Math.abs(Date.parse(s + ':00') - target);
       if (d < bestDiff) { bestDiff = d; si = i; }
     });
@@ -547,7 +623,7 @@ function ecmwfEnsAt(stationId, stepTime){
   if(si < 0) return null;
   const at = (o,k)=> (o && o[k]!=null && o[k][si]!=null) ? o[k][si] : null;
   const poe = {};
-  (ECMWF_ENS.thresholds_mm||[]).forEach(t=>{
+  (ds.thresholds_mm||[]).forEach(t=>{
     const row = p.precip3.poe ? p.precip3.poe[String(t)] : null;
     poe[t] = row ? row[si] : null;
   });
@@ -563,6 +639,18 @@ function ecmwfEnsAt(stationId, stepTime){
              p10:at(p.wind_speed,'p10'), p50:at(p.wind_speed,'p50'), p90:at(p.wind_speed,'p90'),
              dir:at(p.wind_dir,'mean') }
   };
+}
+// ECMWF ENS di satu titik & langkah. Ensemble Open-Meteo hanya memuat CURAH HUJAN; suhu & angin
+// ensemble ECMWF (kalau kosong) dilengkapi dari file GRIB ECMWF Open Data pada langkah yang sama.
+function ecmwfEnsAt(stationId, stepTime){
+  let r = _ensAtFrom(ECMWF_ENS, stationId, stepTime);
+  // titik yang tidak ada di ens_multi.js (mis. titik grid) → pakai GRIB ECMWF Open Data
+  if(!r && ECMWF_GRIB && ECMWF_GRIB !== ECMWF_ENS) r = _ensAtFrom(ECMWF_GRIB, stationId, stepTime);
+  if(r && ECMWF_ENS && ECMWF_ENS.source==='Open-Meteo' && r.temp.mean==null && r.wind.mean==null && ECMWF_GRIB){
+    const g = _ensAtFrom(ECMWF_GRIB, stationId, stepTime);
+    if(g){ r.temp = g.temp; r.wind = g.wind; r.tempFrom = 'ECMWF Open Data'; }
+  }
+  return r;
 }
 // nilai ECMWF ENS sesuai parameter aktif -> {min,max,mean, extra} dalam satuan tampilan
 function ecmwfEnsParam(stationId, stepTime, param){
@@ -665,7 +753,8 @@ function modelReading(pointIdx, step, modelKey){
   const h0 = hours[step.idx];
   if(!h0 || !h0[modelKey]) return null;
   let precip3 = 0, n=0;
-  for(let k=0;k<3;k++){
+  // Open-Meteo: precipitation jam t = jumlah JAM SEBELUMNYA (t-1, t] → jendela [T, T+3 jam) = nilai pada T+1..T+3
+  for(let k=1;k<=3;k++){
     const h = hours[step.idx+k];
     if(h && h[modelKey] && h[modelKey].precip!=null){ precip3 += h[modelKey].precip; n++; }
   }
@@ -974,10 +1063,16 @@ function renderSummaryCard(p, step, avg, spread){
   // Hujan & peluang diambil dari SATU sumber supaya konsisten:
   // ECMWF (51 skenario) bila tersedia untuk titik+jam ini, kalau tidak → rata-rata 3 model.
   let rain, popSrc, pop;
-  if(hasEns){
+  const pooled = ENS_MULTI ? ensPooledAt(p.id, step.time) : null;
+  if(pooled && pooled.mean!=null && pooled.poe['1']!=null && pooled.nm>=2){
+    // gabungan beberapa model (bobot sama per model) — sumber paling kuat bila ada
+    rain = pooled.mean;
+    pop  = Math.round(pooled.poe['1']*100);
+    popSrc = `gabungan ${pooled.nm} model ensemble`;
+  } else if(hasEns){
     rain = e.precip.mean;
     pop  = (e.precip.poe && e.precip.poe['1']!=null) ? Math.round(e.precip.poe['1']*100) : null;
-    popSrc = '51 skenario ECMWF';
+    popSrc = `${ECMWF_ENS.n_members} skenario ECMWF`;
   } else {
     rain = avg.precip3;
     const n = MODELS.length;
@@ -1037,6 +1132,12 @@ function renderSummaryCard(p, step, avg, spread){
 const PRODUK_SLOTS = [2,5,8,11,14,17,20,23];
 const COMPASS16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
 function deg16(deg){ return COMPASS16[Math.round((((deg%360)+360)%360)/22.5)%16]; }
+// kunci waktu "YYYY-MM-DDTHH:00"; jam >= 24 digulirkan ke hari berikutnya
+function hourKeyOf(dateStr, hour){
+  let d = dateStr, h = hour;
+  while(h >= 24){ h -= 24; d = addDays(d, 1); }
+  return `${d}T${String(h).padStart(2,'0')}:00`;
+}
 function addDays(dateStr,n){
   const [y,m,d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n);
@@ -1135,7 +1236,7 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
              temp: e.temp?e.temp.mean:null, speed: e.wind?e.wind.mean:null, dir: e.wind?e.wind.dir:null };
   }
   let precip3=0, pn=0, temp=null, speed=null, dir=null, wcode=null;
-  for(let k=0;k<3;k++){
+  for(let k=1;k<=3;k++){          // jam T+1..T+3 (precip Open-Meteo = jam sebelumnya)
     let hh=slotHour+k, dd=dateStr;
     if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
     const s = srcHour(hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`), src);
@@ -1151,7 +1252,7 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
 function slotDisagree(pi, hidx, dateStr, slotHour){
   const sums = MODELS.map(m=>{
     let s=0,n=0;
-    for(let k=0;k<3;k++){
+    for(let k=1;k<=3;k++){
       let hh=slotHour+k, dd=dateStr;
       if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
       const rec = hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`);
@@ -1218,7 +1319,7 @@ function openJustModal(pi, sh){
   // ECMWF ENS
   const e = ensSlot(STATION_POINTS[pi].id, date, sh);
   const pct = v => v==null ? '–' : Math.round(v*100)+'%';
-  const ensRow = e && e.precip ? `<tr><td>ECMWF ENS (${ECMWF_ENS?ECMWF_ENS.n_members:'?'})</td>`
+  const ensRow = e && e.precip ? `<tr><td>ECMWF ENS (${ECMWF_ENS?ECMWF_ENS.n_members:'?'})<br><span style="color:var(--text-faint);font-size:10.5px">${ECMWF_ENS?fmtRunTag(ECMWF_ENS.run):''}</span></td>`
       + `<td>rata² ${fmtmm(e.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(e.precip.p10)}–${fmtmm(e.precip.p90)}</span></td>`
       + `<td>Peluang hujan<br>≥1mm ${pct(e.precip.poe?e.precip.poe['1']:null)} · ≥10 ${pct(e.precip.poe?e.precip.poe['10']:null)} · ≥20 ${pct(e.precip.poe?e.precip.poe['20']:null)}</td></tr>`
     : `<tr><td>ECMWF ENS</td><td colspan="2" style="color:var(--text-faint)">${
@@ -1227,12 +1328,28 @@ function openJustModal(pi, sh){
         : 'jam ini di luar jangkauan run ENS terakhir'}</td></tr>`;
   // GFS/ICON ensemble — ditarik otomatis kalau belum ada
   const stationId = STATION_POINTS[pi].id;
+  const slotKey = `${date}T${hh}:00`;
   function gfsIconRows(){
+    if(ENS_MULTI){
+      // ensemble multi-model: sudah dihitung pipeline → langsung tampil, tanpa menunggu unduhan
+      const em = ENS_ORDER.filter(k=>k!=='ecmwf' && ENS_MULTI.models[k]).map(k=>{
+        const x = ensModelAt(k, stationId, slotKey), M = ENS_MULTI.models[k];
+        if(!x || x.precip.mean==null) return `<tr><td>${M.short} (${M.n_members})</td><td colspan="2" style="color:var(--text-faint)">tidak tersedia untuk sel ini</td></tr>`;
+        return `<tr><td>${M.short} (${M.n_members})<br><span style="color:var(--text-faint);font-size:10.5px">${fmtRunTag(M.run)}${M.stale?' · lama':''}</span></td>`
+          + `<td>rata² ${fmtmm(x.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(x.precip.p10)}–${fmtmm(x.precip.p90)}</span></td>`
+          + `<td>Peluang hujan<br>≥1mm ${pct(x.precip.poe['1'])} · ≥10 ${pct(x.precip.poe['10'])} · ≥20 ${pct(x.precip.poe['20'])}</td></tr>`;
+      }).join('');
+      const pp = ensPooledAt(stationId, slotKey);
+      const pooled = (pp && pp.mean!=null)
+        ? `<tr style="background:var(--panel-alt)"><td><b>Gabungan</b> (${pp.nm} model)</td><td>rata² ${fmtmm(pp.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(pp.p10)}–${fmtmm(pp.p90)}</span></td>`
+          + `<td>Peluang hujan<br><b>≥1mm ${pct(pp.poe['1'])}</b> · ≥10 ${pct(pp.poe['10'])} · ≥20 ${pct(pp.poe['20'])}</td></tr>` : '';
+      return em + pooled;
+    }
     const ensData = state.ensembleCache[stationId];
     if(!ensData) return `<tr id="jfGfsIcon"><td>GFS / ICON ensemble</td><td colspan="2" style="color:var(--text-faint)">memuat…</td></tr>`;
     const idxByTime = {}; ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
     const hourIdxs = [];
-    for(let k=0;k<3;k++){ const t=`${date}T${String((sh+k)%24).padStart(2,'0')}:00`; if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]); }
+    for(let k=1;k<=3;k++){ const t=hourKeyOf(date, sh+k); if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]); }
     return ENSEMBLE_MODELS.map(m=>{
       const st = statsForHours(ensData, m.key, 'precipitation', hourIdxs, true);
       return `<tr class="jfGfsIcon"><td>${m.label}</td><td>${st?`${st.min.toFixed(1)}–${st.max.toFixed(1)} mm`:'—'}</td><td>${st?`rata² ${st.mean.toFixed(1)} (n=${st.n})`:'—'}</td></tr>`;
@@ -1286,7 +1403,7 @@ function openJustModal(pi, sh){
   };
 
   // tarik GFS/ICON ensemble otomatis kalau belum ada, lalu isi barisnya
-  if(!state.ensembleCache[stationId]){
+  if(!ENS_MULTI && !state.ensembleCache[stationId]){
     fetchEnsembleForPoint(STATION_POINTS[pi]).then(data=>{
       state.ensembleCache[stationId] = data;
       const cur = document.getElementById('justOverlay');
@@ -1392,6 +1509,7 @@ function produkTSV(){
 function flashBtn(id,msg){ const b=document.getElementById(id); if(!b) return; const o=b.dataset.o||b.textContent; b.dataset.o=o; b.textContent=msg; setTimeout(()=>{ b.textContent=o; },1500); }
 function initProdukControls(){
   const s = document.getElementById('produkSrc');
+  if(ECMWF_ENS){ const o=[...s.options].find(x=>x.value==='ens'); if(o) o.textContent = `Ensemble ECMWF (rata-rata ${ECMWF_ENS.n_members} skenario)`; }
   if(!ECMWF_ENS){ const opt=[...s.options].find(o=>o.value==='ens'); if(opt){ opt.disabled=true; opt.textContent+=' — belum aktif'; } }
   s.addEventListener('change', renderProdukTable);
   document.getElementById('produkDay').addEventListener('change', renderProdukTable);
@@ -1407,7 +1525,23 @@ function initProdukControls(){
   });
 }
 
+function updateStaleBanner(){
+  const el = document.getElementById('ensStaleBanner'); if(!el) return;
+  const grib = window.ECMWF_ENS_DATA || null;
+  const age = ensAgeHours();
+  let msg = '';
+  if(!ENS_MULTI && !grib) msg = '⚠ Data ensemble belum termuat (ens_multi.js / ecmwf_ens.js tidak ditemukan). Coba refresh keras (Ctrl+Shift+R); kalau tetap, cek GitHub Actions.';
+  else if(!ENS_MULTI && grib && grib.mock) msg = '⚠ Ensemble ECMWF masih DATA CONTOH (sintetis) — bukan prakiraan asli.';
+  else if(age!=null && age > 20) msg = `⚠ Data ensemble terakhir diperbarui ${Math.round(age)} jam lalu — pipeline kemungkinan berhenti. Cek tab Actions di GitHub (atau refresh keras kalau baru saja diperbarui).`;
+  else if(ENS_MULTI){
+    const stale = ENS_ORDER.filter(k=>ENS_MULTI.models[k] && ENS_MULTI.models[k].stale).map(k=>ENS_MULTI.models[k].short);
+    if(stale.length) msg = `⚠ Model ${stale.join(', ')} gagal diperbarui pada run terakhir — memakai data lama.`;
+  }
+  el.hidden = !msg; el.textContent = msg;
+}
+
 function render(){
+  updateStaleBanner();
   const step = state.steps[state.stepIdx];
   overlayLayer.setUrl(buildFieldCanvas(step));
   updateMarkers(step);
@@ -1590,6 +1724,16 @@ function initEnsembleControls(){
     if(Object.keys(state.ensembleCache).length) document.getElementById('loadEnsembleBtn').click();
   });
   ds.addEventListener('change', ()=>{ state.detailDayIdx = parseInt(ds.value,10); renderDetailTable(); });
+  if(ENS_MULTI){
+    // ensemble multi-model sudah dihitung pipeline untuk semua titik → tombol "Muat GFS + ICON" tidak perlu
+    const btn = document.getElementById('loadEnsembleBtn'), st = document.getElementById('ensembleStatus');
+    if(btn) btn.style.display = 'none';
+    if(st) st.style.display = 'none';
+    const tail = document.getElementById('ensBlurbTail');
+    if(tail) tail.innerHTML = '<b>' + ENS_ORDER.filter(k=>ENS_MULTI.models[k])
+      .map(k=>`${ENS_MULTI.models[k].short} (${ENS_MULTI.models[k].n_members})`).join(' · ')
+      + '</b> tampil otomatis untuk semua titik &amp; semua hari — tanpa perlu memuat manual.';
+  }
 }
 function syncEnsembleControls(){
   const ps = document.getElementById('ensPointSel');
@@ -1618,13 +1762,15 @@ function renderEcmwfEns(){
     wrap.style.display = 'none';
     return;
   }
-  const nMem = ECMWF_ENS.n_members || 51;
-  const runTxt = (ECMWF_ENS.run||'').replace('T',' ').replace('Z',' UTC');
-  const genTxt = (ECMWF_ENS.generated||'').replace('T',' ').replace('Z',' UTC');
-  const mockTxt = ECMWF_ENS.mock ? ' <b style="color:var(--warn)">— DATA CONTOH (sintetis), bukan prakiraan asli</b>' : '';
-  infoEl.innerHTML = `ECMWF · <b>${nMem} skenario</b> · data terakhir <b>${runTxt}</b> · diperbarui ${genTxt}${mockTxt}`;
-
   const point = POINTS[state.selectedIdx];
+  // sumber untuk titik terpilih: ens_multi (Open-Meteo) kalau titiknya ada di sana, kalau tidak GRIB ECMWF Open Data
+  const srcDs = (ECMWF_ENS.points && ECMWF_ENS.points[point.id]) ? ECMWF_ENS : (ECMWF_GRIB && ECMWF_GRIB.points && ECMWF_GRIB.points[point.id] ? ECMWF_GRIB : ECMWF_ENS);
+  const nMem = srcDs.n_members || 51;
+  const runTxt = (srcDs.run||'').replace('T',' ').replace('Z',' UTC');
+  const genTxt = (srcDs.generated||'').replace('T',' ').replace('Z',' UTC');
+  const mockTxt = srcDs.mock ? ' <b style="color:var(--warn)">— DATA CONTOH (sintetis), bukan prakiraan asli</b>' : '';
+  infoEl.innerHTML = `ECMWF · <b>${nMem} skenario</b> · sumber ${srcDs.source||'-'} · data terakhir <b>${runTxt}</b> · diperbarui ${genTxt}${mockTxt}`;
+
   if(!ensHasPoint(state.selectedIdx)){
     wrap.style.display = 'block';
     wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Data ECMWF ENS belum ada untuk titik ini. Titik grid tercakup kalau pipeline dijalankan dengan grid diaktifkan.</div>`;
@@ -1765,7 +1911,76 @@ function statsForHours(ensData, modelKey, varName, hourIdxs, sumMode){
   return { min:Math.min(...values), max:Math.max(...values), mean:values.reduce((s,v)=>s+v,0)/values.length, n:values.length };
 }
 
+// --- Tabel perbandingan ensemble multi-model (ECMWF · AIFS · GEFS · ICON · Gabungan) ---
+function renderEnsMulti(){
+  const wrap = document.getElementById('ensembleTable');
+  const point = POINTS[state.selectedIdx];
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+  const param = state.param==='hujan24' ? 'hujan' : state.param;
+  wrap.style.display = 'block';
+  if(param==='rh'){
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Kelembapan tidak tersedia pada ensemble. Pilih parameter hujan / suhu / angin.</div>`;
+    return;
+  }
+  const def = PARAM_DEF[param], unit = def.unit, isRain = (param==='hujan');
+  const keys = ENS_ORDER.filter(k=>ENS_MULTI.models[k]);
+  const hasPooled = isRain && ENS_MULTI.pooled && ENS_MULTI.pooled.points && ENS_MULTI.pooled.points[point.id];
+  const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+
+  const head = keys.map(k=>{
+    const M = ENS_MULTI.models[k];
+    return `<th><span style="color:${ENS_CLR[k]}">${M.short}</span> (${M.n_members})<br>`
+      + `<span style="font-weight:400;color:var(--text-faint)">${fmtRunTag(M.run)}${M.stale?' · <b style="color:var(--bad)">lama</b>':''}</span></th>`;
+  }).join('') + (hasPooled ? `<th><span style="color:${ENS_CLR.pooled}">Gabungan</span><br><span style="font-weight:400;color:var(--text-faint)">peluang hujan</span></th>` : '');
+
+  const rows = daySteps.map(s=>{
+    const per = keys.map(k=> (k==='ecmwf' && param!=='hujan') ? ecmwfEnsParam(point.id, s.time, param) : ensModelParam(k, point.id, s.time, param));
+    const ok = per.filter(x=>x && x.mean!=null);
+    const hiOf = x => x.p90!=null ? x.p90 : x.max;
+    const loOf = x => x.p10!=null ? x.p10 : x.min;
+    const rowMax = Math.max(isRain?0.6:1, ...ok.map(x=> x.max!=null ? x.max : hiOf(x)));
+    const rowMin = isRain ? 0 : Math.min(...ok.map(x=> x.min!=null ? x.min : loOf(x)));
+    const span = Math.max(rowMax-rowMin, 0.001);
+    const cells = per.map((x,i)=>{
+      if(!x || x.mean==null) return `<td style="color:var(--text-faint)">—</td>`;
+      const lo = loOf(x), hi = hiOf(x);
+      const L = ((lo-rowMin)/span*100).toFixed(1), W = Math.max((hi-lo)/span*100,1.5).toFixed(1), Mn = ((x.mean-rowMin)/span*100).toFixed(1);
+      const title = `${ENS_MULTI.models[keys[i]].label}: kisaran wajar (P10–P90) ${lo.toFixed(1)}–${hi.toFixed(1)} ${unit} · rata² ${x.mean.toFixed(1)} ${unit}`;
+      const poeTxt = (isRain && x.poe) ? `<div class="ens-bar-label" style="margin-top:2px;color:var(--text-faint)">≥1mm ${pct(x.poe['1'])} · ≥10 ${pct(x.poe['10'])}</div>` : '';
+      return `<td><div class="ens-bar-wrap" title="${title}"><div class="ens-bar-track" style="width:90px"><div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:${ENS_CLR[keys[i]]}"></div><div class="ens-bar-mean" style="left:${Mn}%"></div></div></div>`
+        + `<div class="ens-bar-label">${lo.toFixed(1)}–${hi.toFixed(1)} <span style="color:var(--text-faint)">(rata² ${x.mean.toFixed(1)})</span></div>${poeTxt}</td>`;
+    }).join('');
+    let pooledCell = '';
+    if(hasPooled){
+      const pp = ensPooledAt(point.id, s.time);
+      if(pp && pp.mean!=null){
+        const L = (pp.p10/rowMax*100).toFixed(1), W = Math.max((pp.p90-pp.p10)/rowMax*100,1.5).toFixed(1), Mn = (pp.mean/rowMax*100).toFixed(1);
+        pooledCell = `<td><div class="ens-bar-wrap" title="Gabungan ${pp.nm} model (bobot sama per model): P10–P90 ${pp.p10.toFixed(1)}–${pp.p90.toFixed(1)} mm · rata² ${pp.mean.toFixed(1)} mm"><div class="ens-bar-track" style="width:90px"><div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:${ENS_CLR.pooled}"></div><div class="ens-bar-mean" style="left:${Mn}%"></div></div></div>`
+          + `<div class="ens-bar-label"><b>≥1mm ${pct(pp.poe['1'])}</b> · ≥10 ${pct(pp.poe['10'])} · ≥20 ${pct(pp.poe['20'])}</div>`
+          + `<div class="ens-bar-label" style="color:var(--text-faint)">rata² ${pp.mean.toFixed(1)} mm · ${pp.nm} model</div></td>`;
+      } else pooledCell = `<td style="color:var(--text-faint)">—</td>`;
+    }
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>${cells}${pooledCell}</tr>`;
+  }).join('');
+
+  const runs = keys.map(k=>{ const M=ENS_MULTI.models[k]; return `${M.short} ${fmtRunTag(M.run)}`; }).join(' · ');
+  wrap.innerHTML = `
+    <div class="param-head">Sebaran skenario antar model — ${def.label} (${unit}) · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);line-height:1.5;">
+      Batang = kisaran wajar (P10–P90, 8 dari 10 skenario); garis tegak = rata-rata. Skala per baris — batang antar jam tidak dibandingkan lurus.
+      <b>Gabungan</b> = peluang dari 4 model, bobot sama per model (bukan per skenario). Run: ${runs}.
+      ${isRain ? '' : '<br>Suhu & angin ensemble hanya tersedia untuk ECMWF (dari ECMWF Open Data).'}
+    </div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function renderEnsembleTable(){
+  if(ENS_MULTI){ renderEnsMulti(); return; }
   const point = POINTS[state.selectedIdx];
   const ensData = state.ensembleCache[point.id];
   const wrap = document.getElementById('ensembleTable');
@@ -1788,9 +2003,8 @@ function renderEnsembleTable(){
 
   const rows = daySteps.map(s=>{
     let hourIdxs = [];
-    for(let k=0;k<3;k++){
-      const hh = String((s.hour+k)%24).padStart(2,'0');
-      const t = `${s.date}T${hh}:00`;
+    for(let k=1;k<=3;k++){           // jam T+1..T+3 (precip = jam sebelumnya), lewat tengah malam → hari berikut
+      const t = hourKeyOf(s.date, s.hour+k);
       if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]);
     }
     if(!hourIdxs.length) hourIdxs = [idxByTime[s.time]];

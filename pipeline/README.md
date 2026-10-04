@@ -174,3 +174,28 @@ window.ECMWF_ENS_DATA = {
   `build_payload()` menulis JSON.
 * **Multi-model**: menambah NOAA GEFS (31 member, 3-jam s/d D+10, gratis) akan
   menutup celah H+6..H+7 dan memberi pembanding independen.
+
+---
+
+## 8. Ensemble multi-model (Open-Meteo) — `ingest_openmeteo_ens.py`
+
+Pipeline kedua, jauh lebih ringan (Python + numpy, tanpa GRIB), menulis **`../ens_multi.js`**
+(`window.ENS_MULTI`) untuk 77 titik:
+
+| Model | Skenario | Catatan |
+|---|---|---|
+| ECMWF IFS ENS | 51 | masuk di Open-Meteo ±12 jam setelah run (GRIB langsung ECMWF ±8 jam) |
+| ECMWF AIFS ENS | 51 | model AI ECMWF |
+| NOAA GEFS | 31 | 12Z masuk ±01:40 WITA → siklus 12Z tersedia **sebelum** tenggat 04:00 |
+| DWD ICON-EPS | 40 | 12Z masuk ±23:50 WITA |
+
+* Semua model **hanya curah hujan di 32 titik kecamatan/bandara** (Open-Meteo membatasi "bobot" panggilan:
+  600/menit, 5.000/jam, 10.000/hari; tiap kolom skenario dihitung berat — terukur ±2.000/run, 2 run/hari
+  ≈ 4.100). Suhu/angin ensemble ECMWF + titik grid tetap dari pipeline GRIB (`ingest_ecmwf_ens.py`).
+* **Gabungan** = peluang hujan dari 4 model dengan bobot sama per model (bukan per skenario).
+* Jendela hujan 3-jam `[T, T+3 jam)` = nilai pada T+1…T+3, karena `precipitation` Open-Meteo
+  adalah jumlah **jam sebelumnya**.
+* Halaman memakai ECMWF yang **run-nya lebih baru** antara `ens_multi.js` (51 skenario) dan
+  `ecmwf_ens.js` (GRIB, 15–20 skenario).
+* Kunci API berbayar (opsional): set secret `OPENMETEO_API_KEY` → otomatis pakai host `customer-ensemble-api`.
+* Uji cepat: `python ingest_openmeteo_ens.py --limit-points 8 --models gefs --out %TEMP%\tes.js`
