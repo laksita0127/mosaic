@@ -12,7 +12,7 @@
   :root{
     --bg:#f5f7f9; --panel:#ffffff; --panel-alt:#eef1f4; --border:#d7dde3;
     --text:#1b2530; --text-dim:#57626d; --text-faint:#8994a0;
-    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --accent:#2b6cb0;
+    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --aifs:#1f9d8a; --accent:#2b6cb0;
     --good:#5fbf8f; --warn:#e2984a; --bad:#d9705f;
     --radius:3px;
   }
@@ -264,7 +264,7 @@
         <ul style="margin:0;padding-left:18px;">
           <li><b>Peta warna</b> = perkiraan (hujan/suhu/angin/kelembapan) pada jam yang dipilih di penggeser waktu. Warna dihaluskan antar 32 titik kecamatan — bukan grid model asli.</li>
           <li><b>Penggeser waktu</b> bergerak <b>per 3 jam</b>, dari sekarang (H+0) sampai 7 hari ke depan (H+7).</li>
-          <li><b>Kartu model</b> (ECMWF, GFS, ICON) = 3 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
+          <li><b>Kartu model</b> (ECMWF, GFS, ICON, AIFS) = 4 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
           <li><b>Ensemble / "skenario"</b> = satu model dijalankan puluhan kali dengan sedikit variasi kondisi awal, menghasilkan <b>rentang</b> kemungkinan, bukan satu angka. "Peluang hujan 70%" artinya 70% dari skenario menghasilkan hujan.</li>
           <li><b>Kotak "Ringkasan"</b> di bawah menerjemahkan semua itu jadi satu kalimat untuk titik &amp; jam yang dipilih.</li>
           <li>Halaman ini alat bantu analisis internal — <b>bukan produk prakiraan resmi BMKG</b>.</li>
@@ -285,7 +285,7 @@
       <div class="field">
         <label>Model</label>
         <select id="modelSel">
-          <option value="avg">Rata-rata 3 model</option>
+          <option value="avg">Rata-rata 4 model</option>
           <option value="ecmwf">ECMWF</option>
           <option value="gfs">GFS</option>
           <option value="icon">ICON</option>
@@ -402,7 +402,7 @@
         </div>
         <div class="an-card an-wide">
           <h4>Narasi analisis (otomatis, dapat diedit)</h4>
-          <textarea id="anNarrText" style="min-height:230px"></textarea>
+          <textarea id="anNarrText" style="min-height:560px"></textarea>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
             <button class="produk-btn" id="anNarrSave" type="button">Simpan edit</button>
             <button class="produk-btn" id="anNarrReset" type="button">Susun ulang</button>
@@ -420,10 +420,11 @@
         <div class="field">
           <label>Sumber data</label>
           <select id="produkSrc">
-            <option value="avg">Kesepakatan (rata-rata 3 model)</option>
+            <option value="avg">Kesepakatan (rata-rata 4 model)</option>
             <option value="ecmwf">ECMWF</option>
             <option value="gfs">GFS</option>
             <option value="icon">ICON</option>
+            <option value="aifs">AIFS</option>
             <option value="ens">Ensemble ECMWF (rata-rata 51 skenario)</option>
           </select>
         </div>
@@ -620,7 +621,8 @@ const GRID_LABELS = (function(){
 const MODELS = [
   { key:'ecmwf', param:'ecmwf_ifs025', label:'ECMWF', cls:'ecmwf' },
   { key:'gfs',   param:'gfs_seamless', label:'GFS',   cls:'gfs' },
-  { key:'icon',  param:'icon_seamless',label:'ICON',  cls:'icon' }
+  { key:'icon',  param:'icon_seamless',label:'ICON',  cls:'icon' },
+  { key:'aifs',  param:'ecmwf_aifs025_single', label:'AIFS', cls:'aifs' }
 ];
 // True ensemble (many perturbed members per model), fetched separately/on-demand — heavier than the
 // multi-model deterministic set above. Model identifiers per Open-Meteo's ensemble API.
@@ -1170,7 +1172,7 @@ function renderSummaryCard(p, step, avg, spread){
   const hasEns = !!(e && e.precip && e.precip.mean!=null);
 
   // Hujan & peluang diambil dari SATU sumber supaya konsisten:
-  // ECMWF (51 skenario) bila tersedia untuk titik+jam ini, kalau tidak → rata-rata 3 model.
+  // ECMWF (51 skenario) bila tersedia untuk titik+jam ini, kalau tidak → rata-rata 4 model.
   let rain, popSrc, pop;
   const pooled = ENS_MULTI ? ensPooledAt(p.id, step.time) : null;
   if(pooled && pooled.mean!=null && pooled.poe['1']!=null && pooled.nm>=2){
@@ -1186,7 +1188,7 @@ function renderSummaryCard(p, step, avg, spread){
     rain = avg.precip3;
     const n = MODELS.length;
     const hit = MODELS.reduce((s,m)=>{ const r=modelReading(state.selectedIdx, step, m.key); return s + ((r && (r.precip3||0) >= 0.2) ? 1 : 0); }, 0);
-    pop = Math.round(hit/n*100); popSrc = 'kesepakatan 3 model';
+    pop = Math.round(hit/n*100); popSrc = 'kesepakatan 4 model';
   }
   const cat = rainCat3h(rain);
   const popCls = pop==null ? 'c-neutral' : pop>=70 ? 'c-bad' : pop>=40 ? 'c-warn' : 'c-good';
@@ -1203,7 +1205,7 @@ function renderSummaryCard(p, step, avg, spread){
 
   // Keyakinan dari selisih antar model
   let conf, confCls, confSub;
-  if(spread < 1){ conf='Tinggi'; confCls='c-good'; confSub='3 model hampir sama'; }
+  if(spread < 1){ conf='Tinggi'; confCls='c-good'; confSub='4 model hampir sama'; }
   else if(spread < 4){ conf='Sedang'; confCls='c-warn'; confSub=`model agak beda (±${spread.toFixed(1)} mm)`; }
   else { conf='Rendah'; confCls='c-bad'; confSub=`model jauh beda (±${spread.toFixed(1)} mm)`; }
 
@@ -1315,7 +1317,7 @@ function buildHourIndex(){
 // nilai satu sumber pada satu jam
 function srcHour(rec, src){
   if(!rec) return null;
-  if(src==='ecmwf'||src==='gfs'||src==='icon') return rec[src] || null;
+  if(MODELS.some(m=>m.key===src)) return rec[src] || null;
   if(src==='avg'){
     const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
     if(!parts.length) return null;
@@ -1421,7 +1423,7 @@ function openJustModal(pi, sh){
   const fmtmm = v => v==null ? '—' : v.toFixed(1)+' mm';
 
   // baris perbandingan model deterministik
-  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['icon','ICON'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
+  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['icon','ICON'],['aifs','AIFS'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
     const a = slotAgg(pi, hidx, date, sh, k);
     return `<tr><td>${lab}</td><td>${a?fmtmm(a.precip3):'—'}</td><td>${a?(a.wcat||WX_CATS.berawan).txt:'—'}</td></tr>`;
   }).join('');
@@ -1588,7 +1590,7 @@ function renderProdukTable(){
         if(clickable) cls += ' justcell';
         const tip = jr
           ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
-          : (dis?'3 model tidak sepakat — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+          : (dis?'4 model tidak sepakat — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
         return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${badge}</td>`;
       }).join('');
       body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
@@ -1602,7 +1604,7 @@ function renderProdukTable(){
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
-    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 3 model tidak sepakat soal hujan — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 4 model tidak sepakat soal hujan — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
@@ -1703,11 +1705,11 @@ function render(){
   const avgCard = document.createElement('div');
   avgCard.className = 'mcard';
   avgCard.style.setProperty('--mclr', 'var(--accent)');
-  if(!avgReading){ avgCard.innerHTML = `<div class="mname">Rata-rata 3 model</div><div class="mrow">Data tidak tersedia</div>`; }
+  if(!avgReading){ avgCard.innerHTML = `<div class="mname">Rata-rata 4 model</div><div class="mrow">Data tidak tersedia</div>`; }
   else {
     const total24Avg = dailyTotalPrecipFor(state.selectedIdx, step.date);
     avgCard.innerHTML = `
-      <div class="mname">Rata-rata 3 model</div>
+      <div class="mname">Rata-rata 4 model</div>
       <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(avgReading.precip3??0).toFixed(1)} mm</span></div>
       <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24Avg.toFixed(1)} mm</span></div>
       <div class="mrow"><span>Suhu</span><span class="v">${avgReading.temp.toFixed(1)} °C</span></div>
@@ -2325,8 +2327,8 @@ searchInput.addEventListener('input', ()=>{
 });
 document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-box')) searchResults.style.display='none'; });
 
-const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], icon:[0,6,12,18] };
-const RUN_LAG_HOURS = { ecmwf:8, gfs:5, icon:3 };
+const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], icon:[0,6,12,18], aifs:[0,6,12,18] };
+const RUN_LAG_HOURS = { ecmwf:8, gfs:5, icon:3, aifs:6 };
 function estimateLatestRun(modelKey){
   const now = new Date();
   const avail = new Date(now.getTime() - RUN_LAG_HOURS[modelKey]*3600000);

@@ -321,16 +321,22 @@ function renderRain(date, reg){
   const srcTxt = R.src==='gabungan' ? 'ensemble <b>gabungan</b> ECMWF·AIFS·GEFS·ICON (bobot sama per model)' : (R.src==='ECMWF' ? 'ensemble ECMWF' : '<b>tidak ada data ensemble</b> untuk hari ini (hanya deterministik)');
   el.innerHTML = `<h4>Hujan, suhu &amp; angin per kecamatan — ${REGS[reg]}</h4>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th>Kecamatan</th><th>Peluang hujan maks (≥1 mm/3 jam)</th><th>Jam puncak</th><th>Peluang ≥10 mm</th><th>Hujan 3 jam maks (det.)</th><th>Suhu</th><th>Angin maks</th><th>Sel *</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="si-sub" style="margin-top:6px">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata 3 model deterministik; suhu/angin = rata-rata 3 model; sel * = jumlah slot (dari 8) saat 3 model tak sepakat ada/tidaknya hujan.</div>`;
+    <div class="si-sub" style="margin-top:6px">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata model deterministik; suhu/angin = rata-rata 4 model; sel * = jumlah slot (dari 8) saat 4 model tak sepakat ada/tidaknya hujan.</div>`;
   return R;
 }
 
-/* ---------- D. narasi otomatis ---------- */
+/* ---------- D. narasi otomatis: faktor pendukung / penghambat + kesimpulan 3 hari ---------- */
+const NARR_DAYS = 3;
+const dLong = d => dateLong(d, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+const regName = reg => reg==='all' ? 'Bima–Dompu' : REGS[reg];
+const dShort = d => dateLong(d, {weekday:'short', day:'numeric', month:'short'});
+const GRP_SHORT = { 'KOTA BIMA':'Kota Bima', 'KABUPATEN BIMA':'Kab. Bima', 'KABUPATEN DOMPU':'Kab. Dompu' };
+
 function rainPhrase(peak, peak10, rainDet){
   if(peak==null){
-    if(rainDet<0.5) return 'tidak berpotensi hujan signifikan (3 model deterministik)';
-    if(rainDet<10) return 'berpotensi hujan ringan lokal (3 model deterministik)';
-    return 'berpotensi hujan sedang–lebat lokal (3 model deterministik)';
+    if(rainDet<0.5) return 'tidak berpotensi hujan signifikan (model deterministik)';
+    if(rainDet<10) return 'berpotensi hujan ringan lokal (model deterministik)';
+    return 'berpotensi hujan sedang–lebat lokal (model deterministik)';
   }
   let s = peak<0.10 ? 'praktis tidak berpotensi hujan' : peak<0.25 ? 'hujan hanya berpeluang kecil dan bersifat lokal (ringan)'
     : peak<0.50 ? 'berpotensi hujan ringan lokal di sebagian wilayah' : peak<0.75 ? 'berpotensi hujan ringan–sedang di sebagian wilayah'
@@ -338,61 +344,145 @@ function rainPhrase(peak, peak10, rainDet){
   if(peak10!=null && peak10>=0.25) s += `, dengan potensi hujan lebat lokal (≥10 mm/3 jam, peluang hingga ${Math.round(peak10*100)}%)`;
   return s;
 }
-function buildNarrative(date, reg, dyn, lv, R){
-  const par = [`Analisis ${dateLong(date)} — ${REGS[reg]}`, ''];
-  if(dyn){
-    const it = Object.fromEntries(dyn.items.map(i=>[i.k,i]));
-    const bits = [];
-    if(it.soi) bits.push(`${it.soi.lab} ${it.soi.val}`); if(it.nino) bits.push(`Niño 3.4 ${it.nino.val}`); if(it.dmi) bits.push(`DMI ${it.dmi.val}`);
-    let s = `Dinamika atmosfer (${dyn.b ? 'buletin '+dateLong(dyn.b.date,{day:'numeric',month:'long'}) : 'indeks otomatis NOAA, bukan buletin BMKG'}): ${bits.join(', ')}`;
-    if(dyn.ov) s += ` — ${dyn.ov.txt.toLowerCase()}`;
-    if(it.mjo) s += `; MJO ${it.mjo.val}, ${it.mjo.txt}`;
-    if(it.kelvin) s += `; gelombang Kelvin ${it.kelvin.val} (fase konvektif aktif)`;
-    if(it.er) s += `; Rossby ekuator ${it.er.val} (fase konvektif aktif)`;
-    if(it.surge) s += `; indeks surge ${it.surge.val} (${it.surge.txt})`;
-    if(!dyn.b) s += '.';
-    else s += dyn.mn.hit ? '. Buletin menyebut wilayah NTB pada belokan/konvergensi/SST/gelombang atmosfer.' : '. Belokan angin/konvergensi dan SST anomali pada buletin tidak mencakup NTB.';
-    par.push(s);
-  } else par.push('Dinamika atmosfer: belum ada data.');
+// cuaca singkat untuk kesimpulan akhir
+function wxShort(peak, peak10, rainDet){
+  if(peak==null) return rainDet<0.5 ? 'cerah berawan hingga berawan' : rainDet<10 ? 'berawan dengan hujan ringan lokal' : 'berawan dengan hujan sedang–lebat lokal';
+  if(peak<0.10) return 'cerah berawan hingga berawan tanpa hujan signifikan';
+  if(peak<0.25) return 'cerah berawan hingga berawan, hujan ringan hanya lokal dan berpeluang kecil';
+  if(peak<0.50) return 'berawan dengan hujan ringan lokal';
+  if(peak<0.75) return 'berawan hingga hujan ringan–sedang di sebagian wilayah';
+  return 'hujan di sebagian besar wilayah' + (peak10!=null && peak10>=0.25 ? ', lokal lebat' : '');
+}
+
+// faktor lokal (lapisan atas, CAPE, angin 850, geser, ensemble) satu hari -> [{side:'pro'|'con'|'neu', txt}]
+function localFactors(lv, R, date){
+  const F = [], add = (side, txt)=> F.push({ side, txt });
   if(lv){
     const L = Object.fromEntries(lv.levels.map(l=>[l.f,l]));
-    const f = k=> `${L[k].lab} ${L[k].cls||'—'} (RH ${fmt(L[k].avgMean)}%)`;
-    let s = `Kelembapan lapisan: ${f('rh850')}, ${f('rh700')}, ${f('rh500')}, ${f('rh200')}`;
-    if(lv.extra.pwAvg!=null) s += `; uap air total ${fmt(lv.extra.pwAvg)} mm`;
-    s += '. ' + profileSentence(lv);
-    if(lv.extra.w850) s += ` Angin 850 hPa dari ${cmp(deg16(lv.extra.w850.dir))} (±${fmt(lv.extra.w850.spd)} km/jam).`;
-    par.push(s);
+    const rh = (k, lab, pro, con)=>{
+      const l = L[k]; if(!l || l.avgMean==null) return;
+      const t = `${lab} RH ${fmt(l.avgMean)}% (${l.cls})`;
+      add(l.cls==='lembap'?'pro':(l.cls==='kering'?'con':'neu'), l.cls==='lembap' ? `${t} — ${pro}` : (l.cls==='kering' ? `${t} — ${con}` : `${t}`));
+    };
+    rh('rh850','850 hPa','lapisan bawah lembap, suplai uap air cukup','lapisan bawah kering, suplai uap air terbatas');
+    rh('rh700','700 hPa','lembap, awan konvektif bisa tumbuh vertikal','kering, menghambat pertumbuhan awan konvektif');
+    rh('rh500','500 hPa','lembap, mendukung awan hujan tebal','kering, menghambat awan hujan tebal');
+    if(L.rh200 && L.rh200.avgMean!=null) add('neu', `200 hPa RH ${fmt(L.rh200.avgMean)}% (${L.rh200.cls}) — ${L.rh200.cls==='lembap'?'awan tinggi (cirrus/anvil) berpeluang banyak':'awan tinggi relatif sedikit'}`);
+    const ex = lv.extra;
+    if(ex.pwAvg!=null) add(ex.pwAvg>=TH.pw[1]?'pro':(ex.pwAvg<TH.pw[0]?'con':'neu'), `Uap air total ${fmt(ex.pwAvg)} mm — ${ex.pwAvg>=TH.pw[1]?'cukup untuk hujan':(ex.pwAvg<TH.pw[0]?'rendah (udara kering)':'sedang')}`);
+    const capes = Object.values(ex.cape).filter(v=>v!=null);
+    if(capes.length){ const c = avg(capes); add(c>=1000?'pro':(c<250?'con':'neu'), `CAPE rata² model ${fmt(c)} J/kg — ${c>=1000?'atmosfer labil, konveksi kuat mungkin':(c<250?'atmosfer stabil, konveksi lemah':'labilitas sedang')}`); }
+    if(ex.w850){
+      const d = ex.w850.dir, mon = new Date(date+'T00:00:00').getMonth()+1, dryMon = mon>=4 && mon<=10;
+      const txt = `Angin 850 hPa dari ${cmp(deg16(d))} (${fmt(ex.w850.spd)} km/jam)`;
+      if(d>=225 && d<=315) add('pro', `${txt} — baratan, membawa udara lembap dari Samudra Hindia/laut sekitar`);
+      else if(dryMon && d>=45 && d<=180) add('con', `${txt} — arus timuran/tenggara (monsun Australia) yang kering pada musim kemarau`);
+      else add('neu', txt);
+    }
+    if(ex.shear!=null) add(ex.shear>50?'con':'neu', `Geser angin 850–200 hPa ${fmt(ex.shear)} km/jam — ${ex.shear>50?'kuat, menghambat organisasi awan konvektif':'tidak menghambat secara berarti'}`);
   }
+  if(R){
+    const withP = R.rows.filter(r=>r.poe1!=null);
+    if(withP.length){
+      const pk = Math.max(...withP.map(r=>r.poe1));
+      add(pk>=0.5?'pro':(pk<0.15?'con':'neu'), `Peluang ensemble ≥1 mm/3 jam tertinggi ${Math.round(pk*100)}% — ${pk>=0.5?'tinggi':(pk<0.15?'rendah':'sedang')}`);
+    }
+  }
+  return F;
+}
+function bulletList(arr, mark){ return arr.length ? arr.map(f=>`  ${mark} ${f.txt}`).join('\n') : '  (tidak ada)'; }
+
+function dayBlock(date, idx, reg, dyn){
+  const lv = levelStats(reg, date), R = rainStats(date, reg), F = localFactors(lv, R, date);
+  const pro = F.filter(f=>f.side==='pro'), con = F.filter(f=>f.side==='con'), neu = F.filter(f=>f.side==='neu');
+  const lines = [`HARI ${idx+1} — ${dLong(date)}`];
+  lines.push('Faktor yang mendukung hujan:', bulletList(pro,'✔'));
+  lines.push('Faktor yang menghambat hujan:', bulletList(con,'✘'));
+  lines.push('Faktor netral / catatan:', bulletList(neu,'•'));
+  const info = { date, pro:pro.length, con:con.length, R, lv };
   if(R && R.rows.length){
     const withP = R.rows.filter(r=>r.poe1!=null).sort((a,b)=>b.poe1-a.poe1);
     const peak = withP.length ? withP[0].poe1 : null;
-    const peak10 = R.rows.reduce((m,r)=> r.poe10!=null ? Math.max(m,r.poe10) : m, -1);
+    const p10 = R.rows.reduce((m,r)=> r.poe10!=null ? Math.max(m,r.poe10) : m, -1);
     const rainDet = Math.max(...R.rows.map(r=>r.rainDet));
-    let s = `Hujan: ${rainPhrase(peak, peak10<0?null:peak10, rainDet)}`;
+    let s = `Hujan: ${rainPhrase(peak, p10<0?null:p10, rainDet)}`;
+    let sl = null, top = [];
     if(peak!=null && peak>=0.10){
-      const top = withP.filter(r=>r.poe1>=Math.max(0.10, peak*0.7)).slice(0,4).map(r=>r.name);
-      const sl = PRODUK_SLOTS.map(sh=>({sh, v: R.slotAcc[sh].n ? R.slotAcc[sh].s/R.slotAcc[sh].n : -1})).sort((a,b)=>b.v-a.v)[0];
-      s += `; peluang hujan ≥1 mm/3 jam tertinggi ${Math.round(peak*100)}% di ${top.join(', ')}, umumnya sekitar pukul ${String(sl.sh).padStart(2,'0')}.00–${String((sl.sh+3)%24).padStart(2,'0')}.00 WITA`;
+      top = withP.filter(r=>r.poe1>=Math.max(0.10, peak*0.7)).slice(0,4).map(r=>r.name);
+      sl = PRODUK_SLOTS.map(sh=>({sh, v: R.slotAcc[sh].n ? R.slotAcc[sh].s/R.slotAcc[sh].n : -1})).sort((a,b)=>b.v-a.v)[0];
+      s += `; peluang tertinggi ${Math.round(peak*100)}% di ${top.join(', ')}, umumnya pukul ${String(sl.sh).padStart(2,'0')}.00–${String((sl.sh+3)%24).padStart(2,'0')}.00 WITA`;
     }
     s += '.';
+    if(reg==='all' && peak!=null){
+      const gm = {}; R.rows.forEach(r=>{ if(r.poe1!=null) gm[r.grp] = Math.max(gm[r.grp]||0, r.poe1); });
+      const parts = Object.entries(gm).map(([g,v])=>`${GRP_SHORT[g]||g} ${Math.round(v*100)}%`);
+      if(parts.length) s += ` Peluang tertinggi per wilayah: ${parts.join(', ')}.`;
+    }
     if(withP.length && peak>=0.10 && ENS_MULTI){
       const w = withP[0], key = `${date}T${String(w.slot).padStart(2,'0')}:00`;
       const vals = ENS_ORDER.map(k=>{ const x = k==='ecmwf' ? ecmwfEnsAt(w.id,key) : ensModelAt(k,w.id,key); const v = x && x.precip && x.precip.poe ? x.precip.poe['1'] : null; return v==null?null:{k,v}; }).filter(Boolean);
       if(vals.length>=2){
         const hi = Math.max(...vals.map(x=>x.v)), lo = Math.min(...vals.map(x=>x.v));
-        if(hi-lo>=0.3) s += ` Model ensemble tidak sepakat di ${w.name} pukul ${String(w.slot).padStart(2,'0')}.00: ${vals.map(x=>`${(ENS_MULTI.models[x.k]&&ENS_MULTI.models[x.k].short)||x.k} ${Math.round(x.v*100)}%`).join(', ')}.`;
+        if(hi-lo>=0.3) s += ` Ensemble tidak sepakat di ${w.name} pukul ${String(w.slot).padStart(2,'0')}.00: ${vals.map(x=>`${(ENS_MULTI.models[x.k]&&ENS_MULTI.models[x.k].short)||x.k} ${Math.round(x.v*100)}%`).join(', ')}.`;
       }
     }
-    par.push(s);
+    lines.push(s);
     const withT = R.rows.filter(r=>r.ext.tmin!=null && r.ext.tmax!=null);
     const tmin = withT.slice().sort((a,b)=>a.ext.tmin-b.ext.tmin)[0], tmax = withT.slice().sort((a,b)=>b.ext.tmax-a.ext.tmax)[0];
     const kts = R.rows.filter(r=>r.ext.kts!=null).sort((a,b)=>b.ext.kts-a.ext.kts)[0];
-    if(tmin && tmax) par.push(`Suhu udara ${tmin.ext.tmin}–${tmax.ext.tmax} °C (terendah ${tmin.ext.tmin} °C di ${tmin.name}, tertinggi ${tmax.ext.tmax} °C di ${tmax.name})`
-      + (kts ? `; angin permukaan umumnya dari ${cmp(kts.ext.arah)}, kecepatan maksimum ${kts.ext.kts} km/jam di ${kts.name}.` : '.'));
-    const cells = R.rows.reduce((s,r)=>s+r.cells,0), dis = R.rows.reduce((s,r)=>s+r.dis,0), frac = cells ? dis/cells : 0;
-    par.push(`Keyakinan: ${frac<0.05?'tinggi':frac<0.20?'sedang':'rendah'} (${dis} dari ${cells} sel kecamatan×jam, 3 model deterministik tidak sepakat soal hujan).`);
-  }
-  return par.join('\n');
+    if(tmin && tmax) lines.push(`Suhu udara ${tmin.ext.tmin}–${tmax.ext.tmax} °C (terendah di ${tmin.name}, tertinggi di ${tmax.name})`
+      + (kts ? `; angin permukaan umumnya dari ${cmp(kts.ext.arah)}, maksimum ${kts.ext.kts} km/jam di ${kts.name}.` : '.'));
+    const cells = R.rows.reduce((a,r)=>a+r.cells,0), dis = R.rows.reduce((a,r)=>a+r.dis,0), frac = cells ? dis/cells : 0;
+    const conf = frac<0.05 ? 'tinggi' : frac<0.20 ? 'sedang' : 'rendah';
+    lines.push(`Keyakinan: ${conf} (${dis} dari ${cells} sel kecamatan×jam model deterministik tidak sepakat soal hujan).`);
+    const bal = info.pro > info.con ? 'faktor pendukung lebih banyak daripada penghambat' : (info.pro < info.con ? 'faktor penghambat lebih banyak daripada pendukung' : 'faktor pendukung dan penghambat berimbang');
+    lines.push(`Kesimpulan hari ke-${idx+1}: ${bal} (${info.pro} pendukung, ${info.con} penghambat) → ${rainPhrase(peak, p10<0?null:p10, rainDet)}.`);
+    Object.assign(info, { peak, p10: p10<0?null:p10, rainDet, top, slot: sl && sl.sh, tmin: tmin && tmin.ext.tmin, tmax: tmax && tmax.ext.tmax, conf });
+  } else lines.push('Hujan: data ensemble/deterministik hari ini belum tersedia.');
+  return { text: lines.join('\n'), info };
+}
+
+function buildNarrative(date, reg, dyn, lv, R){
+  const opts = [...$('anDay').options].map(o=>o.value), i0 = Math.max(0, opts.indexOf(date));
+  const days = opts.slice(i0, i0+NARR_DAYS);
+  const out = [`ANALISIS & PRAKIRAAN CUACA ${regName(reg).toUpperCase()} — ${dShort(days[0])}${days.length>1?' s.d. '+dShort(days[days.length-1]):''} ${new Date(days[0]+'T00:00:00').getFullYear()}`, ''];
+  // 1. skala besar
+  out.push('A. FAKTOR SKALA BESAR (berlaku untuk beberapa hari ke depan)');
+  if(dyn && dyn.items.length){
+    const pro = dyn.items.filter(i=>i.side==='wet').map(i=>({txt:`${i.lab} ${i.val} — ${i.txt}`}));
+    const con = dyn.items.filter(i=>i.side==='dry').map(i=>({txt:`${i.lab} ${i.val} — ${i.txt}`}));
+    const neu = dyn.items.filter(i=>i.side==='neu').map(i=>({txt:`${i.lab} ${i.val} — ${i.txt}`}));
+    out.push(`Sumber: ${dyn.b ? 'buletin BMKG '+dateLong(dyn.b.date,{day:'numeric',month:'long'})+' + indeks otomatis NOAA' : 'indeks otomatis NOAA (bukan buletin BMKG)'}.`);
+    out.push('Mendukung hujan:', bulletList(pro,'✔'), 'Menghambat hujan:', bulletList(con,'✘'), 'Netral:', bulletList(neu,'•'));
+    if(dyn.b) out.push(dyn.mn.hit ? 'Belokan angin/konvergensi/SST/gelombang pada buletin menyebut wilayah NTB (mendukung).' : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin tidak mencakup NTB.');
+    if(dyn.ov) out.push(`Ringkasan: ${dyn.ov.txt.toLowerCase()}.`);
+  } else out.push('  Belum ada data dinamika atmosfer.');
+  out.push('');
+  // 2. per hari
+  const infos = [];
+  days.forEach((d,i)=>{ const b = dayBlock(d, i, reg, dyn); out.push('B'+(i+1)+'. '+b.text, ''); infos.push(b.info); });
+  // 3. kesimpulan
+  const c = [];
+  c.push(`C. KESIMPULAN CUACA WILAYAH ${regName(reg).toUpperCase()}, ${dShort(days[0])}${days.length>1?' – '+dShort(days[days.length-1]):''}`);
+  const ok = infos.filter(x=>x.peak!==undefined);
+  if(ok.length){
+    const peaks = ok.map(x=>x.peak==null?0:x.peak), rainiest = ok[peaks.indexOf(Math.max(...peaks))];
+    let s = `Pada ${dShort(days[0])}${days.length>1?' hingga '+dShort(days[days.length-1]):''}, wilayah ${regName(reg)} secara umum `;
+    const allLow = peaks.every(p=>p<0.25), anyHigh = peaks.some(p=>p>=0.5);
+    s += anyHigh ? 'berpotensi mengalami hujan yang cukup berarti pada sebagian hari' : (allLow ? 'didominasi cuaca cerah berawan hingga berawan dengan peluang hujan kecil' : 'berawan dengan hujan ringan yang bersifat lokal pada sebagian hari');
+    s += '.';
+    c.push(s);
+    ok.forEach((x,i)=>{
+      c.push(`• ${dShort(x.date)}: ${wxShort(x.peak, x.p10, x.rainDet)}${x.peak!=null && x.peak>=0.10 ? ` (peluang hujan hingga ${Math.round(x.peak*100)}%${x.top&&x.top.length?` di ${x.top.slice(0,3).join(', ')}`:''}${x.slot!=null?`, sekitar pukul ${String(x.slot).padStart(2,'0')}.00–${String((x.slot+3)%24).padStart(2,'0')}.00 WITA`:''})` : ''}; suhu ${x.tmin??'—'}–${x.tmax??'—'} °C; keyakinan ${x.conf}.`);
+    });
+    const trend = peaks.length>1 ? (peaks[peaks.length-1] > peaks[0]+0.15 ? 'Tren: peluang hujan meningkat menjelang akhir periode.' : (peaks[peaks.length-1] < peaks[0]-0.15 ? 'Tren: peluang hujan menurun menjelang akhir periode.' : 'Tren: peluang hujan relatif stabil sepanjang periode.')) : '';
+    if(trend) c.push(trend);
+    c.push(`Hari dengan peluang hujan tertinggi: ${dLong(rainiest.date)}${rainiest.peak!=null?` (${Math.round(rainiest.peak*100)}%)`:''}.`);
+    const lowConf = ok.filter(x=>x.conf==='rendah').map(x=>dShort(x.date));
+    if(lowConf.length) c.push(`Catatan: keyakinan rendah pada ${lowConf.join(', ')} — model tidak sepakat; pantau pembaruan model dan lakukan justifikasi pada sel bertanda *.`);
+  } else c.push('Data belum cukup untuk menyusun kesimpulan.');
+  out.push(c.join('\n'));
+  return out.join('\n');
 }
 
 /* ---------- render utama ---------- */
