@@ -195,7 +195,7 @@ function interpret(p){
   if(p.dmi!=null) add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
   if(p.mjoPhase!=null){
     const ph = p.mjoPhase, side = p.mjoInactive ? 'neu' : ([4,5].includes(ph)?'wet':([1,2,7,8].includes(ph)?'dry':'neu'));
-    add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?'lemah (amp < 1) — tidak berkontribusi':(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
+    add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?(p.mjoAmp!=null?'lemah (amp < 1) — tidak berkontribusi':'tidak aktif / tidak berkontribusi (buletin)'):(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
   }
   [['kelvin','Kelvin',p.kelvinMan],['er','Rossby ekuator',p.erMan]].forEach(([k,lab,v])=>{
     if(v) add(k,lab,WAVE_TXT[v],'wet', 'fase konvektif aktif — mendukung hujan');
@@ -226,6 +226,7 @@ function mergedParams(b, date){
   const p = Object.assign({}, a);
   Object.keys(pb).forEach(k=>{ if(pb[k]!=null && pb[k]!==false) p[k]=pb[k]; });
   if(pb.soi!=null) p.soiStd = null;
+  if(pb.mjoPhase!=null){ p.mjoPhase = pb.mjoPhase; p.mjoAmp = null; p.mjoInactive = pb.mjoInactive; }
   const wm = waveManual(date); p.kelvinMan = wm.kelvin || null; p.erMan = wm.er || null;
   return p;
 }
@@ -242,6 +243,14 @@ function autoNote(b){
 function bulletinFor(date){
   return load(KEY_DYN, []).filter(b=>b.date && b.date <= date).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
 }
+function waveLines(p){
+  const L = [];
+  if(p.kelvin) L.push(['Kelvin', p.kelvin]);
+  if(p.rossby) L.push(['Rossby ekuator', p.rossby]);
+  if(p.belokan) L.push(['Belokan angin / konvergensi', p.belokan]);
+  if(p.sst) L.push(['SST anomali', p.sst]);
+  return L;
+}
 function regionMention(p){
   const txt = [p.belokan,p.sst,p.kelvin,p.rossby].filter(Boolean).join(' ; ');
   return { hit: /NTB|Nusa\s*Tenggara|Nusra|Bima|Dompu|Sumbawa/i.test(txt), text: txt };
@@ -257,6 +266,7 @@ function renderDyn(date){
       : `<div class="si-sub" style="margin-bottom:6px">Belum ada buletin BMKG untuk tanggal ini — memakai indeks otomatis.</div>`)
     + `<div class="an-chips">${items.map(i=>`<div class="an-chip"><div class="k">${i.lab}</div><div class="v">${i.val}</div><span class="si-chip ${tag[i.side]}">${i.txt}</span></div>`).join('')}</div>`
     + (ov?`<div style="margin:8px 0"><span class="si-chip ${ov.cls}">${ov.txt}</span></div>`:'')
+    + (b && waveLines(p).length ? `<table class="an-tbl" style="margin:8px 0;text-align:left"><tbody>${waveLines(p).map(([k,v])=>`<tr><td style="text-align:left"><b>${k}</b></td><td style="text-align:left;white-space:normal">${esc(v.length>230?v.slice(0,230)+'…':v)}</td></tr>`).join('')}</tbody></table>` : '')
     + (b ? `<div class="si-sub" style="line-height:1.5">${mn.hit
       ? '⚠ Buletin menyebut wilayah NTB/Nusa Tenggara pada belokan/konvergensi/SST/gelombang: <i>'+esc(mn.text.slice(0,240))+'</i>'
       : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin <b>tidak mencakup NTB</b> (Bima–Dompu).'}</div>` : '')
@@ -454,6 +464,10 @@ function buildNarrative(date, reg, dyn, lv, R){
     const neu = dyn.items.filter(i=>i.side==='neu').map(i=>({txt:`${i.lab} ${i.val} — ${i.txt}`}));
     out.push(`Sumber: ${dyn.b ? 'buletin BMKG '+dateLong(dyn.b.date,{day:'numeric',month:'long'})+' + indeks otomatis NOAA' : 'indeks otomatis NOAA (bukan buletin BMKG)'}.`);
     out.push('Mendukung hujan:', bulletList(pro,'✔'), 'Menghambat hujan:', bulletList(con,'✘'), 'Netral:', bulletList(neu,'•'));
+    if(dyn.b){
+      const wl = [['Kelvin',dyn.p.kelvin],['Rossby ekuator',dyn.p.rossby]].filter(x=>x[1]).map(([k,v])=>`${k} → ${v.replace(/\.$/,'')}`);
+      if(wl.length) out.push(`Gelombang atmosfer (buletin): ${wl.join('; ')}.`);
+    }
     if(dyn.b) out.push(dyn.mn.hit ? 'Belokan angin/konvergensi/SST/gelombang pada buletin menyebut wilayah NTB (mendukung).' : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin tidak mencakup NTB.');
     if(dyn.ov) out.push(`Ringkasan: ${dyn.ov.txt.toLowerCase()}.`);
   } else out.push('  Belum ada data dinamika atmosfer.');
