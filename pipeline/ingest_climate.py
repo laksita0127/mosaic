@@ -2,12 +2,13 @@
 """
 ingest_climate.py — ambil indeks iklim skala besar terbaru (gratis, tanpa kunci) -> dinamika.js
 
+  MJO       : NOAA PSL, ROMI harian (fase 1-8 + amplitudo)         romi.cpcolr.1x.txt
   Niño 3.4  : NOAA CPC, anomali SST mingguan (OISST)       wksst9120.for
   SOI       : NOAA CPC, SOI terstandar BULANAN               soi
   DMI (IOD) : NOAA PSL, DMI BULANAN (HadISST/OISST)          dmi.had.long.data
 
 Catatan: ini BUKAN buletin BMKG. SOI CPC berskala terstandar (±0,7 ~ setara ±7 pada skala BoM), DMI bulanan terlambat
-±1-2 bulan. MJO, Kelvin/Rossby, indeks surge tidak punya sumber terbuka yang andal -> tetap lewat buletin yang ditempel.
+±1-2 bulan. Kelvin/Rossby, indeks surge tidak punya sumber terbuka yang andal -> tetap lewat buletin yang ditempel.
 
     python pipeline/ingest_climate.py
 """
@@ -77,9 +78,28 @@ def dmi():
     return {"value": v, "month": f"{y}-{mo:02d}", "src": "NOAA PSL, DMI bulanan"}
 
 
+def mjo():
+    """ROMI (OLR-based MJO Index, NOAA PSL): RC1, RC2, amplitudo harian. Fase 1-8 mengikuti konvensi RMM."""
+    import math
+    last = None
+    for ln in get("https://psl.noaa.gov/mjo/mjoindex/romi.cpcolr.1x.txt").splitlines():
+        p = ln.split()
+        if len(p) >= 7 and p[0].isdigit():
+            try:
+                last = (int(p[0]), int(p[1]), int(p[2]), float(p[4]), float(p[5]), float(p[6]))
+            except ValueError:
+                continue
+    if not last:
+        raise RuntimeError("MJO tidak terbaca")
+    y, mo, d, rc1, rc2, amp = last
+    ang = math.degrees(math.atan2(rc2, rc1)) % 360
+    phase = [5, 6, 7, 8, 1, 2, 3, 4][int(ang // 45)]
+    return {"phase": phase, "amp": round(amp, 2), "date": f"{y}-{mo:02d}-{d:02d}", "src": "NOAA PSL, ROMI (OLR)"}
+
+
 def main():
     out, err = {}, []
-    for k, fn in (("nino34", nino34), ("soi", soi), ("dmi", dmi)):
+    for k, fn in (("nino34", nino34), ("soi", soi), ("dmi", dmi), ("mjo", mjo)):
         try:
             out[k] = fn()
             print(k, out[k])

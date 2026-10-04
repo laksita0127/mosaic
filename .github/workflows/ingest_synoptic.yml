@@ -1,0 +1,48 @@
+name: Update peta sinoptik
+
+# Isobar MSL + angin 850/200 hPa dari ECMWF IFS HRES (open data) -> sinoptik.js (±1,3 MB). Run 00Z mendarat ±07:40Z, 12Z ±19:40Z.
+on:
+  schedule:
+    - cron: "25 8 * * *"       # 16:25 WITA  (run 00Z)
+    - cron: "25 20 * * *"      # 04:25 WITA  (run 12Z)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: synoptic
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install deps
+        run: pip install -r pipeline/requirements.txt
+      - name: Run
+        run: |
+          for i in 1 2 3; do
+            python pipeline/ingest_synoptic.py --source ecmwf && break
+            echo "gagal (percobaan $i) — tunggu 3 menit lalu ulang"; sleep 180
+          done
+      - name: Commit hasil
+        run: |
+          git config user.name "mosaic-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sinoptik.js
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan data."
+          else
+            git commit -m "data: sinoptik $(date -u +%Y-%m-%dT%H:%MZ)"
+            for i in 1 2 3 4; do
+              git pull --rebase origin main && git push && break
+              sleep 15
+            done
+          fi

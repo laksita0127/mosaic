@@ -219,3 +219,9 @@ ditempel prakirawan (SOI, Niño 3.4, DMI, MJO, surge, belokan/SST) diinterpretas
 RH 200 hPa ECMWF/GFS dikonversi es->air); (C) ringkasan hujan per kecamatan dari ensemble gabungan; (D) narasi otomatis
 yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & narasi edit disimpan di localStorage
 (per browser). Bukan produk resmi BMKG.
+
+### 10b. Indeks otomatis & peta sinoptik
+- `pipeline/ingest_climate.py` (workflow `ingest_climate.yml`, harian) -> `dinamika.js`: Niño 3.4, SOI, DMI, **MJO (ROMI, NOAA PSL)**.
+- `pipeline/ingest_synoptic.py` (workflow `ingest_synoptic.yml`, 2x/hari) -> `sinoptik.js`: MSL + angin 850/200 hPa ECMWF HRES, 1°, 0–144 jam / 6 jam.
+  `peta_sinoptik.js` menggambar isobar (marching squares) dan streamline di canvas Leaflet.
+- Kelvin/Rossby/indeks surge: belum ada sumber data terbuka yang andal -> tetap lewat buletin yang ditempel.

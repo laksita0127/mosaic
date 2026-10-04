@@ -193,7 +193,7 @@ function interpret(p){
   if(p.dmi!=null) add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
   if(p.mjoPhase!=null){
     const ph = p.mjoPhase, side = p.mjoInactive ? 'neu' : ([4,5].includes(ph)?'wet':([1,2,7,8].includes(ph)?'dry':'neu'));
-    add('mjo','MJO',`fase ${ph}`, side, p.mjoInactive?'tidak aktif/tidak berkontribusi':(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
+    add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?'lemah (amp < 1) — tidak berkontribusi':(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
   }
   if(p.surge!=null) add('surge','Indeks surge',fmt(p.surge,1), p.surge>=10?'wet':'neu', p.surge>=10?'surge signifikan':'tidak signifikan');
   return items;
@@ -213,6 +213,7 @@ function autoParams(){
   if(D.nino34) p.nino = D.nino34.value;
   if(D.soi) p.soiStd = D.soi.value;
   if(D.dmi) p.dmi = D.dmi.value;
+  if(D.mjo){ p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoInactive = D.mjo.amp < 1; p.mjoDate = D.mjo.date; }
   return p;
 }
 function mergedParams(b){
@@ -228,8 +229,9 @@ function autoNote(b){
   const fromBul = k => b && parseBulletin(b.text)[k]!=null;
   if(D.nino34 && !fromBul('nino')) bits.push(`Niño 3.4: ${D.nino34.src}, minggu ${D.nino34.date}`);
   if(D.soi && !fromBul('soi')) bits.push(`SOI: ${D.soi.src}, bulan ${D.soi.month}`);
+  if(D.mjo && !fromBul('mjoPhase')) bits.push(`MJO: ${D.mjo.src}, ${D.mjo.date}`);
   if(D.dmi && !fromBul('dmi')) bits.push(`DMI: ${D.dmi.src}, bulan ${D.dmi.month} (terlambat 1–2 bulan)`);
-  return bits.length ? `<div class="si-sub dim" style="margin-top:6px">Otomatis (bukan buletin BMKG): ${bits.join(' · ')}. Tempel buletin BMKG untuk menimpa dan menambah MJO, surge, belokan angin, SST.</div>` : '';
+  return bits.length ? `<div class="si-sub dim" style="margin-top:6px">Otomatis (bukan buletin BMKG): ${bits.join(' · ')}. Tempel buletin BMKG untuk menimpa dan menambah surge, Kelvin/Rossby, belokan angin, SST.</div>` : '';
 }
 function bulletinFor(date){
   return load(KEY_DYN, []).filter(b=>b.date && b.date <= date).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
