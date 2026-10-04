@@ -1,6 +1,6 @@
 name: Update peta sinoptik
 
-# Isobar MSL + angin 850/200 hPa dari ECMWF IFS HRES (open data) -> sinoptik.js (±1,3 MB). Run 00Z mendarat ±07:40Z, 12Z ±19:40Z.
+# RH + angin per lapisan (permukaan, 850, 700, 500, 200 hPa) + MSL dari ECMWF IFS HRES (open data) -> sinoptik.js (±1 MB). Run 00Z mendarat ±07:40Z, 12Z ±19:40Z.
 on:
   schedule:
     - cron: "25 8 * * *"       # 16:25 WITA  (run 00Z)

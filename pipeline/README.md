@@ -222,6 +222,6 @@ yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & n
 
 ### 10b. Indeks otomatis & peta sinoptik
 - `pipeline/ingest_climate.py` (workflow `ingest_climate.yml`, harian) -> `dinamika.js`: Niño 3.4, SOI, DMI, **MJO (ROMI, NOAA PSL)**.
-- `pipeline/ingest_synoptic.py` (workflow `ingest_synoptic.yml`, 2x/hari) -> `sinoptik.js`: MSL + angin 850/200 hPa ECMWF HRES, 1°, 0–144 jam / 6 jam.
+- `pipeline/ingest_synoptic.py` (workflow `ingest_synoptic.yml`, 2x/hari) -> `sinoptik.js`: MSL + angin + RH di permukaan, 850, 700, 500, 200 hPa (ECMWF HRES, 1°, 0–120 jam / 6 jam, dipadatkan base64).
   `peta_sinoptik.js` menggambar isobar (marching squares) dan streamline di canvas Leaflet.
 - Kelvin/Rossby/indeks surge: belum ada sumber data terbuka yang andal -> tetap lewat buletin yang ditempel.

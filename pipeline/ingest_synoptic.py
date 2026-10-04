@@ -111,7 +111,7 @@ def main():
     from ecmwf.opendata import Client
     d, t, files = fetch_latest(Client(source=a.source))
     F = read_fields(files)
-    need = [("msl", 0), ("10u", 0), ("10v", 0), ("2t", 0), ("2d", 0)] + [(n, L) for L in LEVELS for n in ("u", "v", "r", "t")]
+    need = [("msl", 0), ("10u", 10), ("10v", 10), ("2t", 2), ("2d", 2)] + [(n, L) for L in LEVELS for n in ("u", "v", "r", "t")]
     steps = [s for s in STEPS if all((n, L, s) in F for n, L in need)]
     if not steps:
         print("tidak ada langkah lengkap", file=sys.stderr)
@@ -120,10 +120,11 @@ def main():
     q_wind = lambda x: np.clip(np.round(x / 0.5), -127, 127)               # langkah 0,5 m/s
     fields = {"msl": b64(np.round((st("msl", 0) / 100.0 - 900) * 10), "<i2")}   # (hPa-900)*10
     for nm, L in (("10", 0), ("850", 850), ("700", 700), ("500", 500), ("200", 200)):
-        un, vn = ("10u", "10v") if L == 0 else ("u", "v")
-        fields["u" + nm] = b64(q_wind(st(un, L)), "i1")
-        fields["v" + nm] = b64(q_wind(st(vn, L)), "i1")
-    rh2 = np.clip(100 * esw(st("2d", 0) - 273.15) / esw(st("2t", 0) - 273.15), 0, 100)
+        if L == 0:
+            fields["u10"], fields["v10"] = b64(q_wind(st("10u", 10)), "i1"), b64(q_wind(st("10v", 10)), "i1")
+        else:
+            fields["u" + nm], fields["v" + nm] = b64(q_wind(st("u", L)), "i1"), b64(q_wind(st("v", L)), "i1")
+    rh2 = np.clip(100 * esw(st("2d", 2) - 273.15) / esw(st("2t", 2) - 273.15), 0, 100)
     fields["rh10"] = b64(np.round(rh2), "i1")
     for L in LEVELS:
         fields[f"rh{L}"] = b64(np.round(rh_to_water(st("r", L), st("t", L))), "i1")
