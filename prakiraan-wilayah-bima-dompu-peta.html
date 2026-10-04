@@ -355,6 +355,29 @@
         </div>
         <div class="an-card" id="anHum"></div>
         <div class="an-card an-wide" id="anRain"></div>
+        <div class="an-card an-wide" id="anWave">
+          <h4>Gelombang atmosfer — MJO · Kelvin · Rossby ekuator (NCICS)</h4>
+          <div class="syn-ctl">
+            <select id="waveVar">
+              <option value="olr">OLR (awan konvektif)</option><option value="pwat">Uap air total</option>
+              <option value="uwnd850">Angin zonal 850 hPa</option><option value="vwnd850">Angin meridional 850 hPa</option>
+              <option value="uwnd200">Angin zonal 200 hPa</option><option value="shear">Geser angin</option>
+            </select>
+            <select id="waveType">
+              <option value="all">Gabungan (kontur MJO·Kelvin·ER·Low)</option><option value="kelvin">Hanya Kelvin</option>
+              <option value="er">Hanya Rossby ekuator (ER)</option><option value="mjo">Hanya MJO</option><option value="mtd">Hanya MRG/TD</option>
+            </select>
+            <select id="waveAvg"><option value="1">rata² 1 hari</option><option value="3">3 hari</option><option value="5">5 hari</option><option value="7">7 hari</option></select>
+          </div>
+          <div style="margin-top:8px"><img id="waveImg" alt="Peta gelombang atmosfer NCICS" style="max-width:100%;height:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff"></div>
+          <div id="waveMsg" class="si-sub" style="margin-top:6px;line-height:1.5"></div>
+          <div class="syn-ctl" style="margin-top:8px">
+            <b class="si-sub">Penilaian prakirawan (dari peta di atas):</b>
+            <label class="chk">Kelvin <select id="waveKelvin"><option value="">tidak berpengaruh</option><option value="near">mendekat (≤2 hari)</option><option value="over">di sekitar NTB</option></select></label>
+            <label class="chk">Rossby ekuator <select id="waveER"><option value="">tidak berpengaruh</option><option value="near">mendekat (≤2 hari)</option><option value="over">di sekitar NTB</option></select></label>
+            <span class="si-sub dim">tersimpan per hari analisis; ikut ke ringkasan dinamika &amp; narasi</span>
+          </div>
+        </div>
         <div class="an-card an-wide" id="anSyn">
           <h4>Peta sinoptik — isobar &amp; streamline</h4>
           <div id="synBody">
@@ -362,14 +385,19 @@
               <button class="produk-btn" id="synPrev" type="button">◀</button>
               <select id="synStep"></select>
               <button class="produk-btn" id="synNext" type="button">▶</button>
-              <select id="synLevel"><option value="850">Streamline 850 hPa</option><option value="200">Streamline 200 hPa</option></select>
+              <select id="synLevel">
+                <option value="10">Permukaan</option><option value="850" selected>850 hPa</option><option value="700">700 hPa</option>
+                <option value="500">500 hPa</option><option value="200">200 hPa</option>
+              </select>
+              <label class="chk"><input type="checkbox" id="synRH" checked> Kelembapan (RH)</label>
               <label class="chk"><input type="checkbox" id="synStr" checked> Streamline</label>
-              <label class="chk"><input type="checkbox" id="synIso" checked> Isobar MSL</label>
+              <label class="chk"><input type="checkbox" id="synIso"> Isobar MSL</label>
               <span id="synInfo" class="si-sub"></span>
             </div>
             <div id="synMap"></div>
-            <div id="synLegend" class="si-sub" style="margin-top:6px;line-height:1.5"></div>
-            <div class="si-sub dim" style="margin-top:2px">Dari model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, dan sistem tekanan; bukan analisis cuaca resmi.</div>
+            <div id="synHover" class="si-sub" style="margin-top:6px;min-height:16px;font-family:'IBM Plex Mono',monospace"></div>
+            <div id="synLegend" class="si-sub" style="margin-top:2px;line-height:1.5"></div>
+            <div class="si-sub dim" style="margin-top:2px">Model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, tekanan, dan lapisan lembap/kering. RH 200/500 hPa dinyatakan terhadap air. Arahkan kursor untuk nilai di titik. Bukan analisis cuaca resmi.</div>
           </div>
         </div>
         <div class="an-card an-wide">

@@ -9,7 +9,9 @@
    ========================================================================== */
 (function(){
 'use strict';
-const KEY_DYN = 'mosaic-dinamika', KEY_NARR = 'mosaic-analisis';
+const KEY_DYN = 'mosaic-dinamika', KEY_NARR = 'mosaic-analisis', KEY_WAVE = 'mosaic-gelombang';
+const WAVE_TXT = { near:'mendekat (≤2 hari)', over:'di sekitar NTB' };
+const waveManual = date => load(KEY_WAVE, {})[date] || {};
 // ambang [kering bila < a, lembap bila >= b] — usulan awal, sesuaikan dengan praktik stasiun
 const TH = { rh850:[60,80], rh700:[50,70], rh500:[40,60], rh200:[40,70], pw:[35,50] };
 const PTS = [
@@ -195,6 +197,9 @@ function interpret(p){
     const ph = p.mjoPhase, side = p.mjoInactive ? 'neu' : ([4,5].includes(ph)?'wet':([1,2,7,8].includes(ph)?'dry':'neu'));
     add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?'lemah (amp < 1) — tidak berkontribusi':(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
   }
+  [['kelvin','Kelvin',p.kelvinMan],['er','Rossby ekuator',p.erMan]].forEach(([k,lab,v])=>{
+    if(v) add(k,lab,WAVE_TXT[v],'wet', 'fase konvektif aktif — mendukung hujan');
+  });
   if(p.surge!=null) add('surge','Indeks surge',fmt(p.surge,1), p.surge>=10?'wet':'neu', p.surge>=10?'surge signifikan':'tidak signifikan');
   return items;
 }
@@ -216,11 +221,12 @@ function autoParams(){
   if(D.mjo){ p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoInactive = D.mjo.amp < 1; p.mjoDate = D.mjo.date; }
   return p;
 }
-function mergedParams(b){
+function mergedParams(b, date){
   const a = autoParams() || {}, pb = b ? parseBulletin(b.text) : {};
   const p = Object.assign({}, a);
   Object.keys(pb).forEach(k=>{ if(pb[k]!=null && pb[k]!==false) p[k]=pb[k]; });
   if(pb.soi!=null) p.soiStd = null;
+  const wm = waveManual(date); p.kelvinMan = wm.kelvin || null; p.erMan = wm.er || null;
   return p;
 }
 function autoNote(b){
@@ -244,7 +250,7 @@ function renderDyn(date){
   const view = $('anDynView'); if(!view) return null;
   const b = bulletinFor(date), auto = autoParams();
   if(!b && !auto){ view.innerHTML = `<div class="si-sub">Belum ada data dinamika. Tempel teks <b>Informasi Dinamika Atmosfer</b> BMKG di kotak bawah lalu simpan.</div>`; return null; }
-  const p = mergedParams(b), items = interpret(p), ov = dynOverall(items), mn = regionMention(p);
+  const p = mergedParams(b, date), items = interpret(p), ov = dynOverall(items), mn = regionMention(p);
   const tag = { wet:'c-good', dry:'c-warn', neu:'c-neutral' };
   const age = b ? Math.round((Date.parse(date)-Date.parse(b.date))/86400000) : 0;
   view.innerHTML = (b ? `<div class="si-sub" style="margin-bottom:6px">Buletin tanggal <b>${dateLong(b.date,{day:'numeric',month:'long',year:'numeric'})}</b>${age>0?` <span style="color:var(--warn)">(${age} hari sebelum hari analisis — kondisi saat itu, bukan prakiraan)</span>`:''}</div>`
@@ -341,6 +347,8 @@ function buildNarrative(date, reg, dyn, lv, R){
     let s = `Dinamika atmosfer (${dyn.b ? 'buletin '+dateLong(dyn.b.date,{day:'numeric',month:'long'}) : 'indeks otomatis NOAA, bukan buletin BMKG'}): ${bits.join(', ')}`;
     if(dyn.ov) s += ` — ${dyn.ov.txt.toLowerCase()}`;
     if(it.mjo) s += `; MJO ${it.mjo.val}, ${it.mjo.txt}`;
+    if(it.kelvin) s += `; gelombang Kelvin ${it.kelvin.val} (fase konvektif aktif)`;
+    if(it.er) s += `; Rossby ekuator ${it.er.val} (fase konvektif aktif)`;
     if(it.surge) s += `; indeks surge ${it.surge.val} (${it.surge.txt})`;
     if(!dyn.b) s += '.';
     else s += dyn.mn.hit ? '. Buletin menyebut wilayah NTB pada belokan/konvergensi/SST/gelombang atmosfer.' : '. Belokan angin/konvergensi dan SST anomali pada buletin tidak mencakup NTB.';
@@ -408,6 +416,23 @@ async function loadLevels(){
   try{ await fetchLevels(); }catch(e){ LEVELS_ERR = e.message; }
   render();
 }
+function initWave(){
+  if(!$('anWave')) return;
+  const img = $('waveImg'), msg = $('waveMsg');
+  const upd = ()=>{
+    const v = $('waveVar').value, w = $('waveType').value, a = $('waveAvg').value;
+    const url = `https://ncics.org/pub/mjo/v2/map/${v}.cfs.${w}.indonesia.${a}.png`;
+    msg.innerHTML = `Memuat peta… <a href="${url}" target="_blank" rel="noopener">buka gambar</a>`;
+    img.onload = ()=>{ msg.innerHTML = `Kiri: observasi 4 hari terakhir, kanan: prakiraan CFS 4 hari ke depan; kontur −12/−36 W m⁻² = fase konvektif aktif tiap gelombang (hitam MJO, biru Kelvin, merah ER, ungu Low). Sumber: <a href="https://ncics.org/mjo/" target="_blank" rel="noopener">NCICS/NC State — Carl Schreck</a> (diperbarui harian ±16 UTC). Bukan produk BMKG.`; };
+    img.onerror = ()=>{ msg.innerHTML = `Gambar NCICS tidak dapat dimuat (server NCICS/koneksi). <a href="${url}" target="_blank" rel="noopener">Coba buka langsung</a>.`; };
+    img.src = url + '?h=' + new Date().toISOString().slice(0,13);
+  };
+  ['waveVar','waveType','waveAvg'].forEach(id=>$(id).addEventListener('change', upd));
+  const sync = ()=>{ const w = waveManual($('anDay').value); $('waveKelvin').value = w.kelvin||''; $('waveER').value = w.er||''; };
+  const store = ()=>{ const all = load(KEY_WAVE, {}), d = $('anDay').value; all[d] = { kelvin:$('waveKelvin').value, er:$('waveER').value }; if(!all[d].kelvin && !all[d].er) delete all[d]; save(KEY_WAVE, all); render(); };
+  $('waveKelvin').addEventListener('change', store); $('waveER').addEventListener('change', store);
+  $('anDay').addEventListener('change', sync); sync(); upd();
+}
 function init(){
   if(!$('analisisSection')) return;
   $('anReg').innerHTML = Object.entries(REGS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
@@ -426,6 +451,8 @@ function init(){
     catch(e){ flashBtn('anNarrCopy','Clipboard diblokir'); }
   };
   initDynControls();
+  render();
+  initWave();
   loadLevels();
 }
 window.initAnalisis = init;
