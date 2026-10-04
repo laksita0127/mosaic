@@ -195,7 +195,7 @@ function interpret(p){
   if(p.dmi!=null) add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
   if(p.mjoPhase!=null){
     const ph = p.mjoPhase, side = p.mjoInactive ? 'neu' : ([4,5].includes(ph)?'wet':([1,2,7,8].includes(ph)?'dry':'neu'));
-    add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?(p.mjoAmp!=null?'lemah (amp < 1) — tidak berkontribusi':'tidak aktif / tidak berkontribusi (buletin)'):(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
+    add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?(p.mjoStale?`data ROMI ${p.mjoDate} (tertinggal) — tidak dipakai menyimpulkan`:(p.mjoAmp!=null?'lemah (amp < 1) — tidak berkontribusi':'tidak aktif / tidak berkontribusi (buletin)')):(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
   }
   [['kelvin','Kelvin',p.kelvinMan],['er','Rossby ekuator',p.erMan]].forEach(([k,lab,v])=>{
     if(v) add(k,lab,WAVE_TXT[v],'wet', 'fase konvektif aktif — mendukung hujan');
@@ -216,9 +216,13 @@ function autoParams(){
   const D = window.DINAMIKA; if(!D) return null;
   const p = {};
   if(D.nino34) p.nino = D.nino34.value;
-  if(D.soi) p.soiStd = D.soi.value;
+  if(D.soi){ if(D.soi.scale==='bom') p.soi = D.soi.value; else p.soiStd = D.soi.value; }
   if(D.dmi) p.dmi = D.dmi.value;
-  if(D.mjo){ p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoInactive = D.mjo.amp < 1; p.mjoDate = D.mjo.date; }
+  if(D.mjo){
+    p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoDate = D.mjo.date;
+    p.mjoStale = (Date.now()-Date.parse(D.mjo.date))/86400000 > 3;      // ROMI tertinggal beberapa hari -> jangan dipakai menyimpulkan
+    p.mjoInactive = D.mjo.amp < 1 || p.mjoStale;
+  }
   return p;
 }
 function mergedParams(b, date){
@@ -226,7 +230,7 @@ function mergedParams(b, date){
   const p = Object.assign({}, a);
   Object.keys(pb).forEach(k=>{ if(pb[k]!=null && pb[k]!==false) p[k]=pb[k]; });
   if(pb.soi!=null) p.soiStd = null;
-  if(pb.mjoPhase!=null){ p.mjoPhase = pb.mjoPhase; p.mjoAmp = null; p.mjoInactive = pb.mjoInactive; }
+  if(pb.mjoPhase!=null){ p.mjoPhase = pb.mjoPhase; p.mjoAmp = null; p.mjoStale = false; p.mjoInactive = pb.mjoInactive; }
   const wm = waveManual(date); p.kelvinMan = wm.kelvin || null; p.erMan = wm.er || null;
   return p;
 }
@@ -234,10 +238,10 @@ function autoNote(b){
   const D = window.DINAMIKA; if(!D) return '';
   const bits = [];
   const fromBul = k => b && parseBulletin(b.text)[k]!=null;
-  if(D.nino34 && !fromBul('nino')) bits.push(`Niño 3.4: ${D.nino34.src}, minggu ${D.nino34.date}`);
-  if(D.soi && !fromBul('soi')) bits.push(`SOI: ${D.soi.src}, bulan ${D.soi.month}`);
-  if(D.mjo && !fromBul('mjoPhase')) bits.push(`MJO: ${D.mjo.src}, ${D.mjo.date}`);
-  if(D.dmi && !fromBul('dmi')) bits.push(`DMI: ${D.dmi.src}, bulan ${D.dmi.month} (terlambat 1–2 bulan)`);
+  if(D.nino34 && !fromBul('nino')) bits.push(`Niño 3.4: ${D.nino34.src}, ${D.nino34.date}`);
+  if(D.soi && !fromBul('soi')) bits.push(`SOI: ${D.soi.src}, ${D.soi.date||D.soi.month}`);
+  if(D.mjo && !fromBul('mjoPhase')) bits.push(`MJO: ${D.mjo.src} ${D.mjo.date} — indeks berbasis OLR, bisa berbeda dari RMM BMKG/BoM`);
+  if(D.dmi && !fromBul('dmi')) bits.push(`DMI: ${D.dmi.src}, ${D.dmi.date||D.dmi.month}`);
   return bits.length ? `<div class="si-sub dim" style="margin-top:6px">Otomatis (bukan buletin BMKG): ${bits.join(' · ')}. Tempel buletin BMKG untuk menimpa dan menambah surge, Kelvin/Rossby, belokan angin, SST.</div>` : '';
 }
 function bulletinFor(date){
@@ -389,6 +393,12 @@ function localFactors(lv, R, date){
       else if(dryMon && d>=45 && d<=180) add('con', `${txt} — arus timuran/tenggara (monsun Australia) yang kering pada musim kemarau`);
       else add('neu', txt);
     }
+    const cs = window.synConvStats && window.synConvStats(date,'850');
+    if(cs){
+      const cv = cs.conv, cz = cs.cyc, f1 = x=>fmt(x,1);
+      add(cv>=1?'pro':(cv<=-1?'con':'neu'), `Konvergensi 850 hPa di sekitar NTB tengah (117–120°BT, 7–10°LS) ${f1(cv)}×10⁻⁵ s⁻¹ — ${cv>=1?'angin mengumpul (konvergen), mendukung pertumbuhan awan':(cv<=-1?'divergensi (angin menyebar), menghambat awan hujan':'lemah/netral')}`);
+      if(cz>=1) add('pro', `Belokan angin siklonik 850 hPa di sekitar NTB (vortisitas ${f1(cz)}×10⁻⁵ s⁻¹) — mendukung`);
+    }
     if(ex.shear!=null) add(ex.shear>50?'con':'neu', `Geser angin 850–200 hPa ${fmt(ex.shear)} km/jam — ${ex.shear>50?'kuat, menghambat organisasi awan konvektif':'tidak menghambat secara berarti'}`);
   }
   if(R){
@@ -437,6 +447,8 @@ function dayBlock(date, idx, reg, dyn){
       }
     }
     lines.push(s);
+    const cz_ = window.synConvStats && window.synConvStats(date,'850');
+    if(cz_ && cz_.zones.length) lines.push(`Zona konvergensi 850 hPa terkuat menurut model (ECMWF): ${cz_.zones.map(z=>`${z.name} (${fmt(z.v,1)})`).join(', ')}${cz_.zones.some(z=>z.name==='NTB')?' — termasuk NTB.':' — tidak mencakup NTB.'}`);
     const withT = R.rows.filter(r=>r.ext.tmin!=null && r.ext.tmax!=null);
     const tmin = withT.slice().sort((a,b)=>a.ext.tmin-b.ext.tmin)[0], tmax = withT.slice().sort((a,b)=>b.ext.tmax-a.ext.tmax)[0];
     const kts = R.rows.filter(r=>r.ext.kts!=null).sort((a,b)=>b.ext.kts-a.ext.kts)[0];

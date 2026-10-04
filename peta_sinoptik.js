@@ -6,7 +6,7 @@
    ========================================================================== */
 (function(){
 'use strict';
-let map, layer, S, stepSel, levelSel, rhChk, isoChk, strChk;
+let map, layer, S, stepSel, levelSel, rhChk, isoChk, strChk, dynSel;
 const cache = {};
 const $ = id => document.getElementById(id);
 const HARI = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'], BLN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
@@ -52,6 +52,82 @@ function rhRGB(v){
   }
   return RH_STOPS[RH_STOPS.length-1][1];
 }
+
+/* ---- konvergensi & vortisitas (belokan angin) dari medan angin model ----
+   div  = du/dx + dv/dy ;  zeta = dv/dx - du/dy   (satuan 1e-5 s^-1, grid 1°, dihaluskan 3x3)
+   konvergensi = -div  (positif = angin mengumpul -> potensi pertumbuhan awan)
+   siklonik di BBS = zeta NEGATIF (searah jarum jam) -> "siklonik" = -zeta  */
+const dvCache = {};
+function dynFields(lev, si){
+  const key = lev+'|'+si; if(dvCache[key]) return dvCache[key];
+  const U = fieldAt('u'+lev, si), V = fieldAt('v'+lev, si), nj = S.nj, ni = S.ni;
+  const conv = new Float32Array(nj*ni), cyc = new Float32Array(nj*ni), dy = 111200*S.d;
+  for(let j=1;j<nj-1;j++){
+    const lat = S.lat0 - j*S.d, dx = 111320*Math.cos(lat*Math.PI/180)*S.d;
+    for(let i=1;i<ni-1;i++){
+      const k = j*ni+i;
+      const dudx = (U[k+1]-U[k-1])/(2*dx), dvdx = (V[k+1]-V[k-1])/(2*dx);
+      const dudy = (U[k-ni]-U[k+ni])/(2*dy), dvdy = (V[k-ni]-V[k+ni])/(2*dy);   // baris 0 = utara -> y naik = j turun
+      conv[k] = -(dudx+dvdy)*1e5; cyc[k] = -(dvdx-dudy)*1e5;
+    }
+  }
+  const smooth = a => { const o = new Float32Array(a.length); for(let j=1;j<nj-1;j++) for(let i=1;i<ni-1;i++){ let s=0; for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++) s += a[(j+dj)*ni+i+di]; o[j*ni+i] = s/9; } return o; };
+  return (dvCache[key] = { conv:smooth(conv), cyc:smooth(cyc) });
+}
+const DYN_STOPS = [[0.5,[255,230,140,70]],[1,[255,176,64,130]],[2,[226,90,60,175]],[4,[140,20,100,215]]];
+function dynRGBA(v){
+  if(v < DYN_STOPS[0][0]) return null;
+  for(let k=0;k<DYN_STOPS.length-1;k++){
+    const [a,ca] = DYN_STOPS[k], [b,cb] = DYN_STOPS[k+1];
+    if(v<=b){ const f = (v-a)/(b-a); return ca.map((c,i)=>Math.round(c+(cb[i]-c)*f)); }
+  }
+  return DYN_STOPS[DYN_STOPS.length-1][1];
+}
+function drawDyn(ctx, m, g){
+  const size = m.getSize(), K = 4, w = Math.ceil(size.x/K), h = Math.ceil(size.y/K);
+  const off = document.createElement('canvas'); off.width = w; off.height = h;
+  const o = off.getContext('2d'), img = o.createImageData(w,h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const ll = m.containerPointToLatLng([x*K+K/2, y*K+K/2]), v = sample(g, ll.lat, ll.lng); if(v==null) continue;
+    const c = dynRGBA(v); if(!c) continue; const p = (y*w+x)*4; img.data[p]=c[0]; img.data[p+1]=c[1]; img.data[p+2]=c[2]; img.data[p+3]=c[3];
+  }
+  o.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled = true; ctx.drawImage(off, 0, 0, w*K, h*K);
+}
+// nama daerah terdekat (pendekatan; titik pusat wilayah)
+const GAZ = [['Aceh',4.7,96.8],['Sumut',2.2,99.0],['Sumbar',-0.9,100.4],['Riau',0.5,101.8],['Kep. Riau',1.0,104.5],['Jambi',-1.6,103.0],['Sumsel',-3.2,104.0],['Bengkulu',-3.8,102.3],['Lampung',-4.8,105.0],
+  ['Banten/Jabar',-6.7,107.0],['Jateng',-7.2,110.2],['Jatim',-7.6,112.4],['Bali',-8.4,115.2],['NTB',-8.6,117.4],['NTT',-9.6,121.0],['Kalbar',0.0,110.8],['Kalteng',-1.7,113.5],['Kalsel',-3.0,115.5],['Kaltim',0.8,116.4],
+  ['Kaltara',3.0,116.5],['Sulut',1.4,124.8],['Sulteng',-1.0,120.8],['Gorontalo',0.7,122.4],['Sulbar',-2.5,119.3],['Sulsel',-3.9,120.0],['Sultra',-4.1,122.1],['Maluku',-3.2,129.5],['Maluku Utara',1.5,127.8],
+  ['Papua Barat',-1.4,133.0],['Papua',-4.0,138.5],['Laut Natuna',4.0,108.0],['Selat Makassar',-1.0,118.0],['Laut Banda',-5.5,127.0],['Laut Jawa',-5.5,112.0],['Laut Flores',-7.5,120.0],['Samudra Hindia selatan Jawa-NTT',-11.0,112.0]];
+const nearName = (lat,lon)=>{ let b=null, bd=1e9; GAZ.forEach(([n,la,lo])=>{ const d = Math.hypot(lat-la, (lon-lo)*Math.cos(lat*Math.PI/180)); if(d<bd){ bd=d; b=n; } }); return bd<=4.5 ? b : null; };
+
+// statistik konvergensi 850 hPa untuk satu hari (WITA): kotak NTB tengah (117–120°BT, 7–10°LS) + pusat terkuat se-domain
+const ZONE_MIN = 0.6;      // ×10⁻⁵ s⁻¹ rata² harian pada grid 1° — ambang awal, sesuaikan
+function convStats(dateStr, lev){
+  lev = lev || '850';
+  if(!S || S.fmt!=='packed1') return null;
+  const idx = []; S.steps.forEach((st,i)=>{ if(witaDate(st)===dateStr) idx.push(i); });
+  if(!idx.length) return null;
+  const nj = S.nj, ni = S.ni, J0 = Math.round((S.lat0+7)/S.d), J1 = Math.round((S.lat0+10)/S.d), I0 = Math.round((117-S.lon0)/S.d), I1 = Math.round((120-S.lon0)/S.d);
+  let c = 0, z = 0, n = 0; const meanC = new Float32Array(nj*ni);
+  idx.forEach(si=>{
+    const f = dynFields(lev, si);
+    for(let j=J0;j<=J1;j++) for(let i=I0;i<=I1;i++){ c += f.conv[j*ni+i]; z += f.cyc[j*ni+i]; n++; }
+    for(let k=0;k<meanC.length;k++) meanC[k] += f.conv[k]/idx.length;
+  });
+  const zones = []; let peak = 0;
+  for(let j=2;j<nj-2;j++) for(let i=2;i<ni-2;i++){
+    const v = meanC[j*ni+i]; if(v > peak) peak = v; if(v < ZONE_MIN) continue;
+    let mx = true; for(let dj=-2;dj<=2&&mx;dj++) for(let di=-2;di<=2;di++){ if((dj||di) && meanC[(j+dj)*ni+i+di] > v){ mx=false; break; } }
+    if(!mx) continue;
+    const lat = S.lat0 - j*S.d, lon = S.lon0 + i*S.d, nm = nearName(lat, lon);
+    if(nm) zones.push({ v, lat, lon, name:nm });
+  }
+  zones.sort((a,b)=>b.v-a.v);
+  const seen = new Set(), top = zones.filter(zn=>{ if(seen.has(zn.name)) return false; seen.add(zn.name); return true; }).slice(0,6);
+  return { conv:c/n, cyc:z/n, nSteps:idx.length, zones:top, peak };
+}
+window.synConvStats = convStats;
 
 /* ---- RH berwarna ---- */
 function drawRH(ctx, m, g){
@@ -171,11 +247,13 @@ const SynLayer = L.Layer.extend({
     const ctx = c.getContext('2d'); ctx.clearRect(0,0,sz.x,sz.y);
     const si = +stepSel.selectedIndex, lev = levelSel.value;
     if(rhChk.checked) drawRH(ctx, m, fieldAt('rh'+lev, si));
+    if(dynSel.value) drawDyn(ctx, m, dynFields(lev, si)[dynSel.value]);
     if(strChk.checked) drawStreamlines(ctx, m, fieldAt('u'+lev, si), fieldAt('v'+lev, si), VMAX[lev], rhChk.checked);
     if(isoChk.checked) drawIsobars(ctx, m, fieldAt('msl', si));
     const grad = `linear-gradient(90deg,${RH_STOPS.map(([v,c])=>`rgb(${c.join(',')}) ${v}%`).join(',')})`;
     $('synLegend').innerHTML = `<b>${LEVNAME[lev]}</b> · ` + (rhChk.checked ? `RH (terhadap air): <span style="display:inline-block;vertical-align:middle;width:150px;height:10px;border:1px solid var(--border);background:${grad}"></span> 0→100% · ` : '')
       + (strChk.checked ? (rhChk.checked ? 'streamline angin (hitam) · ' : `streamline angin, warna = kecepatan: <span style="color:#2f6eb0">■</span> pelan → <span style="color:#28a08c">■</span> → <span style="color:#e2984a">■</span> → <span style="color:#c84637">■</span> ≥${VMAX[lev]} km/jam · `) : '')
+      + (dynSel.value ? `<span style="color:#a5441f">▇</span> zona ${dynSel.value==='conv'?'konvergensi':'belokan siklonik (vortisitas)'} ≥0,5 (×10⁻⁵ s⁻¹; makin gelap makin kuat) · ` : '')
       + (isoChk.checked ? 'isobar MSL tiap 2 hPa (tebal tiap 4), L/H = pusat tekanan rendah/tinggi' : '');
   }
 });
@@ -191,14 +269,14 @@ function hover(e){
   const si = stepSel.selectedIndex, lev = levelSel.value, ll = e.latlng, r = sample(fieldAt('rh'+lev, si), ll.lat, ll.lng);
   if(r==null){ $('synHover').textContent = ''; return; }
   const u = sample(fieldAt('u'+lev, si), ll.lat, ll.lng)*3.6, v = sample(fieldAt('v'+lev, si), ll.lat, ll.lng)*3.6, p = sample(fieldAt('msl', si), ll.lat, ll.lng);
-  const dir = (Math.atan2(-u,-v)*180/Math.PI+360)%360;
-  $('synHover').textContent = `${ll.lat.toFixed(1)}°, ${ll.lng.toFixed(1)}° · RH ${Math.round(r)}% · angin dari ${typeof deg16==='function'?deg16(dir):Math.round(dir)+'°'} ${Math.round(Math.hypot(u,v))} km/jam · MSL ${p.toFixed(1)} hPa`;
+  const dir = (Math.atan2(-u,-v)*180/Math.PI+360)%360, df = dynFields(lev, si), cv = sample(df.conv, ll.lat, ll.lng), cz = sample(df.cyc, ll.lat, ll.lng);
+  $('synHover').textContent = `${ll.lat.toFixed(1)}°, ${ll.lng.toFixed(1)}° · RH ${Math.round(r)}% · konv ${cv==null?'—':cv.toFixed(1)} · siklonik ${cz==null?'—':cz.toFixed(1)} (×10⁻⁵/s) · angin dari ${typeof deg16==='function'?deg16(dir):Math.round(dir)+'°'} ${Math.round(Math.hypot(u,v))} km/jam · MSL ${p.toFixed(1)} hPa`;
 }
 function init(){
   const box = $('anSyn'); if(!box) return;
   S = window.SINOPTIK;
   if(!S || S.fmt !== 'packed1'){ $('synBody').innerHTML = '<div class="si-sub">Data sinoptik belum tersedia / format lama — jalankan workflow "Update peta sinoptik" lalu muat ulang.</div>'; return; }
-  stepSel = $('synStep'); levelSel = $('synLevel'); rhChk = $('synRH'); isoChk = $('synIso'); strChk = $('synStr');
+  stepSel = $('synStep'); levelSel = $('synLevel'); dynSel = $('synDyn'); rhChk = $('synRH'); isoChk = $('synIso'); strChk = $('synStr');
   populateSteps($('anDay') && $('anDay').value);
   map = L.map('synMap', { scrollWheelZoom:false, minZoom:4, maxZoom:8 }).setView([-6,118], 5);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution:'Tiles &copy; Esri · ECMWF open data (CC BY 4.0)', maxZoom:10 }).addTo(map);
@@ -208,7 +286,7 @@ function init(){
   const fresh = new Date(S.generated.replace('Z',':00Z'));
   $('synInfo').textContent = `${S.model} · run ${S.run.slice(0,10)} ${S.run.slice(11,13)}Z · diperbarui ${fresh.toISOString().slice(0,16).replace('T',' ')} UTC`;
   const refresh = ()=>layer.redraw();
-  [stepSel, rhChk, isoChk, strChk].forEach(e=>e.addEventListener('change', refresh));
+  [stepSel, rhChk, isoChk, strChk, dynSel].forEach(e=>e.addEventListener('change', refresh));
   levelSel.addEventListener('change', ()=>{ isoChk.checked = levelSel.value==='10'; refresh(); });   // isobar MSL hanya bermakna di permukaan
   isoChk.checked = levelSel.value==='10';
   const day = $('anDay'); if(day) day.addEventListener('change', ()=>{ populateSteps(day.value); refresh(); });
