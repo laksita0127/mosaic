@@ -6,3 +6,7 @@ pipeline/ingest.log
 *.grib2
 *.idx
 det_data.js
+ecmwf_ens.js
+ens_multi.js
+dinamika.js
+sinoptik.js
