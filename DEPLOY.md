@@ -94,3 +94,17 @@ Pages akan re-deploy otomatis.
 - Log verifikasi sekarang pakai `localStorage`: tersimpan **per-browser**,
   tidak sinkron antar komputer/prakirawan. Untuk log bersama perlu backend
   terpisah (mis. Google Sheets / database kecil) — belum termasuk di sini.
+
+
+---
+
+## Arsitektur penerbitan (sejak 4 Okt 2026): cabang `main` = kode, cabang `site` = situs yang tayang
+
+- `main` hanya berisi **kode** (HTML/JS/pipeline/workflow). Riwayatnya kecil dan tidak bertambah oleh data.
+- `site` berisi **situs lengkap** (kode + semua data) dan **selalu 1 commit**: setiap pembaruan data memakai `commit --amend` + force-push
+  (`pipeline/publish_site.sh`), jadi riwayat tidak membengkak walau data diperbarui puluhan kali sehari.
+- GitHub Pages dilayani dari cabang **site** (Settings → Pages → Branch: `site` / root).
+- Setiap push kode ke `main` otomatis disalin ke `site` oleh workflow *Terbitkan kode ke cabang site* (daftar berkas: `pipeline/site_files.txt`).
+- Data: ecmwf_ens.js, ens_multi.js, dinamika.js, sinoptik.js, det_data.js — masing-masing diterbitkan workflow datanya langsung ke `site`.
+- Model deterministik (4 model, 77 titik) dibaca dari `det_data.js`; browser **tidak** memanggil Open-Meteo kecuali tombol ⟳ ditekan atau berkas usang.
+- Memakai lokal (file://): jalankan `ambil_data.bat` untuk mengunduh data terbaru dari cabang `site`.

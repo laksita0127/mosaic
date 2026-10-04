@@ -43,9 +43,16 @@ async function fetchLevels(){
     'wind_speed_850hPa','wind_direction_850hPa','wind_speed_200hPa','wind_direction_200hPa','cape','total_column_integrated_water_vapour'];
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${PTS.map(p=>p.lat).join(',')}&longitude=${PTS.map(p=>p.lon).join(',')}`
     + `&hourly=${vars.join(',')}&models=${MODELS.map(m=>m.param).join(',')}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  let j = await res.json(); j = Array.isArray(j) ? j : [j];
+  let j = null;
+  const D = window.DET_DATA && window.DET_DATA.levels;                       // dari pipeline (tanpa panggilan Open-Meteo)
+  const today = new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
+  if(D && D.time && D.time.some(t=>t.startsWith(today)) && PTS.every(p=>D.points[p.id]) && MODELS.every(m=>window.DET_DATA.models.includes(m.param)))
+    j = PTS.map(p=>({ hourly: Object.assign({ time:D.time }, D.points[p.id]) }));
+  if(!j){
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    j = await res.json(); j = Array.isArray(j) ? j : [j];
+  }
   LEVELS = j.map((entry,i)=>{
     const h = entry.hourly, m = {};
     MODELS.forEach(mm=>{

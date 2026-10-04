@@ -1,0 +1,38 @@
+name: Update model deterministik
+
+# ECMWF IFS · GFS · ICON · AIFS untuk 77 titik, 8 hari, per jam (+ profil lapisan atas Bima & Dompu) -> det_data.js.
+# Halaman membaca berkas ini, jadi browser pengguna TIDAK memanggil Open-Meteo (batas laju gratis per IP).
+# 4x/hari mengikuti run model 00/06/12/18 UTC (menit ganjil supaya tidak kena antrean cron jam bulat).
+on:
+  schedule:
+    - cron: "41 3,9,15,21 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: det-data
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run pipeline
+        env:
+          OPENMETEO_API_KEY: ${{ secrets.OPENMETEO_API_KEY }}
+        run: |
+          for i in 1 2 3; do
+            python pipeline/ingest_deterministic.py && break
+            echo "gagal (percobaan $i) — tunggu 3 menit lalu ulang"; sleep 180
+          done
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "deterministik" det_data.js

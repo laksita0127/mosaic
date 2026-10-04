@@ -5,3 +5,4 @@ pipeline/last_run.txt
 pipeline/ingest.log
 *.grib2
 *.idx
+det_data.js

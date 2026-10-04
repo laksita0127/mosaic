@@ -1,0 +1,8 @@
+# Berkas KODE yang diterbitkan ke cabang `site` (satu per baris). Tambahkan di sini bila ada berkas baru yang dipakai halaman
+# (gambar, skrip, dst). Berkas DATA tidak dimasukkan — diterbitkan workflow data masing-masing.
+.nojekyll
+index.html
+prakiraan-wilayah-bima-dompu-peta.html
+analisis.js
+peta_sinoptik.js
+kecamatan.js

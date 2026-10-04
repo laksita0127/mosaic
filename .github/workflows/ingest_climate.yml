@@ -24,17 +24,7 @@ jobs:
           python-version: "3.11"
       - name: Run
         run: python pipeline/ingest_climate.py
-      - name: Commit hasil
-        run: |
-          git config user.name "mosaic-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dinamika.js
-          if git diff --staged --quiet; then
-            echo "Tidak ada perubahan data."
-          else
-            git commit -m "data: indeks iklim $(date -u +%Y-%m-%d)"
-            for i in 1 2 3 4; do
-              git pull --rebase origin main && git push && break
-              sleep 15
-            done
-          fi
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "indeks iklim" dinamika.js

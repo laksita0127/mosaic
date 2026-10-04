@@ -507,6 +507,7 @@
 <script src="kecamatan.js" onerror="window.__kecGeoMissing=true;"></script>
 <!-- Analisis harian (dinamika atmosfer, kelembapan lapisan, narasi) -->
 <script src="dinamika.js" onerror="window.__dinamikaMissing=true;"></script>
+<script src="det_data.js" onerror="window.__detMissing=true;"></script>
 <script src="sinoptik.js" onerror="window.__sinoptikMissing=true;"></script>
 <script src="analisis.js"></script>
 <script src="peta_sinoptik.js"></script>
@@ -813,7 +814,29 @@ function interpColor(value, stops){
   return hexToRgb(stops[stops.length-1][1]);
 }
 
-async function fetchAll(){
+// Data model deterministik: dibaca dari det_data.js (dibuat pipeline GitHub, 4x/hari) -> TIDAK memanggil Open-Meteo dari browser
+// (batas laju gratis per IP). Kalau berkas tak ada / usang / titik kurang -> kembali ke panggilan langsung seperti semula.
+function detTodayWita(){ return new Date(Date.now()+8*3600e3).toISOString().slice(0,10); }
+function detEntries(){
+  const D = window.DET_DATA;
+  if(!D || !D.points || !D.time) return null;
+  const today = detTodayWita(), start = D.time.findIndex(t=>t.slice(0,10) >= today);
+  if(start < 0 || D.time.length - start < 7*24) return null;                // harus masih mencakup ≥7 hari ke depan
+  if(!MODELS.every(m=>D.models.includes(m.param))) return null;
+  const out = [];
+  for(const p of POINTS){
+    const src = D.points[p.id]; if(!src) return null;
+    const hourly = { time: D.time.slice(start) };
+    for(const k in src) hourly[k] = src[k].slice(start);
+    out.push({ point:p, hours:parseResponse({ hourly }) });
+  }
+  state.detSource = { generated: D.generated };
+  return out;
+}
+async function fetchAll(forceLive){
+  state.detSource = null;
+  const fromFile = forceLive ? null : detEntries();
+  if(fromFile) return fromFile;
   const lats = POINTS.map(p=>p.lat).join(',');
   const lons = POINTS.map(p=>p.lon).join(',');
   const modelsParam = MODELS.map(m=>m.param).join(',');
@@ -2349,14 +2372,15 @@ function renderRunInfo(){
     const lab = r.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
     return `<b>${m.label}</b> ~${lab} UTC`;
   }).join(' <span class="sep">·</span> ');
-  el.innerHTML = `<span>Data ditarik: <b>${fetchedAt}</b></span><span class="sep">|</span><span>Perkiraan run terpakai: ${runLines}</span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru">⟳</button>`;
+  const detNote = state.detSource ? `<span>Data model dari pipeline (dibuat <b>${state.detSource.generated.replace('T',' ').replace('Z',' UTC')}</b>)</span><span class="sep">|</span>` : '';
+  el.innerHTML = `${detNote}<span>Halaman dibuka: <b>${fetchedAt}</b></span><span class="sep">|</span><span>Perkiraan run terpakai: ${runLines}</span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru">⟳</button>`;
   document.getElementById('refreshBtn').onclick = refreshData;
 }
 async function refreshData(){
   const btn = document.getElementById('refreshBtn');
   if(btn){ btn.disabled = true; btn.textContent='…'; }
   try{
-    state.pointsData = await fetchAll();
+    state.pointsData = await fetchAll(true);       // tombol ⟳ = tarik langsung dari Open-Meteo (cuma saat diklik)
     buildSteps();
     document.getElementById('timeSlider').max = state.steps.length-1;
     if(state.stepIdx > state.steps.length-1) state.stepIdx = 0;

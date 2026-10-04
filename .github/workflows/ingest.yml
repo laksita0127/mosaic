@@ -35,23 +35,18 @@ jobs:
       - name: Install deps
         run: pip install -r pipeline/requirements.txt
 
+      - name: Pulihkan data sebelumnya dari cabang site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh --restore ecmwf_ens.js
+
       - name: Run pipeline
         # 20 skenario + --fast (naik bertahap 8 -> 15 -> 20; plafon cloud ±25). --source ecmwf (mirror AWS sering 503 "Slow Down"
         # untuk IP GitHub). --dl-timeout 1500 = gagal cepat kalau tetap di-rate-limit,
         # bukan retry berjam-jam. Pipeline tetap menulis hasil walau suhu/angin gagal.
         run: python pipeline/ingest_ecmwf_ens.py --source ecmwf --max-members 20 --fast --dl-timeout 1500 --force
 
-      - name: Commit hasil
-        run: |
-          git config user.name "mosaic-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ecmwf_ens.js
-          if git diff --staged --quiet; then
-            echo "Tidak ada perubahan data."
-          else
-            git commit -m "data: ECMWF ENS $(date -u +%Y-%m-%dT%H:%MZ)"
-            for i in 1 2 3 4; do
-              git pull --rebase origin main && git push && break
-              sleep 15
-            done
-          fi
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "ECMWF ENS GRIB" ecmwf_ens.js

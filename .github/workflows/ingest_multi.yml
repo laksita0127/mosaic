@@ -36,6 +36,11 @@ jobs:
       - name: Install deps
         run: pip install numpy
 
+      - name: Pulihkan data sebelumnya dari cabang site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh --restore ens_multi.js
+
       - name: Run pipeline
         env:
           # opsional: kunci API berbayar Open-Meteo (Settings > Secrets > OPENMETEO_API_KEY)
@@ -46,17 +51,7 @@ jobs:
             echo "gagal (percobaan $i) — tunggu 3 menit lalu ulang"; sleep 180
           done
 
-      - name: Commit hasil
-        run: |
-          git config user.name "mosaic-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ens_multi.js
-          if git diff --staged --quiet; then
-            echo "Tidak ada perubahan data."
-          else
-            git commit -m "data: multi-model ENS $(date -u +%Y-%m-%dT%H:%MZ)"
-            for i in 1 2 3 4; do
-              git pull --rebase origin main && git push && break
-              sleep 15
-            done
-          fi
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "multi-model ENS" ens_multi.js

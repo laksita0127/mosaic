@@ -1,0 +1,26 @@
+name: Terbitkan kode ke cabang site
+
+# Setiap kali kode di `main` berubah (HTML/JS), salin ke cabang `site` yang dilayani GitHub Pages.
+# Data (ecmwf_ens.js, ens_multi.js, dinamika.js, sinoptik.js, det_data.js) TIDAK disentuh — itu diterbitkan workflow data masing-masing.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-site
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Terbitkan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "kode" $(grep -v '^#' pipeline/site_files.txt)
