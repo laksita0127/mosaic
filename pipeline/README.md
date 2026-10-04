@@ -210,3 +210,12 @@ sekali; hasilnya `elevation.json` ikut di repo) menyimpan selisih `dz = DEM titi
 skenario (flag `ELEVATION_CORRECTION`, `LAPSE_K_PER_M` di `config.py`; 6,5 K/km = downscaling Open-Meteo pada
 tabel deterministik). Contoh: Tambora (1.476 m vs 970 m) −3,3 °C; Bandara WADB (2 m vs 232 m) +1,5 °C.
 Median |dz| 159 m (≈1 °C), maks 865 m. Berlaku mulai run Actions berikutnya.
+
+## 10. Analisis Harian (analisis.js)
+
+Bagian "Analisis harian" di halaman (Kota Bima / Kab. Bima / Kab. Dompu): (A) buletin Dinamika Atmosfer BMKG yang
+ditempel prakirawan (SOI, Niño 3.4, DMI, MJO, surge, belokan/SST) diinterpretasi dengan aturan sederhana; (B) RH lapisan
+850/700/500/200 hPa, uap air total, CAPE, angin 850/200 hPa dari Open-Meteo (ECMWF·GFS·ICON, diambil di browser,
+RH 200 hPa ECMWF/GFS dikonversi es->air); (C) ringkasan hujan per kecamatan dari ensemble gabungan; (D) narasi otomatis
+yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & narasi edit disimpan di localStorage
+(per browser). Bukan produk resmi BMKG.
