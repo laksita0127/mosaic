@@ -1,0 +1,2 @@
+// dibuat otomatis oleh pipeline/ingest_climate.py - JANGAN diedit tangan
+window.DINAMIKA = {"nino34":{"value":2.67,"date":"2026-11-22","src":"BoM, Niño3.4 relatif mingguan","scale":"bom"},"soi":{"value":-1.1,"month":"2026-10","src":"NOAA CPC, SOI terstandar bulanan (cadangan, skala berbeda dari BoM)","scale":"noaa"},"dmi":{"value":0.146,"month":"2026-05","src":"NOAA PSL, DMI bulanan (cadangan, terlambat 1-2 bulan)","scale":"noaa"},"mjo":{"phase":1,"amp":1.31,"date":"2026-11-23","src":"NOAA PSL, ROMI (OLR)"},"generated":"2026-11-28T02:56Z"};
