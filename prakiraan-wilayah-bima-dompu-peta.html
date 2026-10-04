@@ -1,0 +1,2422 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOSAIC — Wilayah Bima–Dompu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f7f9; --panel:#ffffff; --panel-alt:#eef1f4; --border:#d7dde3;
+    --text:#1b2530; --text-dim:#57626d; --text-faint:#8994a0;
+    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --aifs:#1f9d8a; --accent:#2b6cb0;
+    --good:#5fbf8f; --warn:#e2984a; --bad:#d9705f;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;padding:28px 20px 60px;}
+  .wrap{max-width:1040px;margin:0 auto;}
+  .masthead{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
+  .masthead-logo{width:46px;height:46px;object-fit:contain;flex:none;}
+  .masthead-logo-fallback{
+    width:46px;height:46px;flex:none;border-radius:6px;background:var(--panel-alt);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--text-dim);letter-spacing:0.5px;
+  }
+  .masthead-text{min-width:0;}
+  .masthead h1{font-size:20px;font-weight:700;margin:0 0 4px;letter-spacing:0.3px;}
+  .masthead-sup{font-size:12.5px;font-weight:500;color:var(--text-dim);margin-left:8px;letter-spacing:0;}
+  .masthead .sub{font-size:12.5px;color:var(--text-dim);}
+  .masthead-unit{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+  .status{font-size:13px;color:var(--text-dim);padding:12px 0;}
+  .status.err{color:var(--bad);}
+
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
+  .field select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .field.grow{flex:1;min-width:160px;}
+  .search-box{position:relative;}
+  .search-box input{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius);max-height:200px;overflow-y:auto;z-index:1000;display:none;}
+  .search-results div{padding:8px 10px;font-size:12.5px;cursor:pointer;}
+  .search-results div:hover{background:var(--border);}
+
+  .map-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}
+  #map{height:500px;width:100%;background:var(--panel);}
+  .legend-bar{padding:12px 14px;border-top:1px solid var(--border);}
+  .legend-title{font-family:'IBM Plex Mono',monospace;color:var(--text-dim);font-size:11.5px;margin-bottom:8px;}
+  .legend-scale{position:relative;max-width:520px;}
+  .legend-grad{display:flex;height:20px;border-radius:3px;overflow:hidden;border:1px solid var(--border);}
+  .legend-grad span{flex:1;height:100%;}
+  .legend-ticks{position:relative;height:16px;margin-top:3px;}
+  .legend-tick{position:absolute;transform:translateX(-50%);font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-faint);white-space:nowrap;}
+  .legend-note{color:var(--text-faint);font-size:10.5px;margin-top:8px;display:block;}
+
+  .run-info{
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:9px 14px;margin-bottom:12px;font-size:11.5px;color:var(--text-dim);
+  }
+  .run-info .sep{color:var(--border);}
+  .run-info b{color:var(--text);font-weight:600;}
+  .day-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .day-tabs button{
+    background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
+    padding:8px 13px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;cursor:pointer;text-align:left;
+  }
+  .day-tabs button .d1{display:block;font-weight:600;color:var(--text);line-height:1.3;}
+  .day-tabs button .d2{display:block;font-size:11px;color:var(--text-faint);line-height:1.3;margin-top:1px;}
+  .day-tabs button.active{border-color:var(--text-dim);background:var(--panel-alt);}
+  .day-tabs button.active .d1{color:var(--accent);}
+  .refresh-btn{
+    margin-left:auto;background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);
+    width:28px;height:28px;border-radius:var(--radius);cursor:pointer;font-size:14px;flex:none;
+  }
+  .refresh-btn:hover{color:var(--text);}
+  .refresh-btn:disabled{opacity:0.5;cursor:default;}
+  .legend-note{color:var(--text-faint);margin-left:auto;font-size:10.5px;}
+
+  .time-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;}
+  .time-readout{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .time-readout .now{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
+  .time-readout .rel{font-size:12px;color:var(--text-dim);}
+  .slider-row{display:flex;align-items:center;gap:10px;}
+  .play-btn{background:var(--accent);border:none;color:#ffffff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;}
+  input[type=range]{flex:1;accent-color:var(--accent);}
+  .step-btn{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:var(--radius);cursor:pointer;flex:none;}
+  .day-ticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-faint);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+
+  .selected-note{font-size:12.5px;color:var(--text-dim);margin-bottom:14px;}
+  .selected-note b{color:var(--text);}
+  section{margin-bottom:26px;}
+  .sec-title{font-size:11.5px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-faint);margin:0 0 10px;}
+
+  .agree-banner{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);margin-bottom:14px;}
+  .agree-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+  .model-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  .mcard{background:var(--panel);border:1px solid var(--border);border-top:2px solid var(--mclr);border-radius:var(--radius);padding:12px 14px;}
+  .mcard .mname{font-size:12px;font-weight:600;color:var(--mclr);margin-bottom:8px;}
+  .mrow{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--text-dim);}
+  .mrow span.v{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+
+  form.logform{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  form.logform .full{grid-column:1/-1;}
+  form.logform label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;}
+  form.logform input,form.logform textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 9px;border-radius:var(--radius);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  form.logform textarea{font-family:'IBM Plex Sans',sans-serif;resize:vertical;min-height:44px;}
+  form.logform button{grid-column:1/-1;justify-self:start;background:var(--ecmwf);color:#ffffff;border:none;padding:9px 20px;border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:2px;}
+  form.logform button:hover{filter:brightness(1.08);}
+  .form-hint{grid-column:1/-1;font-size:11.5px;color:var(--text-faint);margin-top:-4px;}
+
+  table{border-collapse:collapse;width:100%;}
+  th,td{padding:6px 10px;text-align:right;font-size:12px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  th{color:var(--text-faint);font-weight:500;border-bottom:1px solid var(--border);}
+  th:first-child,td:first-child{text-align:left;color:var(--text-dim);font-family:'IBM Plex Sans',sans-serif;}
+  tbody tr:nth-child(odd){background:rgba(255,255,255,0.015);}
+  .diff-good{color:var(--good);} .diff-warn{color:var(--warn);} .diff-bad{color:var(--bad);}
+  .del-btn{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:11px;text-decoration:underline;padding:0;}
+  .del-btn:hover{color:var(--bad);}
+  .empty-log{color:var(--text-faint);font-size:12.5px;padding:14px 0;}
+  .param-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;}
+
+  footer{margin-top:24px;font-size:11.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:14px;}
+
+  @media (max-width:640px){ #map{height:400px;} .model-cards{grid-template-columns:1fr 1fr;} form.logform{grid-template-columns:1fr 1fr;} }
+  .avgcol{color:var(--text);font-weight:600;background:rgba(43,108,176,0.06);}
+  .ens-bar-wrap{display:flex;flex-direction:row;align-items:center;gap:9px;cursor:help;}
+  .ens-bar-track{position:relative;width:110px;height:9px;background:var(--panel-alt);border:1px solid var(--border);border-radius:5px;}
+  .ens-table{width:auto;}
+  .ens-table td, .ens-table th{padding-right:28px;}
+  .ens-bar-fill{position:absolute;top:0;height:100%;border-radius:5px;opacity:0.65;}
+  .ens-bar-mean{position:absolute;top:-2px;width:2px;height:13px;background:var(--text);}
+  .ens-bar-label{font-size:10.5px;color:var(--text);white-space:nowrap;}
+
+  /* --- Ringkasan bahasa sederhana --- */
+  .summary-card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--accent);
+    border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;}
+  .summary-head{font-size:11.5px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);margin-bottom:10px;}
+  .summary-head b{color:var(--text);text-transform:none;letter-spacing:0;font-size:13px;}
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .summary-item{display:flex;flex-direction:column;gap:3px;}
+  .summary-item .si-key{font-size:11px;color:var(--text-faint);display:flex;align-items:center;gap:5px;}
+  .summary-item .si-val{font-size:15px;font-weight:600;color:var(--text);line-height:1.25;}
+  .summary-item .si-sub{font-size:11.5px;color:var(--text-dim);line-height:1.35;}
+  .si-chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;}
+  .si-chip.c-good{background:rgba(95,191,143,0.18);color:#2f7d5a;}
+  .si-chip.c-warn{background:rgba(226,152,74,0.18);color:#a5661f;}
+  .si-chip.c-bad{background:rgba(217,112,95,0.2);color:#b0402f;}
+  .si-chip.c-neutral{background:var(--panel-alt);color:var(--text-dim);}
+  .help-details{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    margin-bottom:16px;font-size:12.5px;}
+  .help-details summary{cursor:pointer;padding:10px 14px;font-weight:600;color:var(--text-dim);list-style:none;}
+  .help-details summary::-webkit-details-marker{display:none;}
+  .help-details summary::before{content:"▸ ";color:var(--text-faint);}
+  .help-details[open] summary::before{content:"▾ ";}
+  .help-details .help-body{padding:0 14px 14px;color:var(--text-dim);line-height:1.6;}
+  .help-details .help-body li{margin-bottom:5px;}
+  @media (max-width:640px){ .summary-grid{grid-template-columns:1fr 1fr;} }
+
+  /* --- Tabel produk format BMKG --- */
+  .produk-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;}
+  .produk-controls .field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px;}
+  .produk-controls select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .produk-btn{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim);padding:8px 14px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;cursor:pointer;}
+  .produk-btn:hover{color:var(--text);}
+  .produk-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);}
+  table.produk{border-collapse:collapse;width:100%;font-size:11.5px;}
+  table.produk th,table.produk td{border:1px solid var(--border);padding:4px 6px;text-align:center;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;}
+  table.produk thead th{background:var(--panel-alt);color:var(--text-dim);font-weight:600;position:sticky;top:0;}
+  table.produk td.kec{text-align:left;font-weight:600;color:var(--text);position:sticky;left:0;background:var(--panel);}
+  table.produk tr.grp td{background:var(--panel-alt);text-align:left;font-weight:700;color:var(--accent);letter-spacing:0.5px;font-size:11px;}
+  table.produk td.num{font-family:'IBM Plex Mono',monospace;}
+  .wx{display:inline-flex;align-items:center;gap:4px;}
+  .wx .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .wx-0{color:var(--text-faint);}          /* cerah */
+  .wx-1{color:var(--text-dim);}            /* cerah berawan */
+  .wx-2{color:var(--text);}                /* berawan */
+  .wx-3{color:#2f7d5a;font-weight:600;}    /* hujan ringan/lokal */
+  .wx-4{color:#a5661f;font-weight:600;}    /* hujan sedang */
+  .wx-5{color:#b0402f;font-weight:700;}    /* hujan lebat / petir */
+  td.disagree{box-shadow:inset 3px 0 0 var(--warn);}
+  td.disagree::after{content:" *";color:var(--warn);font-weight:700;}
+  /* --- Analisis harian --- */
+  .an-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+  .an-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;min-width:0;}
+  .an-card h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:0.6px;color:var(--accent);}
+  .an-card textarea{width:100%;box-sizing:border-box;min-height:110px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical;}
+  .an-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .an-chip{background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius);padding:6px 9px;min-width:92px;}
+  .an-chip .k{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
+  .an-chip .v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin:1px 0 3px;}
+  table.an-tbl{border-collapse:collapse;width:100%;font-size:11.5px;}
+  table.an-tbl th,table.an-tbl td{border:1px solid var(--border);padding:4px 6px;text-align:center;white-space:nowrap;}
+  table.an-tbl thead th{background:var(--panel-alt);color:var(--text-dim);font-weight:600;}
+  table.an-tbl td.kec{text-align:left;}
+  .an-card .dim{color:var(--text-faint);}
+  .an-wide{grid-column:1/-1;}
+  .syn-canvas{position:absolute;left:0;top:0;pointer-events:none;}
+  #synMap{height:480px;border:1px solid var(--border);border-radius:var(--radius);margin-top:8px;}
+  .syn-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+  .syn-ctl select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:12.5px;}
+  .syn-ctl label.chk{font-size:12.5px;color:var(--text-dim);display:flex;gap:4px;align-items:center;}
+  @media (max-width:820px){ .an-grid{grid-template-columns:1fr;} }
+  .stale-banner{background:rgba(217,112,95,0.14);border:1px solid var(--bad);color:#8a3226;border-radius:3px;padding:8px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.45;}
+  .stale-banner[hidden]{display:none;}
+  td.justcell{cursor:pointer;}
+  td.justcell:hover{outline:1px solid var(--accent);outline-offset:-1px;}
+  td.just-set{box-shadow:inset 3px 0 0 var(--accent);background:rgba(43,108,176,0.06);}
+  td.just-set.disagree::after{content:"";}
+  /* modal justifikasi */
+  .just-overlay{position:fixed;inset:0;background:rgba(20,28,38,0.45);z-index:5000;display:flex;align-items:center;justify-content:center;padding:16px;}
+  .just-overlay[hidden]{display:none!important;}
+  .just-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:18px 20px;font-size:13px;}
+  .just-box h3{margin:0 0 4px;font-size:15px;}
+  .just-box .sub{color:var(--text-dim);font-size:12px;margin-bottom:12px;}
+  .just-cmp{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px;}
+  .just-cmp th,.just-cmp td{border:1px solid var(--border);padding:5px 8px;text-align:left;}
+  .just-cmp th{background:var(--panel-alt);color:var(--text-dim);font-weight:600;}
+  .just-form label{display:block;font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;margin:8px 0 3px;}
+  .just-form select,.just-form textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:var(--radius);font-family:inherit;font-size:13px;}
+  .just-form textarea{resize:vertical;min-height:44px;}
+  .just-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .just-actions button{border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer;background:var(--panel-alt);color:var(--text-dim);}
+  .just-actions button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;}
+  .just-actions button.danger{color:var(--bad);}
+  .produk-legend{font-size:11px;color:var(--text-faint);margin-top:8px;line-height:1.6;}
+  .produk-legend b{color:var(--text-dim);}
+
+  @media print{
+    body{padding:0;background:#fff;}
+    .wrap>*:not(#produkSection){display:none !important;}
+    #produkSection{margin:0;}
+    #produkSection .sec-title,.produk-controls,.produk-legend{display:none !important;}
+    #produkPrintHead{display:block !important;}
+    table.produk{font-size:9px;}
+    table.produk th,table.produk td{padding:2px 3px;}
+    .produk-wrap{border:none;overflow:visible;}
+  }
+  #produkPrintHead{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="masthead">
+    <img src="data:image/png;base64,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" alt="Logo BMKG" class="masthead-logo"
+      onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex';">
+    <div id="logoFallback" class="masthead-logo-fallback" style="display:none;">BMKG</div>
+    <div class="masthead-text">
+      <h1>MOSAIC <span class="masthead-sup">Multi-model Output Spatial Analysis, Interactive Comparison</span></h1>
+      <div class="sub" id="mastheadSub">Wilayah Bima–Dompu — 32 titik kecamatan/bandara + grid — hujan, suhu, angin, kelembapan — per 3 jam</div>
+      <div class="masthead-unit">Stasiun Meteorologi Kelas II Sultan Muhammad Salahuddin — Bima</div>
+    </div>
+  </div>
+
+  <div id="status" class="status">Memuat data model untuk 32 titik…</div>
+
+  <div id="content" style="display:none;">
+    <details class="help-details">
+      <summary>Cara baca halaman ini</summary>
+      <div class="help-body">
+        <ul style="margin:0;padding-left:18px;">
+          <li><b>Peta warna</b> = perkiraan (hujan/suhu/angin/kelembapan) pada jam yang dipilih di penggeser waktu. Warna dihaluskan antar 32 titik kecamatan — bukan grid model asli.</li>
+          <li><b>Penggeser waktu</b> bergerak <b>per 3 jam</b>, dari sekarang (H+0) sampai 7 hari ke depan (H+7).</li>
+          <li><b>Kartu model</b> (ECMWF, GFS, ICON, AIFS) = 4 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
+          <li><b>Ensemble / "skenario"</b> = satu model dijalankan puluhan kali dengan sedikit variasi kondisi awal, menghasilkan <b>rentang</b> kemungkinan, bukan satu angka. "Peluang hujan 70%" artinya 70% dari skenario menghasilkan hujan.</li>
+          <li><b>Kotak "Ringkasan"</b> di bawah menerjemahkan semua itu jadi satu kalimat untuk titik &amp; jam yang dipilih.</li>
+          <li>Halaman ini alat bantu analisis internal — <b>bukan produk prakiraan resmi BMKG</b>.</li>
+        </ul>
+      </div>
+    </details>
+    <div class="controls">
+      <div class="field">
+        <label>Parameter</label>
+        <select id="paramSel">
+          <option value="hujan">Curah hujan (3 jam)</option>
+          <option value="hujan24">Curah hujan (akumulasi 24 jam)</option>
+          <option value="suhu">Suhu</option>
+          <option value="angin">Angin</option>
+          <option value="rh">Kelembapan</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <select id="modelSel">
+          <option value="avg">Rata-rata 4 model</option>
+          <option value="ecmwf">ECMWF</option>
+          <option value="gfs">GFS</option>
+          <option value="icon">ICON</option>
+        </select>
+      </div>
+      <div class="field grow search-box">
+        <label>Cari kecamatan</label>
+        <input type="text" id="searchInput" placeholder="mis. Sape, Woja, Tambora…" autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
+
+    <div class="run-info" id="runInfo"></div>
+    <div id="ensStaleBanner" class="stale-banner" hidden></div>
+
+    <div class="map-panel">
+      <div id="map"></div>
+      <div class="legend-bar">
+        <div class="legend-title" id="legendTitle"></div>
+        <div class="legend-scale">
+          <div class="legend-grad" id="legendGradBar"></div>
+          <div class="legend-ticks" id="legendTicks"></div>
+        </div>
+        <span class="legend-note">medan diinterpolasi antar 32 titik — bukan grid model asli</span>
+      </div>
+    </div>
+
+    <div class="time-panel">
+      <div class="time-readout">
+        <span class="now" id="timeNow">—</span>
+        <span class="rel" id="timeRel">—</span>
+      </div>
+      <div class="slider-row">
+        <button class="step-btn" id="prevBtn">‹</button>
+        <button class="play-btn" id="playBtn">▶</button>
+        <input type="range" id="timeSlider" min="0" max="23" step="1" value="0">
+        <button class="step-btn" id="nextBtn">›</button>
+      </div>
+      <div class="day-ticks"><span>H+0</span><span>H+1</span><span>H+2</span><span>H+3</span><span>H+4</span><span>H+5</span><span>H+6</span><span>H+7</span></div>
+    </div>
+
+    <div class="selected-note" id="selectedNote"></div>
+
+    <div class="summary-card" id="summaryCard"></div>
+
+    <section id="analisisSection">
+      <div class="sec-title">Analisis harian — Kota Bima · Kab. Bima · Kab. Dompu</div>
+      <div class="produk-controls">
+        <div class="field"><label>Hari</label><select id="anDay"></select></div>
+        <div class="field"><label>Wilayah</label><select id="anReg"></select></div>
+      </div>
+      <div class="an-grid">
+        <div class="an-card">
+          <h4>Dinamika atmosfer (skala besar)</h4>
+          <div id="anDynView"></div>
+          <details id="anDynCtl" style="margin-top:10px">
+            <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Tempel / kelola buletin BMKG</summary>
+            <textarea id="anDynText" placeholder="Tempel teks &quot;Informasi Dinamika Atmosfer … tanggal 04 Oktober 2026&quot; (SOI, Niño 3.4, DMI, MJO, Indeks Surge, Kelvin, Rossby, belokan angin, SST)…" style="margin-top:8px"></textarea>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+              <button class="produk-btn" id="anDynSave" type="button">Simpan buletin</button>
+              <select id="anDynList" style="background:var(--panel);border:1px solid var(--border);color:var(--text);padding:7px;border-radius:var(--radius);font-size:12px"></select>
+              <button class="produk-btn" id="anDynDel" type="button">Hapus</button>
+              <span id="anDynMsg" class="si-sub"></span>
+            </div>
+            <div class="si-sub" style="margin-top:4px">Disimpan per tanggal di browser ini. Hari analisis memakai buletin terbaru yang tanggalnya ≤ hari tersebut.</div>
+          </details>
+        </div>
+        <div class="an-card" id="anHum"></div>
+        <div class="an-card an-wide" id="anRain"></div>
+        <div class="an-card an-wide" id="anWave">
+          <h4>Gelombang atmosfer — MJO · Kelvin · Rossby ekuator (NCICS)</h4>
+          <div class="syn-ctl">
+            <select id="waveVar">
+              <option value="olr">OLR (awan konvektif)</option><option value="pwat">Uap air total</option>
+              <option value="uwnd850">Angin zonal 850 hPa</option><option value="vwnd850">Angin meridional 850 hPa</option>
+              <option value="uwnd200">Angin zonal 200 hPa</option><option value="shear">Geser angin</option>
+            </select>
+            <select id="waveType">
+              <option value="all">Gabungan (kontur MJO·Kelvin·ER·Low)</option><option value="kelvin">Hanya Kelvin</option>
+              <option value="er">Hanya Rossby ekuator (ER)</option><option value="mjo">Hanya MJO</option><option value="mtd">Hanya MRG/TD</option>
+            </select>
+            <select id="waveAvg"><option value="1">rata² 1 hari</option><option value="3">3 hari</option><option value="5">5 hari</option><option value="7">7 hari</option></select>
+          </div>
+          <div style="margin-top:8px"><img id="waveImg" alt="Peta gelombang atmosfer NCICS" style="max-width:100%;height:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff"></div>
+          <div id="waveMsg" class="si-sub" style="margin-top:6px;line-height:1.5"></div>
+          <div class="syn-ctl" style="margin-top:8px">
+            <b class="si-sub">Penilaian prakirawan (dari peta di atas):</b>
+            <label class="chk">Kelvin <select id="waveKelvin"><option value="">tidak berpengaruh</option><option value="near">mendekat (≤2 hari)</option><option value="over">di sekitar NTB</option></select></label>
+            <label class="chk">Rossby ekuator <select id="waveER"><option value="">tidak berpengaruh</option><option value="near">mendekat (≤2 hari)</option><option value="over">di sekitar NTB</option></select></label>
+            <span class="si-sub dim">tersimpan per hari analisis; ikut ke ringkasan dinamika &amp; narasi</span>
+          </div>
+        </div>
+        <div class="an-card an-wide" id="anSyn">
+          <h4>Peta sinoptik — isobar &amp; streamline</h4>
+          <div id="synBody">
+            <div class="syn-ctl">
+              <button class="produk-btn" id="synPrev" type="button">◀</button>
+              <select id="synStep"></select>
+              <button class="produk-btn" id="synNext" type="button">▶</button>
+              <select id="synLevel">
+                <option value="10">Permukaan</option><option value="850" selected>850 hPa</option><option value="700">700 hPa</option>
+                <option value="500">500 hPa</option><option value="200">200 hPa</option>
+              </select>
+              <label class="chk"><input type="checkbox" id="synRH" checked> Kelembapan (RH)</label>
+              <select id="synDyn"><option value="">Zona: tanpa</option><option value="conv">Zona konvergensi</option><option value="cyc">Zona belokan siklonik</option></select>
+              <label class="chk"><input type="checkbox" id="synStr" checked> Streamline</label>
+              <label class="chk"><input type="checkbox" id="synIso"> Isobar MSL</label>
+              <span id="synInfo" class="si-sub"></span>
+            </div>
+            <div id="synMap"></div>
+            <div id="synHover" class="si-sub" style="margin-top:6px;min-height:16px;font-family:'IBM Plex Mono',monospace"></div>
+            <div id="synLegend" class="si-sub" style="margin-top:2px;line-height:1.5"></div>
+            <div class="si-sub dim" style="margin-top:2px">Model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, tekanan, dan lapisan lembap/kering. RH 200/500 hPa dinyatakan terhadap air. Arahkan kursor untuk nilai di titik. Bukan analisis cuaca resmi.</div>
+          </div>
+        </div>
+        <div class="an-card an-wide">
+          <h4>Narasi analisis (otomatis, dapat diedit)</h4>
+          <textarea id="anNarrText" style="min-height:560px"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <button class="produk-btn" id="anNarrSave" type="button">Simpan edit</button>
+            <button class="produk-btn" id="anNarrReset" type="button">Susun ulang</button>
+            <button class="produk-btn" id="anNarrCopy" type="button">Salin</button>
+            <span id="anNarrMsg" class="si-sub"></span>
+          </div>
+          <div class="si-sub" style="margin-top:6px">Narasi ini bantuan berbasis aturan sederhana — bukan produk resmi BMKG. Prakirawan tetap yang memutuskan.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="produkSection">
+      <div class="sec-title">Tabel produk — format prakiraan BMKG (semua kecamatan sekaligus)</div>
+      <div class="produk-controls">
+        <div class="field">
+          <label>Sumber data</label>
+          <select id="produkSrc">
+            <option value="avg">Kesepakatan (rata-rata 4 model)</option>
+            <option value="ecmwf">ECMWF</option>
+            <option value="gfs">GFS</option>
+            <option value="icon">ICON</option>
+            <option value="aifs">AIFS</option>
+            <option value="ens">Ensemble ECMWF (rata-rata 51 skenario)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Hari</label>
+          <select id="produkDay"></select>
+        </div>
+        <button class="produk-btn" id="produkCopy">Salin tabel (TSV)</button>
+        <button class="produk-btn" id="produkPrint">Cetak</button>
+      </div>
+      <div id="produkPrintHead"></div>
+      <div class="produk-wrap">
+        <table class="produk" id="produkTable"></table>
+      </div>
+      <div class="produk-legend" id="produkLegend"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Rincian per model — titik terpilih</div>
+      <div class="agree-banner" id="agreeBanner"></div>
+      <div class="model-cards" id="modelCards"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Detail titik terpilih — H+0 s/d H+7, tiap 3 jam</div>
+      <div class="day-tabs" id="detailDayTabs"></div>
+      <div class="param-panel" id="detailTable"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
+        Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
+        <br><span id="ensBlurbTail"><b>ECMWF</b> tampil otomatis. <b>GFS (~31)</b> dan <b>ICON (~40)</b> ditarik saat tombol di bawah ditekan.</span>
+      </div>
+      <div class="produk-controls" style="margin-bottom:10px;">
+        <div class="field"><label>Titik</label><select id="ensPointSel"></select></div>
+        <div class="field"><label>Hari</label><select id="ensDaySel"></select></div>
+      </div>
+      <div id="ecmwfEnsInfo" style="font-size:11.5px;color:var(--text-faint);margin-bottom:8px;"></div>
+      <div class="param-panel" id="ecmwfEnsTable" style="margin-bottom:14px;"></div>
+      <button class="step-btn" id="loadEnsembleBtn" style="width:auto;padding:8px 16px;">Muat GFS + ICON ensemble untuk titik ini</button>
+      <span id="ensembleStatus" style="font-size:12px;color:var(--text-faint);margin-left:10px;"></span>
+      <div class="param-panel" id="ensembleTable" style="margin-top:10px;display:none;"></div>
+    </section>
+
+    <section>
+      <div class="sec-title">Log verifikasi — catat kejadian aktual di titik &amp; waktu terpilih</div>
+      <form class="logform" id="logForm">
+        <div class="form-hint">Mencatat untuk <b id="logTargetLabel">—</b>.</div>
+        <div><label>Curah hujan aktual (mm)</label><input type="number" step="0.1" id="fHujan" required></div>
+        <div><label>Angin dominan</label><input type="text" id="fAngin" placeholder="mis. Timur 15 km/j" required></div>
+        <div><label>Suhu aktual (°C)</label><input type="number" step="0.1" id="fSuhu" required></div>
+        <div><label>Kelembapan aktual (%)</label><input type="number" step="1" id="fRH" required></div>
+        <div class="full"><label>Catatan</label><textarea id="fCatatan" placeholder="observasi tambahan (opsional)"></textarea></div>
+        <button type="submit">Simpan ke log</button>
+      </form>
+    </section>
+
+    <section>
+      <div class="sec-title">Riwayat verifikasi (semua titik)</div>
+      <div id="histWrap"></div>
+    </section>
+  </div>
+
+  <footer>
+    Data model deterministik + ensemble GFS/ICON: Open-Meteo (ECMWF IFS · NOAA GFS · DWD ICON). <b>Ensemble ECMWF IFS ENS (51 member)</b> ditarik terpisah dari ECMWF Open Data (lisensi CC-BY-4.0) lewat <code>pipeline/ingest_ecmwf_ens.py</code> dan dibaca dari <code>ecmwf_ens.js</code> di folder yang sama — bukan produk resmi BMKG. Curah hujan = akumulasi 3 jam ke depan dari waktu terpilih; suhu/kelembapan/angin bersifat sesaat. Log verifikasi memakai penyimpanan yang sama dengan versi sebelumnya.
+  </footer>
+</div>
+
+<!-- Ensemble ECMWF IFS ENS (51 member) — dihasilkan oleh pipeline/ingest_ecmwf_ens.py.
+     Dimuat lewat <script src> supaya jalan langsung dari file:// (tanpa server).
+     Kalau file tidak ada, panel ECMWF ENS otomatis disembunyikan. -->
+<script src="ecmwf_ens.js" onerror="window.__ecmwfEnsMissing=true;"></script>
+<!-- Ensemble multi-model (ECMWF IFS 51 · AIFS 51 · GEFS 31 · ICON-EPS 40) — pipeline/ingest_openmeteo_ens.py -->
+<script src="ens_multi.js" onerror="window.__ensMultiMissing=true;"></script>
+<!-- Batas kecamatan (Bima, Dompu, Kota Bima) — GADM 4.1, disederhanakan. Dipakai untuk
+     menggambar batas di peta & memberi label titik grid ("Tambora 1", "Tambora 2", …). -->
+<script src="kecamatan.js" onerror="window.__kecGeoMissing=true;"></script>
+<!-- Analisis harian (dinamika atmosfer, kelembapan lapisan, narasi) -->
+<script src="dinamika.js" onerror="window.__dinamikaMissing=true;"></script>
+<script src="det_data.js" onerror="window.__detMissing=true;"></script>
+<script src="sinoptik.js" onerror="window.__sinoptikMissing=true;"></script>
+<script src="analisis.js"></script>
+<script src="peta_sinoptik.js"></script>
+
+<script>
+const STATION_POINTS = [
+  { id:'asakota',  name:'Asakota (Kota Bima)',       lat:-8.4384574, lon:118.7340556 },
+  { id:'mpunda',   name:'Mpunda (Kota Bima)',        lat:-8.4583951, lon:118.7468712 },
+  { id:'raba',     name:'Raba (Kota Bima)',          lat:-8.4666508, lon:118.7578140 },
+  { id:'rasanaeb', name:'Rasanae Barat (Kota Bima)', lat:-8.4540632, lon:118.7241865 },
+  { id:'rasanaet', name:'Rasanae Timur (Kota Bima)', lat:-8.4848559, lon:118.7712912 },
+  { id:'ambalawi', name:'Ambalawi (Kab. Bima)', lat:-8.3264522, lon:118.7764962 },
+  { id:'belo',     name:'Belo (Kab. Bima)',     lat:-8.6222979, lon:118.7248796 },
+  { id:'bolo',     name:'Bolo (Kab. Bima)',     lat:-8.5064752, lon:118.6223796 },
+  { id:'donggo',   name:'Donggo (Kab. Bima)',   lat:-8.4208895, lon:118.5966613 },
+  { id:'langgudu', name:'Langgudu (Kab. Bima)', lat:-8.6949798, lon:118.8326843 },
+  { id:'lambitu',  name:'Lambitu (Kab. Bima)',  lat:-8.5649700, lon:118.7899569 },
+  { id:'lambu',    name:'Lambu (Kab. Bima)',    lat:-8.6983459, lon:119.0227159 },
+  { id:'madapangga',name:'Madapangga (Kab. Bima)',lat:-8.5122620, lon:118.5877133 },
+  { id:'monta',    name:'Monta (Kab. Bima)',    lat:-8.6899290, lon:118.6689537 },
+  { id:'palibelo', name:'Palibelo (Kab. Bima)', lat:-8.5373439, lon:118.7375113 },
+  { id:'parado',   name:'Parado (Kab. Bima)',   lat:-8.7638288, lon:118.5542359 },
+  { id:'sanggar',  name:'Sanggar (Kab. Bima)',  lat:-8.3732956, lon:118.2954806 },
+  { id:'soromandi',name:'Soromandi (Kab. Bima)',lat:-8.3811867, lon:118.6901139 },
+  { id:'tambora',  name:'Tambora (Kab. Bima)',  lat:-8.1709744, lon:117.9717606 },
+  { id:'wawo',     name:'Wawo (Kab. Bima)',     lat:-8.5607035, lon:118.8638881 },
+  { id:'wera',     name:'Wera (Kab. Bima)',     lat:-8.3387749, lon:118.9232124 },
+  { id:'woha',     name:'Woha (Kab. Bima)',     lat:-8.5581257, lon:118.6964438 },
+  { id:'sape',     name:'Sape (Kab. Bima)',     lat:-8.5664773, lon:118.9834956 },
+  { id:'dompu',      name:'Dompu (Kab. Dompu)',      lat:-8.5401250, lon:118.4647211 },
+  { id:'huu',        name:"Hu'u (Kab. Dompu)",       lat:-8.7399358, lon:118.4365634 },
+  { id:'kempo',      name:'Kempo (Kab. Dompu)',      lat:-8.5396910, lon:118.2496396 },
+  { id:'kilo',       name:'Kilo (Kab. Dompu)',       lat:-8.3098905, lon:118.3947476 },
+  { id:'manggelewa', name:'Manggelewa (Kab. Dompu)', lat:-8.5188164, lon:118.3190713 },
+  { id:'pajo',       name:'Pajo (Kab. Dompu)',       lat:-8.6081784, lon:118.4913610 },
+  { id:'pekat',      name:'Pekat (Kab. Dompu)',      lat:-8.2605896, lon:117.7970165 },
+  { id:'woja',       name:'Woja (Kab. Dompu)',       lat:-8.5470487, lon:118.4317451 },
+  { id:'bandara', name:'Bandara WADB', lat:-8.5418159, lon:118.6921890 }
+];
+// Grid tambahan (bukan nama tempat) untuk memperhalus medan interpolasi —
+// tiap titik ditanyakan langsung ke model (bukan ditebak dari titik lain).
+function generateGrid(spacing){
+  const lats = STATION_POINTS.map(p=>p.lat), lons = STATION_POINTS.map(p=>p.lon);
+  const minLat=Math.min(...lats)-0.06, maxLat=Math.max(...lats)+0.06;
+  const minLon=Math.min(...lons)-0.06, maxLon=Math.max(...lons)+0.06;
+  const pts = [];
+  let gi = 0;
+  for(let lat=minLat; lat<=maxLat; lat+=spacing){
+    for(let lon=minLon; lon<=maxLon; lon+=spacing){
+      pts.push({ id:'g'+(gi++), name:null, lat:+lat.toFixed(4), lon:+lon.toFixed(4) });
+    }
+  }
+  return pts;
+}
+const GRID_POINTS = generateGrid(0.15);
+const POINTS = STATION_POINTS.concat(GRID_POINTS);
+const STATION_COUNT = STATION_POINTS.length;
+
+// --- Batas kecamatan: point-in-polygon + label titik grid ("Tambora 1", ...) ---
+const KEC_GEO = (typeof window!=='undefined' && window.KEC_GEO) ? window.KEC_GEO : null;
+function _ringContains(ring, lat, lon){
+  // ray casting; ring = [[lon,lat],...]
+  let inside = false;
+  for(let i=0, j=ring.length-1; i<ring.length; j=i++){
+    const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if(((yi>lat)!==(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+function _polyContains(poly, lat, lon){
+  if(!_ringContains(poly[0], lat, lon)) return false;
+  for(let k=1;k<poly.length;k++){ if(_ringContains(poly[k], lat, lon)) return false; } // hole
+  return true;
+}
+function _kecCentroid(feat){
+  const ring = feat.geometry.coordinates[0][0];
+  let sx=0, sy=0; ring.forEach(p=>{ sx+=p[0]; sy+=p[1]; });
+  return [sy/ring.length, sx/ring.length]; // [lat, lon]
+}
+function kecAt(lat, lon){
+  if(!KEC_GEO) return null;
+  for(const f of KEC_GEO.features){
+    for(const poly of f.geometry.coordinates){
+      if(_polyContains(poly, lat, lon)) return f.properties.name;
+    }
+  }
+  return null;
+}
+function nearestKec(lat, lon){
+  if(!KEC_GEO) return null;
+  let best=null, bd=Infinity;
+  KEC_GEO.features.forEach(f=>{
+    const c=_kecCentroid(f), d=(c[0]-lat)**2+(c[1]-lon)**2;
+    if(d<bd){ bd=d; best=f.properties.name; }
+  });
+  return best;
+}
+// label untuk tiap titik grid: "<Kecamatan> N" (N urut utara->selatan, barat->timur)
+const GRID_LABELS = (function(){
+  const lbl = {};
+  if(!KEC_GEO) return lbl;
+  const byKec = {};
+  GRID_POINTS.forEach((g,gi)=>{
+    const k = kecAt(g.lat, g.lon) || nearestKec(g.lat, g.lon) || 'Luar wilayah';
+    (byKec[k] = byKec[k] || []).push(gi);
+  });
+  Object.keys(byKec).forEach(k=>{
+    byKec[k].sort((a,b)=> GRID_POINTS[b].lat - GRID_POINTS[a].lat || GRID_POINTS[a].lon - GRID_POINTS[b].lon);
+    byKec[k].forEach((gi,idx)=>{ lbl[gi] = `${k} ${idx+1}`; });
+  });
+  return lbl;
+})();
+const MODELS = [
+  { key:'ecmwf', param:'ecmwf_ifs025', label:'ECMWF', cls:'ecmwf' },
+  { key:'gfs',   param:'gfs_seamless', label:'GFS',   cls:'gfs' },
+  { key:'icon',  param:'icon_seamless',label:'ICON',  cls:'icon' },
+  { key:'aifs',  param:'ecmwf_aifs025_single', label:'AIFS', cls:'aifs' }
+];
+// True ensemble (many perturbed members per model), fetched separately/on-demand — heavier than the
+// multi-model deterministic set above. Model identifiers per Open-Meteo's ensemble API.
+// ECMWF excluded here: the free ensemble endpoint only returns its single control run (no real
+// members) at a coarser resolution than the ECMWF used in the main table — showing it here was
+// more confusing than useful.
+const ENSEMBLE_MODELS = [
+  { key:'gfs',   param:'gfs_seamless', label:'GFS (GEFS)', cls:'gfs' },
+  { key:'icon',  param:'icon_seamless',label:'ICON (EPS)', cls:'icon' }
+];
+const HOURS_SHOWN = [2,5,8,11,14,17,20,23];  // sama dengan slot tabel produk BMKG
+// (angin ditampilkan dalam km/jam — data Open-Meteo sudah km/jam)
+
+// --- Ensemble: dua sumber data praproses (dibaca dari file .js di folder yang sama) ---
+//  * ens_multi.js  : ECMWF IFS ENS (51) + AIFS ENS (51) + GEFS (31) + ICON-EPS (40) via Open-Meteo,
+//                    77 titik, dihitung pipeline/ingest_openmeteo_ens.py
+//  * ecmwf_ens.js  : ECMWF IFS ENS langsung dari ECMWF Open Data (GRIB), pipeline/ingest_ecmwf_ens.py
+const ENS_MULTI = (typeof window!=='undefined' && window.ENS_MULTI && window.ENS_MULTI.models) ? window.ENS_MULTI : null;
+const ENS_ORDER = ['ecmwf','aifs','gefs','icon'];
+const ENS_CLR = { ecmwf:'#7c5cbf', aifs:'#1f9d8a', gefs:'#c9702a', icon:'#2f9e6e', pooled:'#3a4a5a' };
+// ECMWF ENS yang dipakai seluruh halaman = yang run-nya LEBIH BARU. Open-Meteo (51 skenario) baru
+// muncul ±12 jam setelah run, GRIB langsung dari ECMWF ±8 jam — jadi kadang GRIB (lebih sedikit
+// skenario tapi lebih segar) yang dipakai. Kalau run sama → Open-Meteo (skenario lebih banyak).
+const ECMWF_ENS = (function(){
+  const g = (typeof window!=='undefined' && window.ECMWF_ENS_DATA) ? window.ECMWF_ENS_DATA : null;
+  const m = ENS_MULTI && ENS_MULTI.models.ecmwf ? ENS_MULTI.models.ecmwf : null;
+  const fromMulti = m ? { schema:'multi', model:'ECMWF IFS ENS', run:m.run, generated:ENS_MULTI.generated,
+      n_members:m.n_members, steps:ENS_MULTI.steps, thresholds_mm:ENS_MULTI.thresholds_mm,
+      points:m.points, source:'Open-Meteo', stale:!!m.stale } : null;
+  const fromGrib = g ? Object.assign({source:'ECMWF Open Data'}, g) : null;
+  if(fromMulti && fromGrib && !fromGrib.mock && fromGrib.run && fromMulti.run && fromGrib.run > fromMulti.run) return fromGrib;
+  return fromMulti || fromGrib;
+})();
+const ECMWF_GRIB = (typeof window!=='undefined' && window.ECMWF_ENS_DATA && !window.ECMWF_ENS_DATA.mock) ? window.ECMWF_ENS_DATA : null;
+function isStationIdx(pointIdx){ return pointIdx < STATION_COUNT; }
+// ringkasan satu model ensemble multi-model untuk satu titik & langkah (null kalau tak ada)
+function ensModelAt(key, pointId, stepTime){
+  const M = ENS_MULTI && ENS_MULTI.models[key]; if(!M) return null;
+  const p = M.points[pointId]; if(!p) return null;
+  const si = ENS_MULTI.steps.indexOf(stepTime); if(si < 0) return null;
+  const at = (o,k)=> (o && o[k] && o[k][si]!=null) ? o[k][si] : null;
+  const poe = {};
+  (ENS_MULTI.thresholds_mm||[]).forEach(t=>{
+    const row = p.precip3 && p.precip3.poe ? p.precip3.poe[String(t)] : null;
+    poe[t] = row ? row[si] : null;
+  });
+  const stat = o => ({ mean:at(o,'mean'), min:at(o,'min'), max:at(o,'max'), p10:at(o,'p10'), p90:at(o,'p90') });
+  return { si, n:M.n_members, stale:!!M.stale, run:M.run,
+    precip:Object.assign(stat(p.precip3), {poe}),
+    temp:stat(p.temp),
+    wind:Object.assign(stat(p.wind_speed), {dir:at(p.wind_dir,'mean')}) };
+}
+function ensModelParam(key, pointId, stepTime, param){
+  const e = ensModelAt(key, pointId, stepTime); if(!e) return null;
+  if(param==='hujan'||param==='hujan24') return Object.assign({n:e.n}, e.precip);
+  if(param==='suhu') return Object.assign({n:e.n}, e.temp);
+  if(param==='angin') return Object.assign({n:e.n, dir:e.wind.dir}, e.wind);
+  return null;
+}
+// gabungan semua model (bobot sama per model) — hanya curah hujan 3-jam
+function ensPooledAt(pointId, stepTime){
+  const P = ENS_MULTI && ENS_MULTI.pooled && ENS_MULTI.pooled.points && ENS_MULTI.pooled.points[pointId];
+  if(!P) return null;
+  const si = ENS_MULTI.steps.indexOf(stepTime); if(si < 0) return null;
+  const q = P.precip3, at = k => (q[k] && q[k][si]!=null) ? q[k][si] : null;
+  const poe = {};
+  (ENS_MULTI.thresholds_mm||[]).forEach(t=>{ poe[t] = q.poe && q.poe[String(t)] ? q.poe[String(t)][si] : null; });
+  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe };
+}
+function ensTotalMembers(){
+  let n = 0;
+  if(ENS_MULTI) ENS_ORDER.forEach(k=>{ const M = ENS_MULTI.models[k]; if(M && !M.stale) n += M.n_members; });
+  return n;
+}
+function fmtRunTag(iso){
+  if(!iso) return 'run ?';
+  const d = new Date(iso);
+  const bln = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return `${String(d.getUTCDate()).padStart(2,'0')} ${bln[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2,'0')}Z`;
+}
+// umur data ensemble (jam) berdasarkan waktu file terakhir ditulis pipeline
+function ensAgeHours(){
+  const t = [ENS_MULTI && ENS_MULTI.generated, window.ECMWF_ENS_DATA && window.ECMWF_ENS_DATA.generated]
+    .filter(Boolean).map(s=>Date.parse(s)).filter(x=>!isNaN(x));
+  if(!t.length) return null;
+  return (Date.now() - Math.max(...t)) / 3600000;
+}
+// ECMWF ENS punya data untuk titik ini? (32 kecamatan + 45 grid kalau pipeline sudah menyertakan)
+function ensHasPoint(pointIdx){
+  const p = POINTS[pointIdx]; if(!p) return false;
+  return !!((ECMWF_ENS && ECMWF_ENS.points && ECMWF_ENS.points[p.id]) || (ECMWF_GRIB && ECMWF_GRIB.points && ECMWF_GRIB.points[p.id]));
+}
+// Nilai ECMWF ENS untuk satu stasiun pada satu langkah waktu (string sama dg state.steps[].time).
+function _ensAtFrom(ds, stationId, stepTime){
+  if(!ds) return null;
+  const p = ds.points[stationId];
+  if(!p) return null;
+  let si = ds.steps.indexOf(stepTime);
+  if(si < 0){
+    // cocokkan ke langkah ENS terdekat (maks 90 menit) — jaga-jaga kalau grid
+    // data ENS belum sinkron dengan grid jam halaman (00.. vs 02..)
+    const target = Date.parse(stepTime + ':00');
+    let bestDiff = 91 * 60 * 1000;
+    ds.steps.forEach((s, i) => {
+      const d = Math.abs(Date.parse(s + ':00') - target);
+      if (d < bestDiff) { bestDiff = d; si = i; }
+    });
+  }
+  if(si < 0) return null;
+  const at = (o,k)=> (o && o[k]!=null && o[k][si]!=null) ? o[k][si] : null;
+  const poe = {};
+  (ds.thresholds_mm||[]).forEach(t=>{
+    const row = p.precip3.poe ? p.precip3.poe[String(t)] : null;
+    poe[t] = row ? row[si] : null;
+  });
+  return {
+    si,
+    precip: { mean:at(p.precip3,'mean'), min:at(p.precip3,'min'), max:at(p.precip3,'max'),
+              p10:at(p.precip3,'p10'), p25:at(p.precip3,'p25'), p50:at(p.precip3,'p50'),
+              p75:at(p.precip3,'p75'), p90:at(p.precip3,'p90'), poe,
+              members: p.precip3.members ? p.precip3.members.map(r=>r[si]) : null },
+    temp:  { mean:at(p.temp,'mean'), min:at(p.temp,'min'), max:at(p.temp,'max'),
+             p10:at(p.temp,'p10'), p50:at(p.temp,'p50'), p90:at(p.temp,'p90') },
+    wind:  { mean:at(p.wind_speed,'mean'), min:at(p.wind_speed,'min'), max:at(p.wind_speed,'max'),
+             p10:at(p.wind_speed,'p10'), p50:at(p.wind_speed,'p50'), p90:at(p.wind_speed,'p90'),
+             dir:at(p.wind_dir,'mean') }
+  };
+}
+// ECMWF ENS di satu titik & langkah. Ensemble Open-Meteo hanya memuat CURAH HUJAN; suhu & angin
+// ensemble ECMWF (kalau kosong) dilengkapi dari file GRIB ECMWF Open Data pada langkah yang sama.
+function ecmwfEnsAt(stationId, stepTime){
+  let r = _ensAtFrom(ECMWF_ENS, stationId, stepTime);
+  // titik yang tidak ada di ens_multi.js (mis. titik grid) → pakai GRIB ECMWF Open Data
+  if(!r && ECMWF_GRIB && ECMWF_GRIB !== ECMWF_ENS) r = _ensAtFrom(ECMWF_GRIB, stationId, stepTime);
+  if(r && ECMWF_ENS && ECMWF_ENS.source==='Open-Meteo' && r.temp.mean==null && r.wind.mean==null && ECMWF_GRIB){
+    const g = _ensAtFrom(ECMWF_GRIB, stationId, stepTime);
+    if(g){ r.temp = g.temp; r.wind = g.wind; r.tempFrom = 'ECMWF Open Data'; }
+  }
+  return r;
+}
+// nilai ECMWF ENS sesuai parameter aktif -> {min,max,mean, extra} dalam satuan tampilan
+function ecmwfEnsParam(stationId, stepTime, param){
+  const e = ecmwfEnsAt(stationId, stepTime);
+  if(!e) return null;
+  if(param==='hujan' || param==='hujan24')
+    return { min:e.precip.min, max:e.precip.max, mean:e.precip.mean,
+             p10:e.precip.p10, p90:e.precip.p90, poe:e.precip.poe };
+  if(param==='suhu')
+    return { min:e.temp.min, max:e.temp.max, mean:e.temp.mean, p10:e.temp.p10, p90:e.temp.p90 };
+  if(param==='angin'){
+    // data angin sudah dalam km/jam
+    return { min:e.wind.min, max:e.wind.max, mean:e.wind.mean,
+             p10:e.wind.p10, p90:e.wind.p90, dir:e.wind.dir };
+  }
+  return null; // rh: ECMWF ENS open-data tidak menyediakan
+}
+
+const PARAM_DEF = {
+  hujan:{ label:'Curah hujan 3 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
+  hujan24:{ label:'Curah hujan 24 jam', unit:'mm', stops:[[0,'#152f7a'],[1,'#2f5fc4'],[2,'#4f9fe0'],[5,'#a9d8f0'],[7,'#cbe3f2'],[9,'#f3e6c8'],[10,'#fff3c2'],[12,'#ffd93f'],[15,'#ff9a3f'],[50,'#e0463f'],[100,'#7a1f1f']] },
+  suhu: { label:'Suhu', unit:'°C', stops:[[20,'#5b9bd5'],[24,'#a9d2ee'],[27,'#6fcf97'],[30,'#e2c93f'],[33,'#e2984a'],[36,'#d9453f']] },
+  angin:{ label:'Kec. angin', unit:'km/j', stops:[[0,'#ffffff'],[10,'#cfe9f5'],[20,'#a9dced'],[30,'#bfe6b0'],[40,'#8fd17a'],[50,'#d7d878'],[65,'#f5c542'],[90,'#f0943f'],[120,'#e0573f']] },
+  rh:   { label:'Kelembapan', unit:'%', stops:[[40,'#e2984a'],[55,'#e2c93f'],[70,'#ffffff'],[85,'#6fcf97'],[95,'#4fbfae'],[100,'#5b9bd5']] }
+};
+
+let state = { pointsData:[], steps:[], stepIdx:0, param:'hujan', modelSel:'avg', selectedIdx:0, playing:false, timer:null, detailDayIdx:0, ensembleCache:{} };
+let map, arrowMarkers=[], gridMarkers=[], gridArrowMarkers=[], overlayLayer=null, bbox;
+
+function degToCompass(deg){ const dirs=['U','TL','T','TG','S','BD','B','BL']; return dirs[Math.round(deg/45)%8]; }
+function pointDisplayName(point){
+  if(point.name) return point.name;
+  const gi = point.id && point.id[0]==='g' ? parseInt(point.id.slice(1),10) : -1;
+  if(gi>=0 && GRID_LABELS[gi]) return `${GRID_LABELS[gi]} · grid`;
+  return `Titik grid (${point.lat.toFixed(3)}, ${point.lon.toFixed(3)})`;
+}
+function hexToRgb(hex){ const h=hex.replace('#',''); return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}; }
+function interpColor(value, stops){
+  if(value<=stops[0][0]) return hexToRgb(stops[0][1]);
+  if(value>=stops[stops.length-1][0]) return hexToRgb(stops[stops.length-1][1]);
+  for(let i=0;i<stops.length-1;i++){
+    const [v0,c0]=stops[i],[v1,c1]=stops[i+1];
+    if(value>=v0&&value<=v1){
+      const t=(value-v0)/(v1-v0), p0=hexToRgb(c0), p1=hexToRgb(c1);
+      return {r:p0.r+(p1.r-p0.r)*t, g:p0.g+(p1.g-p0.g)*t, b:p0.b+(p1.b-p0.b)*t};
+    }
+  }
+  return hexToRgb(stops[stops.length-1][1]);
+}
+
+// Data model deterministik: dibaca dari det_data.js (dibuat pipeline GitHub, 4x/hari) -> TIDAK memanggil Open-Meteo dari browser
+// (batas laju gratis per IP). Kalau berkas tak ada / usang / titik kurang -> kembali ke panggilan langsung seperti semula.
+function detTodayWita(){ return new Date(Date.now()+8*3600e3).toISOString().slice(0,10); }
+function detEntries(){
+  const D = window.DET_DATA;
+  if(!D || !D.points || !D.time) return null;
+  const today = detTodayWita(), start = D.time.findIndex(t=>t.slice(0,10) >= today);
+  if(start < 0 || D.time.length - start < 7*24) return null;                // harus masih mencakup ≥7 hari ke depan
+  if(!MODELS.every(m=>D.models.includes(m.param))) return null;
+  const out = [];
+  for(const p of POINTS){
+    const src = D.points[p.id]; if(!src) return null;
+    const hourly = { time: D.time.slice(start) };
+    for(const k in src) hourly[k] = src[k].slice(start);
+    out.push({ point:p, hours:parseResponse({ hourly }) });
+  }
+  state.detSource = { generated: D.generated };
+  return out;
+}
+async function fetchAll(forceLive){
+  state.detSource = null;
+  const fromFile = forceLive ? null : detEntries();
+  if(fromFile) return fromFile;
+  const lats = POINTS.map(p=>p.lat).join(',');
+  const lons = POINTS.map(p=>p.lon).join(',');
+  const modelsParam = MODELS.map(m=>m.param).join(',');
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
+    `&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m` +
+    `&models=${modelsParam}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const json = await res.json();
+  const arr = Array.isArray(json) ? json : [json];
+  return arr.map((entry,i)=>({ point:POINTS[i], hours:parseResponse(entry) }));
+}
+function parseResponse(json){
+  const time = json.hourly.time;
+  return time.map((t,i)=>{
+    const rec = { time:t, hour:parseInt(t.slice(11,13),10), date:t.slice(0,10) };
+    MODELS.forEach(m=>{
+      rec[m.key] = {
+        temp: json.hourly['temperature_2m_'+m.param]?.[i],
+        rh: json.hourly['relative_humidity_2m_'+m.param]?.[i],
+        precip: json.hourly['precipitation_'+m.param]?.[i],
+        wcode: json.hourly['weather_code_'+m.param]?.[i],
+        speed: json.hourly['wind_speed_10m_'+m.param]?.[i],
+        dir: json.hourly['wind_direction_10m_'+m.param]?.[i]
+      };
+    });
+    return rec;
+  });
+}
+
+function buildSteps(){
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  const forwardDates = dates.slice(0,8);
+  const idxByTime = {};
+  state.pointsData[0].hours.forEach((h,i)=>{ idxByTime[h.time]=i; });
+  const steps = [];
+  forwardDates.forEach(date=>{
+    HOURS_SHOWN.forEach(hr=>{
+      const t = `${date}T${String(hr).padStart(2,'0')}:00`;
+      if(idxByTime[t]!=null) steps.push({ time:t, date, hour:hr, idx:idxByTime[t] });
+    });
+  });
+  state.steps = steps;
+}
+
+// per-model reading for a point at a given step: precip is 3h sum, others instantaneous
+function modelReading(pointIdx, step, modelKey){
+  const hours = state.pointsData[pointIdx].hours;
+  const h0 = hours[step.idx];
+  if(!h0 || !h0[modelKey]) return null;
+  let precip3 = 0, n=0;
+  // Open-Meteo: precipitation jam t = jumlah JAM SEBELUMNYA (t-1, t] → jendela [T, T+3 jam) = nilai pada T+1..T+3
+  for(let k=1;k<=3;k++){
+    const h = hours[step.idx+k];
+    if(h && h[modelKey] && h[modelKey].precip!=null){ precip3 += h[modelKey].precip; n++; }
+  }
+  const base = h0[modelKey];
+  return { temp:base.temp, rh:base.rh, precip3: n?precip3:null, speed:base.speed, dir:base.dir };
+}
+function ensembleReading(pointIdx, step){
+  const parts = MODELS.map(m=>modelReading(pointIdx, step, m.key)).filter(Boolean);
+  if(!parts.length) return null;
+  const avg = k => parts.reduce((s,p)=>s+(p[k]||0),0)/parts.length;
+  let sx=0,sy=0;
+  parts.forEach(p=>{ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); });
+  let dir = Math.atan2(sx,sy)*180/Math.PI; if(dir<0) dir+=360;
+  return { temp:avg('temp'), rh:avg('rh'), precip3:avg('precip3'), speed:avg('speed'), dir };
+}
+function readingFor(pointIdx, step){
+  return state.modelSel==='avg' ? ensembleReading(pointIdx, step) : modelReading(pointIdx, step, state.modelSel);
+}
+function dailyTotalPrecip(pointIdx, date, modelKey){
+  const hours = state.pointsData[pointIdx].hours.filter(h=>h.date===date);
+  return hours.reduce((s,h)=> s + (h[modelKey] && h[modelKey].precip!=null ? h[modelKey].precip : 0), 0);
+}
+function dailyTotalPrecipFor(pointIdx, date){
+  if(state.modelSel!=='avg') return dailyTotalPrecip(pointIdx, date, state.modelSel);
+  const vals = MODELS.map(m=>dailyTotalPrecip(pointIdx, date, m.key));
+  return vals.reduce((s,v)=>s+v,0)/vals.length;
+}
+function paramValueForPoint(pointIdx, step){
+  if(state.param==='hujan24') return dailyTotalPrecipFor(pointIdx, step.date);
+  return paramValue(readingFor(pointIdx, step));
+}
+function paramValue(reading){
+  if(!reading) return null;
+  if(state.param==='hujan') return reading.precip3;
+  if(state.param==='suhu') return reading.temp;
+  if(state.param==='rh') return reading.rh;
+  if(state.param==='angin') return reading.speed;
+  return null;
+}
+
+function computeBbox(){
+  const pad=0.10, lats=POINTS.map(p=>p.lat), lons=POINTS.map(p=>p.lon);
+  bbox = { minLat:Math.min(...lats)-pad, maxLat:Math.max(...lats)+pad, minLon:Math.min(...lons)-pad, maxLon:Math.max(...lons)+pad };
+}
+function buildFieldCanvas(step){
+  const W=340, H=Math.round(W*(bbox.maxLat-bbox.minLat)/(bbox.maxLon-bbox.minLon));
+  const canvas=document.createElement('canvas'); canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext('2d'); const img=ctx.createImageData(W,H);
+  const def = PARAM_DEF[state.param];
+  const vals = POINTS.map((p,i)=> paramValueForPoint(i, step));
+  for(let y=0;y<H;y++){
+    const lat=bbox.maxLat-(y/(H-1))*(bbox.maxLat-bbox.minLat);
+    for(let x=0;x<W;x++){
+      const lon=bbox.minLon+(x/(W-1))*(bbox.maxLon-bbox.minLon);
+      let wsum=0,vsum=0;
+      for(let i=0;i<POINTS.length;i++){
+        if(vals[i]==null) continue;
+        const dLat=lat-POINTS[i].lat, dLon=lon-POINTS[i].lon, d2=dLat*dLat+dLon*dLon;
+        const w=1/(d2*22+0.0006);
+        wsum+=w; vsum+=w*vals[i];
+      }
+      const val = wsum>0 ? vsum/wsum : def.stops[0][0];
+      const c=interpColor(val, def.stops);
+      const idx=(y*W+x)*4;
+      const isRain = (state.param==='hujan'||state.param==='hujan24');
+      const alpha = isRain ? Math.round(235 * Math.max(0, Math.min(1, val/def.stops[1][0]))) : 235;
+      img.data[idx]=c.r; img.data[idx+1]=c.g; img.data[idx+2]=c.b; img.data[idx+3]=alpha;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return canvas.toDataURL();
+}
+
+function arrowIcon(dirDeg, selected){
+  const rot = (dirDeg+180)%360;
+  const s = selected? 30:22;
+  return L.divIcon({
+    className:'',
+    html:`<svg width="${s}" height="${s}" viewBox="0 0 26 26" style="transform:rotate(${rot}deg)">
+      <line x1="13" y1="21" x2="13" y2="6" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+      <line x1="13" y1="21" x2="13" y2="6" stroke="${selected?'#e2984a':'#12202e'}" stroke-width="2" stroke-linecap="round"/>
+      <polygon points="13,1.5 7,10.5 19,10.5" fill="#ffffff"/>
+      <polygon points="13,3.2 8.6,9.8 17.4,9.8" fill="${selected?'#e2984a':'#12202e'}"/>
+    </svg>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
+function dotIcon(selected){
+  const s = selected?16:9;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${s}px;height:${s}px;border-radius:50%;background:${selected?'#e2984a':'#12202e'};border:${selected?2.5:1.4}px solid #ffffff;box-shadow:0 0 0 1px rgba(0,0,0,0.4);"></div>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
+// panah angin kecil untuk titik grid — bikin medan angin di peta terlihat lebih padat
+function gridArrowIcon(dirDeg){
+  const rot = (dirDeg+180)%360;
+  const s = 15;
+  return L.divIcon({
+    className:'',
+    html:`<svg width="${s}" height="${s}" viewBox="0 0 26 26" style="transform:rotate(${rot}deg);opacity:0.9">
+      <line x1="13" y1="20" x2="13" y2="7" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="13" y1="20" x2="13" y2="7" stroke="#33475b" stroke-width="1.6" stroke-linecap="round"/>
+      <polygon points="13,3 8.5,10.5 17.5,10.5" fill="#ffffff"/>
+      <polygon points="13,4.6 9.7,10 16.3,10" fill="#33475b"/>
+    </svg>`,
+    iconSize:[s,s], iconAnchor:[s/2,s/2]
+  });
+}
+
+function initMap(){
+  computeBbox();
+  map = L.map('map',{ scrollWheelZoom:false }).setView([-8.53,118.55], 9);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
+    attribution:'Tiles &copy; Esri', maxZoom:14
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:14
+  }).addTo(map);
+  const bounds=[[bbox.minLat,bbox.minLon],[bbox.maxLat,bbox.maxLon]];
+  overlayLayer = L.imageOverlay(buildFieldCanvas(state.steps[0]), bounds, { opacity:0.82, interactive:false }).addTo(map);
+
+  // batas kecamatan
+  if(KEC_GEO){
+    const kecLayer = L.geoJSON(KEC_GEO, {
+      style:{ color:'#3a4a5a', weight:1, opacity:0.5, fill:false, interactive:false }
+    }).addTo(map);
+    const ctl = L.control({position:'topright'});
+    ctl.onAdd = ()=>{
+      const div = L.DomUtil.create('div','');
+      div.style.cssText = 'background:#fff;border:1px solid var(--border);border-radius:3px;padding:4px 7px;font:12px/1 IBM Plex Sans,sans-serif;cursor:pointer;user-select:none;';
+      div.innerHTML = '☑ Batas kecamatan';
+      L.DomEvent.disableClickPropagation(div);
+      div.onclick = ()=>{
+        if(map.hasLayer(kecLayer)){ map.removeLayer(kecLayer); div.innerHTML='☐ Batas kecamatan'; }
+        else { kecLayer.addTo(map); div.innerHTML='☑ Batas kecamatan'; }
+      };
+      return div;
+    };
+    ctl.addTo(map);
+  }
+
+  STATION_POINTS.forEach((p,i)=>{
+    const marker = L.marker([p.lat,p.lon], { icon: dotIcon(i===state.selectedIdx) }).addTo(map);
+    marker.bindTooltip('', { direction:'top', offset:[0,-6] });
+    marker.on('click', ()=>{ state.selectedIdx=i; state.detailDayIdx=Math.floor(state.stepIdx/8); render(); });
+    arrowMarkers.push(marker);
+  });
+
+  GRID_POINTS.forEach((gp,gi)=>{
+    const pointIdx = STATION_COUNT + gi;
+    const marker = L.circleMarker([gp.lat, gp.lon], {
+      radius:3, weight:1, color:'#94a3b0', fillColor:'#c3cdd6', fillOpacity:0.6
+    }).addTo(map);
+    marker.bindTooltip('', { direction:'top', offset:[0,-4] });
+    marker.on('click', ()=>{
+      state.selectedIdx = pointIdx;
+      state.detailDayIdx = Math.floor(state.stepIdx/8);
+      render();
+      map.panTo([gp.lat, gp.lon]);
+    });
+    gridMarkers.push(marker);
+
+    const ga = L.marker([gp.lat, gp.lon], { icon: gridArrowIcon(0), interactive:false, opacity:0, zIndexOffset:-200 }).addTo(map);
+    gridArrowMarkers.push(ga);
+  });
+
+  map.on('click', (e)=>{
+    const step = state.steps[state.stepIdx];
+    const def = PARAM_DEF[state.param];
+    const val = idwValueAt(e.latlng.lat, e.latlng.lng, step);
+    const decimals = (state.param==='hujan'||state.param==='hujan24') ? 1 : 0;
+    const valTxt = val!=null ? val.toFixed(decimals)+' '+def.unit : 'tidak tersedia';
+    const kec = kecAt(e.latlng.lat, e.latlng.lng);
+    const kecTxt = kec ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:3px;">Kecamatan: <b>${kec}</b></div>` : '';
+    L.popup({ maxWidth:240 })
+      .setLatLng(e.latlng)
+      .setContent(
+        `<div style="font-family:'IBM Plex Sans',sans-serif;">` +
+        `<div style="font-weight:600;font-size:12.5px;margin-bottom:3px;">${def.label}: ${valTxt}</div>` +
+        kecTxt +
+        `<div style="font-size:11px;color:#8fa0b3;line-height:1.4;">Estimasi interpolasi dari titik-titik kecamatan terdekat — bukan hasil model langsung di lokasi ini. Klik titik bulat/panah terdekat untuk rincian per model.</div>` +
+        `</div>`
+      )
+      .openOn(map);
+  });
+}
+
+function idwValueAt(lat, lon, step){
+  const vals = POINTS.map((p,i)=> paramValueForPoint(i, step));
+  let wsum=0, vsum=0;
+  for(let i=0;i<POINTS.length;i++){
+    if(vals[i]==null) continue;
+    const dLat=lat-POINTS[i].lat, dLon=lon-POINTS[i].lon, d2=dLat*dLat+dLon*dLon;
+    const w=1/(d2*22+0.0006);
+    wsum+=w; vsum+=w*vals[i];
+  }
+  return wsum>0 ? vsum/wsum : null;
+}
+
+function fmtParamValue(pointIdx, step){
+  const def = PARAM_DEF[state.param];
+  const v = paramValueForPoint(pointIdx, step);
+  if(v==null) return '—';
+  const decimals = (state.param==='hujan'||state.param==='hujan24') ? 1 : 0;
+  return v.toFixed(decimals)+' '+def.unit;
+}
+function updateMarkers(step){
+  const def = PARAM_DEF[state.param];
+  STATION_POINTS.forEach((p,i)=>{
+    const isSel = i===state.selectedIdx;
+    if(state.param==='angin'){
+      const r = readingFor(i, step);
+      arrowMarkers[i].setIcon(arrowIcon(r?r.dir:0, isSel));
+    } else {
+      arrowMarkers[i].setIcon(dotIcon(isSel));
+    }
+    arrowMarkers[i].setTooltipContent(`<b>${p.name}</b><br>${def.label}: ${fmtParamValue(i, step)}`);
+  });
+  const windMode = state.param==='angin';
+  GRID_POINTS.forEach((gp,gi)=>{
+    const pointIdx = STATION_COUNT + gi;
+    const isSel = pointIdx===state.selectedIdx;
+    gridMarkers[gi].setStyle({
+      radius: isSel?7:(windMode?2:3), weight: isSel?2.5:1,
+      color: isSel?'#e2984a':'#94a3b0', fillColor: isSel?'#e2984a':'#c3cdd6',
+      fillOpacity: windMode && !isSel ? 0.25 : 0.6
+    });
+    gridMarkers[gi].setTooltipContent(`<b>${GRID_LABELS[gi] || 'Titik grid'}</b> <span style="opacity:.6">· grid ~11 km</span><br>${def.label}: ${fmtParamValue(pointIdx, step)}<br><span style="font-size:10px;opacity:.7;">klik untuk detail lengkap</span>`);
+    if(windMode){
+      const r = readingFor(pointIdx, step);
+      gridArrowMarkers[gi].setIcon(gridArrowIcon(r?r.dir:0));
+      gridArrowMarkers[gi].setOpacity(0.9);
+    } else {
+      gridArrowMarkers[gi].setOpacity(0);
+    }
+  });
+}
+
+function fmtTimeLabel(step){
+  const d = new Date(step.time+':00');
+  if(state.param==='hujan24'){
+    return d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'}) + ' — akumulasi 24 jam (00:00–24:00 WITA)';
+  }
+  const base = d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'}) + ' — ' + String(step.hour).padStart(2,'0')+':00 WITA';
+  if(state.param==='hujan'){
+    const endHour = (step.hour+3)%24;
+    return base + ` (akumulasi hujan s/d ${String(endHour).padStart(2,'0')}:00)`;
+  }
+  return base;
+}
+function stepGranularity(){
+  return state.param==='hujan24' ? 8 : 1;
+}
+function fmtRel(idx){
+  const dayNum = Math.floor(idx/8);
+  if(state.param==='hujan24') return 'H+'+dayNum;
+  return 'H+'+dayNum+', langkah '+((idx%8)+1)+'/8';
+}
+function fmtDateShort(dateStr){ const d=new Date(dateStr+'T00:00:00'); return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}); }
+
+function updateLegend(){
+  const def = PARAM_DEF[state.param];
+  document.getElementById('legendTitle').textContent = def.label+' ('+def.unit+')';
+  // discrete evenly-spaced blocks (like a categorical met legend), not value-proportional —
+  // proportional spacing washes out when values are skewed toward the low end (e.g. dry-season rain).
+  const n = def.stops.length - 1;
+  const gradEl = document.getElementById('legendGradBar');
+  gradEl.innerHTML = def.stops.slice(0,-1).map((s,i)=>`<span style="background:${s[1]}"></span>`).join('');
+  const ticksEl = document.getElementById('legendTicks');
+  ticksEl.innerHTML = '';
+  def.stops.forEach((s,i)=>{
+    const pct = (i/n)*100;
+    const tick = document.createElement('span');
+    tick.className='legend-tick';
+    tick.style.left = pct+'%';
+    tick.textContent = s[0];
+    ticksEl.appendChild(tick);
+  });
+}
+
+// Kategori hujan untuk akumulasi 3 jam (pendekatan, mengacu longgar ke skala BMKG).
+function rainCat3h(mm){
+  if(mm==null)      return { txt:'—', cls:'c-neutral' };
+  if(mm < 0.5)      return { txt:'Tanpa hujan', cls:'c-neutral' };
+  if(mm < 3)        return { txt:'Hujan ringan', cls:'c-good' };
+  if(mm < 10)       return { txt:'Hujan sedang', cls:'c-warn' };
+  if(mm < 20)       return { txt:'Hujan lebat', cls:'c-bad' };
+  return { txt:'Hujan sangat lebat', cls:'c-bad' };
+}
+
+function renderSummaryCard(p, step, avg, spread){
+  const el = document.getElementById('summaryCard');
+  if(!el) return;
+  const when = fmtTimeLabel(step);
+  if(!avg){
+    el.innerHTML = `<div class="summary-head">Ringkasan — <b>${pointDisplayName(p)}</b></div>
+      <div class="si-sub">Data model belum tersedia untuk titik/jam ini.</div>`;
+    return;
+  }
+  const endHour = String((step.hour+3)%24).padStart(2,'0');
+  const e = ensHasPoint(state.selectedIdx) ? ecmwfEnsAt(p.id, step.time) : null;
+  const hasEns = !!(e && e.precip && e.precip.mean!=null);
+
+  // Hujan & peluang diambil dari SATU sumber supaya konsisten:
+  // ECMWF (51 skenario) bila tersedia untuk titik+jam ini, kalau tidak → rata-rata 4 model.
+  let rain, popSrc, pop;
+  const pooled = ENS_MULTI ? ensPooledAt(p.id, step.time) : null;
+  if(pooled && pooled.mean!=null && pooled.poe['1']!=null && pooled.nm>=2){
+    // gabungan beberapa model (bobot sama per model) — sumber paling kuat bila ada
+    rain = pooled.mean;
+    pop  = Math.round(pooled.poe['1']*100);
+    popSrc = `gabungan ${pooled.nm} model ensemble`;
+  } else if(hasEns){
+    rain = e.precip.mean;
+    pop  = (e.precip.poe && e.precip.poe['1']!=null) ? Math.round(e.precip.poe['1']*100) : null;
+    popSrc = `${ECMWF_ENS.n_members} skenario ECMWF`;
+  } else {
+    rain = avg.precip3;
+    const n = MODELS.length;
+    const hit = MODELS.reduce((s,m)=>{ const r=modelReading(state.selectedIdx, step, m.key); return s + ((r && (r.precip3||0) >= 0.2) ? 1 : 0); }, 0);
+    pop = Math.round(hit/n*100); popSrc = 'kesepakatan 4 model';
+  }
+  const cat = rainCat3h(rain);
+  const popCls = pop==null ? 'c-neutral' : pop>=70 ? 'c-bad' : pop>=40 ? 'c-warn' : 'c-good';
+  const rainDetail = (rain==null) ? '—'
+    : (rain < 0.5) ? 'hampir tidak ada (~0 mm)'
+    : `≈ ${rain.toFixed(1)} mm hingga ${endHour}:00`;
+
+  // Suhu: pakai rentang ECMWF ENS bila ada
+  let tempTxt;
+  if(e && e.temp && e.temp.p10!=null && e.temp.p90!=null)
+    tempTxt = `${e.temp.p10.toFixed(0)}–${e.temp.p90.toFixed(0)} °C`;
+  else
+    tempTxt = `${avg.temp.toFixed(0)} °C`;
+
+  // Keyakinan dari selisih antar model
+  let conf, confCls, confSub;
+  if(spread < 1){ conf='Tinggi'; confCls='c-good'; confSub='4 model hampir sama'; }
+  else if(spread < 4){ conf='Sedang'; confCls='c-warn'; confSub=`model agak beda (±${spread.toFixed(1)} mm)`; }
+  else { conf='Rendah'; confCls='c-bad'; confSub=`model jauh beda (±${spread.toFixed(1)} mm)`; }
+
+  const windTxt = `${degToCompass(avg.dir)} ${avg.speed.toFixed(0)} km/j`;
+
+  el.innerHTML = `
+    <div class="summary-head">Ringkasan — <b>${pointDisplayName(p)}</b> · ${when}</div>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="si-key">☔ Hujan (3 jam)</div>
+        <div class="si-val"><span class="si-chip ${cat.cls}">${cat.txt}</span></div>
+        <div class="si-sub">${rainDetail}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🌧️ Peluang hujan</div>
+        <div class="si-val"><span class="si-chip ${popCls}">${pop==null?'—':pop+'%'}</span></div>
+        <div class="si-sub">${pop==null?'ECMWF di luar jangkauan':'dari '+popSrc}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🌡️ Suhu &nbsp;·&nbsp; 💨 Angin</div>
+        <div class="si-val">${tempTxt}</div>
+        <div class="si-sub">Angin ${windTxt}</div>
+      </div>
+      <div class="summary-item">
+        <div class="si-key">🎯 Keyakinan perkiraan</div>
+        <div class="si-val"><span class="si-chip ${confCls}">${conf}</span></div>
+        <div class="si-sub">${confSub}</div>
+      </div>
+    </div>`;
+}
+
+/* ==========================================================================
+   TABEL PRODUK — format prakiraan BMKG (semua kecamatan sekaligus)
+   ========================================================================== */
+const PRODUK_SLOTS = [2,5,8,11,14,17,20,23];
+const COMPASS16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+function deg16(deg){ return COMPASS16[Math.round((((deg%360)+360)%360)/22.5)%16]; }
+// kunci waktu "YYYY-MM-DDTHH:00"; jam >= 24 digulirkan ke hari berikutnya
+function hourKeyOf(dateStr, hour){
+  let d = dateStr, h = hour;
+  while(h >= 24){ h -= 24; d = addDays(d, 1); }
+  return `${d}T${String(h).padStart(2,'0')}:00`;
+}
+function addDays(dateStr,n){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n);
+  return dt.toISOString().slice(0,10);
+}
+// Kategori cuaca mengikuti legenda produk BMKG stasiun (8 kategori, sesuai PDF).
+const WX_CATS = {
+  cerah:          {txt:'Cerah',             rank:0, cls:'wx-0'},
+  cerahberawan:   {txt:'Cerah Berawan',     rank:1, cls:'wx-1'},
+  berawan:        {txt:'Berawan',           rank:2, cls:'wx-2'},
+  berawantebal:   {txt:'Berawan Tebal',     rank:3, cls:'wx-2'},
+  hujanringan:    {txt:'Hujan Ringan',      rank:4, cls:'wx-3'},
+  hujansedang:    {txt:'Hujan Sedang',      rank:5, cls:'wx-4'},
+  hujanlebat:     {txt:'Hujan Lebat',       rank:6, cls:'wx-5'},
+  hujanlebatpetir:{txt:'Hujan Lebat+Petir', rank:7, cls:'wx-5'},
+};
+const WX_LEGEND = 'Cerah · Cerah Berawan · Berawan · Berawan Tebal · Hujan Ringan · Hujan Sedang · Hujan Lebat · Hujan Lebat+Petir';
+function wxFromCode(c){
+  if(c==null) return null;
+  if(c===0) return WX_CATS.cerah;
+  if(c===1||c===2) return WX_CATS.cerahberawan;
+  if(c===3) return WX_CATS.berawan;
+  if(c===45||c===48) return WX_CATS.berawan;
+  if(c>=51&&c<=67) return (c>=63) ? WX_CATS.hujansedang : WX_CATS.hujanringan;   // gerimis & hujan ringan → Hujan Ringan
+  if(c===80) return WX_CATS.hujanringan;
+  if(c===81) return WX_CATS.hujansedang;
+  if(c===82) return WX_CATS.hujanlebat;
+  if(c>=95) return WX_CATS.hujanlebatpetir;
+  return WX_CATS.berawan;
+}
+function wxFromPrecip3(mm){
+  if(mm==null || mm<0.5) return null;
+  if(mm<10) return WX_CATS.hujanringan;
+  if(mm<20) return WX_CATS.hujansedang;
+  return WX_CATS.hujanlebat;
+}
+function worseCode(c1,c2){
+  const r = c => c!=null ? (wxFromCode(c)||{rank:-1}).rank : -1;
+  return r(c1) >= r(c2) ? c1 : c2;
+}
+function wxCombine(codeCat, precipCat, mm){
+  let cc = codeCat;
+  // kode model kadang bilang "hujan/gerimis" padahal curah hujan ~0 — jangan over-call
+  if(mm!=null && mm < 0.2 && cc && cc.rank >= 4 && cc.rank <= 5) cc = WX_CATS.berawan;
+  let best = null;
+  [cc, precipCat].forEach(x=>{ if(x && (!best || x.rank>best.rank)) best = x; });
+  if(!best) best = WX_CATS.berawan;
+  if(best.rank>=8 && mm!=null && mm>=20) return WX_CATS.hujanlebatpetir;
+  return best;
+}
+function stationGroup(name){
+  if(/Kota Bima/i.test(name)) return 'KOTA BIMA';
+  if(/Kab\. Bima/i.test(name)) return 'KABUPATEN BIMA';
+  if(/Kab\. Dompu/i.test(name)) return 'KABUPATEN DOMPU';
+  return 'BANDARA / LAINNYA';
+}
+function shortKec(name){ return name.replace(/\s*\((Kota|Kab\.)[^)]*\)\s*/,'').trim(); }
+
+function buildHourIndex(){
+  return STATION_POINTS.map((_,i)=>{
+    const m = new Map();
+    (state.pointsData[i]?.hours||[]).forEach(h=> m.set(h.time, h));
+    return m;
+  });
+}
+// nilai satu sumber pada satu jam
+function srcHour(rec, src){
+  if(!rec) return null;
+  if(MODELS.some(m=>m.key===src)) return rec[src] || null;
+  if(src==='avg'){
+    const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
+    if(!parts.length) return null;
+    const mean = k => { const v=parts.map(p=>p[k]).filter(x=>x!=null); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; };
+    let sx=0,sy=0,nd=0, wc=null;
+    parts.forEach(p=>{
+      if(p.dir!=null){ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nd++; }
+      wc = worseCode(wc, p.wcode);
+    });
+    return { temp:mean('temp'), rh:mean('rh'), precip:mean('precip'), wcode:wc,
+             speed:mean('speed'), dir: nd? (Math.atan2(sx,sy)*180/Math.PI+360)%360 : null };
+  }
+  return null;
+}
+function ensSlot(stationId, dateStr, slotHour){
+  if(!ECMWF_ENS) return null;
+  // grid ENS kini sama dengan slot tabel (02,05,…,23) — ecmwfEnsAt tetap punya
+  // toleransi kalau ternyata data belum sinkron.
+  return ecmwfEnsAt(stationId, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
+}
+function slotAgg(pi, hidx, dateStr, slotHour, src){
+  if(src==='ens'){
+    const e = ensSlot(STATION_POINTS[pi].id, dateStr, slotHour);
+    if(!e) return null;
+    const mm = e.precip ? e.precip.mean : null;
+    return { precip3:mm, wcat: wxFromPrecip3(mm) || WX_CATS.berawan,
+             temp: e.temp?e.temp.mean:null, speed: e.wind?e.wind.mean:null, dir: e.wind?e.wind.dir:null };
+  }
+  let precip3=0, pn=0, temp=null, speed=null, dir=null, wcode=null;
+  for(let k=1;k<=3;k++){          // jam T+1..T+3 (precip Open-Meteo = jam sebelumnya)
+    let hh=slotHour+k, dd=dateStr;
+    if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
+    const s = srcHour(hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`), src);
+    if(!s) continue;
+    if(s.precip!=null){ precip3+=s.precip; pn++; }
+    if(k===1 || temp==null){ temp=s.temp; speed=s.speed; dir=s.dir; }
+    wcode = worseCode(wcode, s.wcode);
+  }
+  if(pn===0 && temp==null) return null;
+  const mm = pn?precip3:null;
+  return { precip3:mm, wcat: wxCombine(wxFromCode(wcode), wxFromPrecip3(mm), mm), temp, speed, dir };
+}
+function slotDisagree(pi, hidx, dateStr, slotHour){
+  const sums = MODELS.map(m=>{
+    let s=0,n=0;
+    for(let k=1;k<=3;k++){
+      let hh=slotHour+k, dd=dateStr;
+      if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
+      const rec = hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`);
+      const v = rec && rec[m.key] && rec[m.key].precip;
+      if(v!=null){ s+=v; n++; }
+    }
+    return n?s:null;
+  }).filter(v=>v!=null);
+  if(sums.length<2) return false;
+  const wet = sums.filter(v=>v>=0.5).length;
+  return wet>0 && wet<sums.length;
+}
+function dayExtent(pi, hidx, dateStr, src){
+  let tmin=Infinity,tmax=-Infinity,rmin=Infinity,rmax=-Infinity,spdMax=0,sx=0,sy=0,nW=0,haveT=false,haveR=false;
+  if(src==='ens'){
+    PRODUK_SLOTS.forEach(sh=>{
+      const e = ensSlot(STATION_POINTS[pi].id, dateStr, sh);
+      if(e && e.temp && e.temp.mean!=null){ tmin=Math.min(tmin,e.temp.mean); tmax=Math.max(tmax,e.temp.mean); haveT=true; }
+      if(e && e.wind && e.wind.mean!=null) spdMax=Math.max(spdMax,e.wind.mean);
+      if(e && e.wind && e.wind.dir!=null){ const r=e.wind.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nW++; }
+    });
+    return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null, rmin:null, rmax:null,
+             arah: nW? deg16(Math.atan2(sx,sy)*180/Math.PI):'—', kts: spdMax?Math.round(spdMax):null };
+  }
+  const day = (state.pointsData[pi]?.hours||[]).filter(h=>h.date===dateStr);
+  day.forEach(h=>{
+    const s = srcHour(h, src); if(!s) return;
+    if(s.temp!=null){ tmin=Math.min(tmin,s.temp); tmax=Math.max(tmax,s.temp); haveT=true; }
+    if(s.rh!=null){ rmin=Math.min(rmin,s.rh); rmax=Math.max(rmax,s.rh); haveR=true; }
+    if(s.speed!=null) spdMax=Math.max(spdMax,s.speed);
+    if(s.dir!=null){ const r=s.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nW++; }
+  });
+  let arah='—';
+  if(nW){ const R = Math.hypot(sx,sy)/nW; arah = R<0.35 ? 'VRB' : deg16(Math.atan2(sx,sy)*180/Math.PI); }
+  return { tmin:haveT?Math.round(tmin):null, tmax:haveT?Math.round(tmax):null,
+           rmin:haveR?Math.round(rmin):null, rmax:haveR?Math.round(rmax):null,
+           arah, kts: spdMax?Math.round(spdMax):null };
+}
+
+// --- Justifikasi prakirawan untuk sel yang bertanda * (model tidak sepakat) ---
+const JUST_KEY = 'mosaic-justifikasi';
+function loadJust(){ try{ return JSON.parse(localStorage.getItem(JUST_KEY)||'{}'); }catch(e){ return {}; } }
+function saveJust(){ try{ localStorage.setItem(JUST_KEY, JSON.stringify(JUST)); }catch(e){} }
+function justKey(date, pi, sh){ return `${date}|${pi}|${sh}`; }
+let JUST = loadJust();
+const JUST_DASAR = ['Kesepakatan model','ECMWF','GFS','ICON','Ensemble ECMWF','Nowcasting / radar','Observasi terkini','Klimatologi','Lainnya'];
+
+function openJustModal(pi, sh){
+  const daySel = document.getElementById('produkDay');
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  const date = daySel.value || dates[0];
+  const hidx = buildHourIndex();
+  const kec = shortKec(STATION_POINTS[pi].name);
+  const jk = justKey(date, pi, sh);
+  const jr = JUST[jk] || {};
+  const hh = String(sh).padStart(2,'0');
+  const fmtmm = v => v==null ? '—' : v.toFixed(1)+' mm';
+
+  // baris perbandingan model deterministik
+  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['icon','ICON'],['aifs','AIFS'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
+    const a = slotAgg(pi, hidx, date, sh, k);
+    return `<tr><td>${lab}</td><td>${a?fmtmm(a.precip3):'—'}</td><td>${a?(a.wcat||WX_CATS.berawan).txt:'—'}</td></tr>`;
+  }).join('');
+  // ECMWF ENS
+  const e = ensSlot(STATION_POINTS[pi].id, date, sh);
+  const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+  const ensRow = e && e.precip ? `<tr><td>ECMWF ENS (${ECMWF_ENS?ECMWF_ENS.n_members:'?'})<br><span style="color:var(--text-faint);font-size:10.5px">${ECMWF_ENS?fmtRunTag(ECMWF_ENS.run):''}</span></td>`
+      + `<td>rata² ${fmtmm(e.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(e.precip.p10)}–${fmtmm(e.precip.p90)}</span></td>`
+      + `<td>Peluang hujan<br>≥1mm ${pct(e.precip.poe?e.precip.poe['1']:null)} · ≥10 ${pct(e.precip.poe?e.precip.poe['10']:null)} · ≥20 ${pct(e.precip.poe?e.precip.poe['20']:null)}</td></tr>`
+    : `<tr><td>ECMWF ENS</td><td colspan="2" style="color:var(--text-faint)">${
+        !ECMWF_ENS ? 'belum aktif (file ecmwf_ens.js belum termuat — coba refresh keras Ctrl+Shift+R)'
+        : !ECMWF_ENS.points[STATION_POINTS[pi].id] ? 'titik ini belum ada di data ENS'
+        : 'jam ini di luar jangkauan run ENS terakhir'}</td></tr>`;
+  // GFS/ICON ensemble — ditarik otomatis kalau belum ada
+  const stationId = STATION_POINTS[pi].id;
+  const slotKey = `${date}T${hh}:00`;
+  function gfsIconRows(){
+    if(ENS_MULTI){
+      // ensemble multi-model: sudah dihitung pipeline → langsung tampil, tanpa menunggu unduhan
+      const em = ENS_ORDER.filter(k=>k!=='ecmwf' && ENS_MULTI.models[k]).map(k=>{
+        const x = ensModelAt(k, stationId, slotKey), M = ENS_MULTI.models[k];
+        if(!x || x.precip.mean==null) return `<tr><td>${M.short} (${M.n_members})</td><td colspan="2" style="color:var(--text-faint)">tidak tersedia untuk sel ini</td></tr>`;
+        return `<tr><td>${M.short} (${M.n_members})<br><span style="color:var(--text-faint);font-size:10.5px">${fmtRunTag(M.run)}${M.stale?' · lama':''}</span></td>`
+          + `<td>rata² ${fmtmm(x.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(x.precip.p10)}–${fmtmm(x.precip.p90)}</span></td>`
+          + `<td>Peluang hujan<br>≥1mm ${pct(x.precip.poe['1'])} · ≥10 ${pct(x.precip.poe['10'])} · ≥20 ${pct(x.precip.poe['20'])}</td></tr>`;
+      }).join('');
+      const pp = ensPooledAt(stationId, slotKey);
+      const pooled = (pp && pp.mean!=null)
+        ? `<tr style="background:var(--panel-alt)"><td><b>Gabungan</b> (${pp.nm} model)</td><td>rata² ${fmtmm(pp.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(pp.p10)}–${fmtmm(pp.p90)}</span></td>`
+          + `<td>Peluang hujan<br><b>≥1mm ${pct(pp.poe['1'])}</b> · ≥10 ${pct(pp.poe['10'])} · ≥20 ${pct(pp.poe['20'])}</td></tr>` : '';
+      return em + pooled;
+    }
+    const ensData = state.ensembleCache[stationId];
+    if(!ensData) return `<tr id="jfGfsIcon"><td>GFS / ICON ensemble</td><td colspan="2" style="color:var(--text-faint)">memuat…</td></tr>`;
+    const idxByTime = {}; ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
+    const hourIdxs = [];
+    for(let k=1;k<=3;k++){ const t=hourKeyOf(date, sh+k); if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]); }
+    return ENSEMBLE_MODELS.map(m=>{
+      const st = statsForHours(ensData, m.key, 'precipitation', hourIdxs, true);
+      return `<tr class="jfGfsIcon"><td>${m.label}</td><td>${st?`${st.min.toFixed(1)}–${st.max.toFixed(1)} mm`:'—'}</td><td>${st?`rata² ${st.mean.toFixed(1)} (n=${st.n})`:'—'}</td></tr>`;
+    }).join('');
+  }
+  let gfsiconRows = gfsIconRows();
+
+  const catOpts = ['(pakai otomatis)'].concat(Object.values(WX_CATS).map(c=>c.txt))
+    .map(t=>`<option${jr.kategori===t?' selected':''}>${t}</option>`).join('');
+  const dasarOpts = ['(pilih dasar)'].concat(JUST_DASAR)
+    .map(t=>`<option${jr.dasar===t?' selected':''}>${t}</option>`).join('');
+
+  let ov = document.getElementById('justOverlay');
+  if(!ov){ ov = document.createElement('div'); ov.id='justOverlay'; ov.className='just-overlay'; document.body.appendChild(ov); }
+  ov.innerHTML = `
+    <div class="just-box">
+      <h3>Justifikasi prakirawan</h3>
+      <div class="sub"><b>${kec}</b> · ${new Date(date+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'})} · jam <b>${hh}.00</b> (3 jam ke depan)</div>
+      <table class="just-cmp">
+        <thead><tr><th>Sumber</th><th>Hujan 3 jam</th><th>Kategori / sebaran</th></tr></thead>
+        <tbody>${detRows}${ensRow}${gfsiconRows}</tbody>
+      </table>
+      <div class="just-form">
+        <label>Kategori final (keputusan prakirawan)</label>
+        <select id="jfKategori">${catOpts}</select>
+        <label>Dasar keputusan</label>
+        <select id="jfDasar">${dasarOpts}</select>
+        <label>Catatan / justifikasi</label>
+        <textarea id="jfCatatan" placeholder="mis. radar menunjukkan sel konvektif bergerak dari selatan; pilih Hujan Sedang">${jr.catatan||''}</textarea>
+      </div>
+      <div class="just-actions">
+        <button class="primary" id="jfSave">Simpan keputusan</button>
+        ${JUST[jk]?'<button class="danger" id="jfDel">Hapus justifikasi</button>':''}
+        <button id="jfCancel">Batal</button>
+      </div>
+    </div>`;
+  ov.hidden = false;
+  const close = ()=>{ ov.hidden = true; ov.innerHTML=''; };
+  ov.onclick = ev=>{ if(ev.target===ov) close(); };
+  document.getElementById('jfCancel').onclick = close;
+  const delBtn = document.getElementById('jfDel');
+  if(delBtn) delBtn.onclick = ()=>{ delete JUST[jk]; saveJust(); close(); renderProdukTable(); };
+  document.getElementById('jfSave').onclick = ()=>{
+    const kat = document.getElementById('jfKategori').value;
+    const das = document.getElementById('jfDasar').value;
+    const cat = document.getElementById('jfCatatan').value.trim();
+    if(kat==='(pakai otomatis)' && !cat){ delete JUST[jk]; }
+    else JUST[jk] = { kategori: kat==='(pakai otomatis)' ? null : kat,
+                      dasar: das==='(pilih dasar)' ? null : das, catatan: cat, ts: Date.now() };
+    saveJust(); close(); renderProdukTable();
+  };
+
+  // tarik GFS/ICON ensemble otomatis kalau belum ada, lalu isi barisnya
+  if(!ENS_MULTI && !state.ensembleCache[stationId]){
+    fetchEnsembleForPoint(STATION_POINTS[pi]).then(data=>{
+      state.ensembleCache[stationId] = data;
+      const cur = document.getElementById('justOverlay');
+      if(cur && !cur.hidden){
+        const row = cur.querySelector('#jfGfsIcon');
+        if(row) row.outerHTML = gfsIconRows();
+      }
+    }).catch(()=>{
+      const row = document.querySelector('#justOverlay #jfGfsIcon td[colspan]');
+      if(row) row.textContent = 'gagal memuat GFS/ICON ensemble';
+    });
+  }
+}
+
+function renderProdukTable(){
+  const tbl = document.getElementById('produkTable');
+  if(!tbl || !state.pointsData.length) return;
+  const srcSel = document.getElementById('produkSrc');
+  const daySel = document.getElementById('produkDay');
+  const src = srcSel.value;
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  if(daySel.options.length !== dates.length){
+    daySel.innerHTML = dates.map((d,i)=>{
+      const dd = new Date(d+'T00:00:00');
+      return `<option value="${d}">Hari ${i+1} — ${dd.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}</option>`;
+    }).join('');
+  }
+  const date = daySel.value || dates[0];
+  const hidx = buildHourIndex();
+  const groups = ['KOTA BIMA','KABUPATEN BIMA','KABUPATEN DOMPU','BANDARA / LAINNYA'];
+  const byGrp = {}; groups.forEach(g=>byGrp[g]=[]);
+  STATION_POINTS.forEach((p,i)=> byGrp[stationGroup(p.name)].push(i));
+  // urutan kecamatan dalam tiap grup = persis dokumen produk BMKG
+  const PRODUK_ORDER = {
+    'KOTA BIMA': ['Asakota','Rasanae Barat','Rasanae Timur','Mpunda','Raba'],
+    'KABUPATEN BIMA': ['Ambalawi','Wera','Sape','Lambu','Wawo','Lambitu','Palibelo','Belo','Langgudu','Monta','Woha','Bolo','Madapangga','Soromandi','Tambora','Sanggar','Donggo','Parado'],
+    'KABUPATEN DOMPU': ['Dompu','Pajo',"Hu'u",'Woja','Kilo','Manggelewa','Kempo','Pekat'],
+  };
+  groups.forEach(g=>{
+    const ord = PRODUK_ORDER[g]; if(!ord) return;
+    byGrp[g].sort((a,b)=>{
+      const ia = ord.indexOf(shortKec(STATION_POINTS[a].name));
+      const ib = ord.indexOf(shortKec(STATION_POINTS[b].name));
+      return (ia<0?999:ia) - (ib<0?999:ib);
+    });
+  });
+
+  const head = `<thead>
+    <tr><th rowspan="2">Kecamatan</th><th colspan="8">Kondisi Cuaca (WITA)</th>
+        <th colspan="2">Suhu (°C)</th><th colspan="2">RH (%)</th><th colspan="2">Angin</th></tr>
+    <tr>${PRODUK_SLOTS.map(h=>`<th>${String(h).padStart(2,'0')}.00</th>`).join('')}
+        <th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Arah</th><th>km/j</th></tr></thead>`;
+
+  let body = '';
+  groups.forEach(g=>{
+    if(!byGrp[g].length) return;
+    body += `<tr class="grp"><td colspan="15">► ${g}</td></tr>`;
+    byGrp[g].forEach(pi=>{
+      const ext = dayExtent(pi, hidx, date, src);
+      const cells = PRODUK_SLOTS.map(sh=>{
+        const a = slotAgg(pi, hidx, date, sh, src);
+        if(!a) return `<td>—</td>`;
+        const dis = (src==='avg') && slotDisagree(pi, hidx, date, sh);
+        const jk = justKey(date, pi, sh);
+        const jr = JUST[jk];
+        let w = a.wcat || WX_CATS.berawan;
+        let cls = dis ? 'disagree' : '', badge = '';
+        if(jr){
+          w = Object.values(WX_CATS).find(c=>c.txt===jr.kategori) || w;
+          cls += ' just-set'; badge = ' <span style="opacity:.7">✎</span>';
+        }
+        const clickable = dis || jr;
+        if(clickable) cls += ' justcell';
+        const tip = jr
+          ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
+          : (dis?'4 model tidak sepakat — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${badge}</td>`;
+      }).join('');
+      body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
+        `<td class="num">${ext.tmin??'—'}</td><td class="num">${ext.tmax??'—'}</td>` +
+        `<td class="num">${ext.rmin??'—'}</td><td class="num">${ext.rmax??'—'}</td>` +
+        `<td>${ext.arah}</td><td class="num">${ext.kts??'—'}</td></tr>`;
+    });
+  });
+  tbl.innerHTML = head + '<tbody>' + body + '</tbody>';
+
+  const srcName = srcSel.selectedOptions[0].textContent;
+  document.getElementById('produkLegend').innerHTML =
+    `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
+    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 4 model tidak sepakat soal hujan — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
+    + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
+
+  document.getElementById('produkPrintHead').innerHTML =
+    `<div style="font-weight:700">PRAKIRAAN CUACA KOTA BIMA, KABUPATEN BIMA, DAN KABUPATEN DOMPU</div>` +
+    `<div style="font-size:11px">Olahan model: ${srcName} — ${new Date(date+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} — dicetak ${new Date().toLocaleString('id-ID')}</div>`;
+}
+function produkTSV(){
+  return [...document.querySelectorAll('#produkTable tr')].map(tr =>
+    [...tr.children].map(td => td.textContent.replace(/\s+/g,' ').trim()).join('\t')
+  ).join('\n');
+}
+function flashBtn(id,msg){ const b=document.getElementById(id); if(!b) return; const o=b.dataset.o||b.textContent; b.dataset.o=o; b.textContent=msg; setTimeout(()=>{ b.textContent=o; },1500); }
+function initProdukControls(){
+  const s = document.getElementById('produkSrc');
+  if(ECMWF_ENS){ const o=[...s.options].find(x=>x.value==='ens'); if(o) o.textContent = `Ensemble ECMWF (rata-rata ${ECMWF_ENS.n_members} skenario)`; }
+  if(!ECMWF_ENS){ const opt=[...s.options].find(o=>o.value==='ens'); if(opt){ opt.disabled=true; opt.textContent+=' — belum aktif'; } }
+  s.addEventListener('change', renderProdukTable);
+  document.getElementById('produkDay').addEventListener('change', renderProdukTable);
+  document.getElementById('produkCopy').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(produkTSV()); flashBtn('produkCopy','Tersalin ✓'); }
+    catch(e){ flashBtn('produkCopy','Clipboard diblokir'); }
+  });
+  document.getElementById('produkPrint').addEventListener('click', ()=> window.print());
+  document.getElementById('produkTable').addEventListener('click', (ev)=>{
+    const td = ev.target.closest('td.justcell');
+    if(!td) return;
+    openJustModal(parseInt(td.dataset.pi,10), parseInt(td.dataset.sh,10));
+  });
+}
+
+function updateStaleBanner(){
+  const el = document.getElementById('ensStaleBanner'); if(!el) return;
+  const grib = window.ECMWF_ENS_DATA || null;
+  const age = ensAgeHours();
+  let msg = '';
+  if(!ENS_MULTI && !grib) msg = '⚠ Data ensemble belum termuat (ens_multi.js / ecmwf_ens.js tidak ditemukan). Coba refresh keras (Ctrl+Shift+R); kalau tetap, cek GitHub Actions.';
+  else if(!ENS_MULTI && grib && grib.mock) msg = '⚠ Ensemble ECMWF masih DATA CONTOH (sintetis) — bukan prakiraan asli.';
+  else if(age!=null && age > 20) msg = `⚠ Data ensemble terakhir diperbarui ${Math.round(age)} jam lalu — pipeline kemungkinan berhenti. Cek tab Actions di GitHub (atau refresh keras kalau baru saja diperbarui).`;
+  else if(ENS_MULTI){
+    const stale = ENS_ORDER.filter(k=>ENS_MULTI.models[k] && ENS_MULTI.models[k].stale).map(k=>ENS_MULTI.models[k].short);
+    if(stale.length) msg = `⚠ Model ${stale.join(', ')} gagal diperbarui pada run terakhir — memakai data lama.`;
+  }
+  el.hidden = !msg; el.textContent = msg;
+}
+
+function render(){
+  updateStaleBanner();
+  const step = state.steps[state.stepIdx];
+  overlayLayer.setUrl(buildFieldCanvas(step));
+  updateMarkers(step);
+  updateLegend();
+
+  document.getElementById('timeNow').textContent = fmtTimeLabel(step);
+  document.getElementById('timeRel').textContent = fmtRel(state.stepIdx);
+  document.getElementById('timeSlider').value = state.stepIdx;
+
+  const p = POINTS[state.selectedIdx];
+  document.getElementById('selectedNote').innerHTML = `Titik terpilih: <b>${pointDisplayName(p)}</b> — klik titik lain pada peta atau cari lewat kotak pencarian.`;
+
+  const modelReadings = {};
+  MODELS.forEach(m=>{ modelReadings[m.key] = modelReading(state.selectedIdx, step, m.key); });
+
+  const precipVals = MODELS.map(m=>modelReadings[m.key]?.precip3||0);
+  const spread = Math.max(...precipVals) - Math.min(...precipVals);
+  const banner = document.getElementById('agreeBanner');
+  let dotColor, msg;
+  if(spread < 1){ dotColor='var(--good)'; msg='Model sepakat pada perkiraan hujan 3-jam di titik &amp; waktu ini.'; }
+  else if(spread < 4){ dotColor='var(--warn)'; msg='Model cukup berbeda (selisih '+spread.toFixed(1)+' mm/3jam) — pertimbangkan observasi aktual.'; }
+  else { dotColor='var(--bad)'; msg='Model berselisih besar (selisih '+spread.toFixed(1)+' mm/3jam) — confidence rendah.'; }
+  banner.innerHTML = `<span class="agree-dot" style="background:${dotColor}"></span><span>${msg}</span>`;
+
+  renderSummaryCard(p, step, ensembleReading(state.selectedIdx, step), spread);
+
+  const cardsWrap = document.getElementById('modelCards');
+  cardsWrap.innerHTML = '';
+  MODELS.forEach(m=>{
+    const r = modelReadings[m.key];
+    const card = document.createElement('div');
+    card.className = 'mcard';
+    card.style.setProperty('--mclr', `var(--${m.cls})`);
+    if(!r){ card.innerHTML = `<div class="mname">${m.label}</div><div class="mrow">Data tidak tersedia</div>`; }
+    else {
+      const total24 = dailyTotalPrecip(state.selectedIdx, step.date, m.key);
+      card.innerHTML = `
+        <div class="mname">${m.label}</div>
+        <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(r.precip3??0).toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24.toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Suhu</span><span class="v">${r.temp.toFixed(1)} °C</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${degToCompass(r.dir)} ${r.speed.toFixed(0)} km/j</span></div>
+        <div class="mrow"><span>Kelembapan</span><span class="v">${r.rh.toFixed(0)} %</span></div>
+      `;
+    }
+    cardsWrap.appendChild(card);
+  });
+
+  const avgReading = ensembleReading(state.selectedIdx, step);
+  const avgCard = document.createElement('div');
+  avgCard.className = 'mcard';
+  avgCard.style.setProperty('--mclr', 'var(--accent)');
+  if(!avgReading){ avgCard.innerHTML = `<div class="mname">Rata-rata 4 model</div><div class="mrow">Data tidak tersedia</div>`; }
+  else {
+    const total24Avg = dailyTotalPrecipFor(state.selectedIdx, step.date);
+    avgCard.innerHTML = `
+      <div class="mname">Rata-rata 4 model</div>
+      <div class="mrow"><span>Hujan (3 jam)</span><span class="v">${(avgReading.precip3??0).toFixed(1)} mm</span></div>
+      <div class="mrow"><span>Hujan (24 jam, hari ini)</span><span class="v">${total24Avg.toFixed(1)} mm</span></div>
+      <div class="mrow"><span>Suhu</span><span class="v">${avgReading.temp.toFixed(1)} °C</span></div>
+      <div class="mrow"><span>Angin</span><span class="v">${degToCompass(avgReading.dir)} ${avgReading.speed.toFixed(0)} km/j</span></div>
+      <div class="mrow"><span>Kelembapan</span><span class="v">${avgReading.rh.toFixed(0)} %</span></div>
+    `;
+  }
+  cardsWrap.appendChild(avgCard);
+
+  // --- Kartu ECMWF IFS ENS (51 member) — probabilistik, dari pipeline ---
+  const ensCard = document.createElement('div');
+  ensCard.className = 'mcard';
+  ensCard.style.setProperty('--mclr', '#7c5cbf');
+  const nMem = ECMWF_ENS ? (ECMWF_ENS.n_members||51) : 51;
+  const ensTitle = `ECMWF · ${nMem} skenario`;
+  const mock = ECMWF_ENS && ECMWF_ENS.mock ? ' <span style="color:var(--warn)">(CONTOH)</span>' : '';
+  if(!ECMWF_ENS){
+    ensCard.innerHTML = `<div class="mname">ECMWF ensemble</div><div class="mrow" style="line-height:1.45">Belum aktif — data ensemble ECMWF belum termuat.</div>`;
+  } else if(!ensHasPoint(state.selectedIdx)){
+    ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Data ECMWF ENS belum ada untuk titik ini. Pilih titik kecamatan/bandara, atau jalankan ulang pipeline (grid).</div>`;
+  } else {
+    const e = ecmwfEnsAt(p.id, step.time);
+    if(!e){
+      ensCard.innerHTML = `<div class="mname">${ensTitle}${mock}</div><div class="mrow" style="line-height:1.45">Jam ini di luar jangkauan data ECMWF terakhir (${(ECMWF_ENS.run||'').replace('T',' ').replace('Z',' UTC')}).</div>`;
+    } else {
+      const pr = e.precip, poe = pr.poe||{};
+      const pctTxt = v => v==null ? '—' : Math.round(v*100)+'%';
+      const rng = (a,b,u)=> (a==null||b==null) ? '—' : `${a.toFixed(1)}–${b.toFixed(1)} ${u}`;
+      ensCard.innerHTML = `
+        <div class="mname">${ensTitle}${mock}</div>
+        <div class="mrow"><span>Hujan 3j — perkiraan tengah</span><span class="v">${pr.mean==null?'—':pr.mean.toFixed(1)} mm</span></div>
+        <div class="mrow"><span>Kisaran wajar (8 dr 10 skenario)</span><span class="v">${rng(pr.p10,pr.p90,'mm')}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 1 mm</span><span class="v">${pctTxt(poe['1'])}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 10 mm</span><span class="v">${pctTxt(poe['10'])}</span></div>
+        <div class="mrow"><span>Peluang hujan ≥ 20 mm</span><span class="v">${pctTxt(poe['20'])}</span></div>
+        <div class="mrow"><span>Suhu (kisaran wajar)</span><span class="v">${e.temp.mean==null?'—':e.temp.mean.toFixed(0)}° &nbsp;(${rng(e.temp.p10,e.temp.p90,'°')})</span></div>
+        <div class="mrow"><span>Angin</span><span class="v">${e.wind.mean==null?'—':e.wind.mean.toFixed(0)} km/j${e.wind.dir==null?'':' '+degToCompass(e.wind.dir)}</span></div>
+      `;
+    }
+  }
+  cardsWrap.appendChild(ensCard);
+
+  document.getElementById('logTargetLabel').textContent = `${pointDisplayName(p)}, ${fmtTimeLabel(step)}`;
+  renderProdukTable();
+  renderDetailTable();
+  renderHistory();
+}
+
+function renderDetailTable(){
+  const pd = state.pointsData[state.selectedIdx];
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  if(state.detailDayIdx >= dates.length) state.detailDayIdx = 0;
+  const tabsEl = document.getElementById('detailDayTabs');
+  tabsEl.innerHTML = '';
+  dates.forEach((date,i)=>{
+    const btn = document.createElement('button');
+    btn.className = i===state.detailDayIdx ? 'active' : '';
+    btn.innerHTML = `<span class="d1">H+${i}</span><span class="d2">${fmtDateShort(date)}</span>`;
+    btn.onclick = ()=>{ state.detailDayIdx=i; renderDetailTable(); };
+    tabsEl.appendChild(btn);
+  });
+  const date = dates[state.detailDayIdx];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  const totals = MODELS.map(m=>`<span class="${m.cls}">${m.label} ${dailyTotalPrecip(state.selectedIdx,date,m.key).toFixed(1)} mm</span>`).join(' &middot; ');
+  const avgTotal = dailyTotalPrecipFor(state.selectedIdx, date);
+  const totalsWithAvg = totals + ` &middot; <span class="avgcol"><b>Rata-rata ${avgTotal.toFixed(1)} mm</b></span>`;
+
+  const rowFmt = (step, modelKey) => {
+    const r = modelReading(state.selectedIdx, step, modelKey);
+    if(!r) return '—';
+    if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
+    if(state.param==='suhu') return r.temp.toFixed(1);
+    if(state.param==='rh') return r.rh.toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+r.speed.toFixed(0);
+    return '—';
+  };
+  const rowFmtAvg = (step) => {
+    const r = ensembleReading(state.selectedIdx, step);
+    if(!r) return '—';
+    if(state.param==='hujan'||state.param==='hujan24') return (r.precip3??0).toFixed(1);
+    if(state.param==='suhu') return r.temp.toFixed(1);
+    if(state.param==='rh') return r.rh.toFixed(0);
+    if(state.param==='angin') return degToCompass(r.dir)+' '+r.speed.toFixed(0);
+    return '—';
+  };
+  const rows = daySteps.map(s=>{
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>` +
+      MODELS.map(m=>`<td class="${m.cls}">${rowFmt(s,m.key)}</td>`).join('') +
+      `<td class="avgcol"><b>${rowFmtAvg(s)}</b></td>` +
+      `</tr>`;
+  }).join('');
+  const unit = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].unit;
+
+  document.getElementById('detailTable').innerHTML = `
+    <div class="param-head">Akumulasi hujan 24 jam (${fmtDateShort(date)}): ${totalsWithAvg}</div>
+    <table>
+      <thead><tr><th>Jam</th>${MODELS.map(m=>`<th>${m.label} (${unit})</th>`).join('')}<th class="avgcol">Rata-rata (${unit})</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  renderEcmwfEns();
+  renderEnsembleTable();
+}
+
+// Pemilih titik + hari khusus seksi ensemble (biar tidak bergantung pilihan di seksi lain)
+function initEnsembleControls(){
+  const ps = document.getElementById('ensPointSel');
+  const ds = document.getElementById('ensDaySel');
+  if(!ps || !ds) return;
+  const named = '<optgroup label="Kecamatan / bandara">' +
+    STATION_POINTS.map((p,i)=>`<option value="${i}">${shortKec(p.name)}</option>`).join('') + '</optgroup>';
+  const gopt = GRID_POINTS.map((g,gi)=>({gi, lab: GRID_LABELS[gi] || `grid ${gi} · ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`}))
+    .sort((a,b)=> a.lab.localeCompare(b.lab, 'id'));
+  const grid = GRID_POINTS.length ? '<optgroup label="Titik grid (~11 km)">' +
+    gopt.map(o=>`<option value="${STATION_COUNT+o.gi}">${o.lab}</option>`).join('') + '</optgroup>' : '';
+  ps.innerHTML = named + grid;
+  ps.addEventListener('change', ()=>{
+    state.selectedIdx = parseInt(ps.value,10);
+    if(map) map.panTo([POINTS[state.selectedIdx].lat, POINTS[state.selectedIdx].lon]);
+    render();
+    // kalau GFS/ICON pernah dimuat, tarik ulang untuk titik baru
+    if(Object.keys(state.ensembleCache).length) document.getElementById('loadEnsembleBtn').click();
+  });
+  ds.addEventListener('change', ()=>{ state.detailDayIdx = parseInt(ds.value,10); renderDetailTable(); });
+  if(ENS_MULTI){
+    // ensemble multi-model sudah dihitung pipeline untuk semua titik → tombol "Muat GFS + ICON" tidak perlu
+    const btn = document.getElementById('loadEnsembleBtn'), st = document.getElementById('ensembleStatus');
+    if(btn) btn.style.display = 'none';
+    if(st) st.style.display = 'none';
+    const tail = document.getElementById('ensBlurbTail');
+    if(tail) tail.innerHTML = '<b>' + ENS_ORDER.filter(k=>ENS_MULTI.models[k])
+      .map(k=>`${ENS_MULTI.models[k].short} (${ENS_MULTI.models[k].n_members})`).join(' · ')
+      + '</b> tampil otomatis untuk semua titik &amp; semua hari — tanpa perlu memuat manual.';
+  }
+}
+function syncEnsembleControls(){
+  const ps = document.getElementById('ensPointSel');
+  const ds = document.getElementById('ensDaySel');
+  if(!ps || !ds || !state.pointsData.length) return;
+  const dates = [...new Set(state.pointsData[0].hours.map(h=>h.date))].sort();
+  if(ds.options.length !== dates.length){
+    ds.innerHTML = dates.map((d,i)=>{
+      const dd = new Date(d+'T00:00:00');
+      return `<option value="${i}">Hari ${i+1} — ${dd.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}</option>`;
+    }).join('');
+  }
+  ps.value = String(state.selectedIdx);   // cocok untuk kecamatan & titik grid
+  ds.value = String(state.detailDayIdx);
+}
+
+// --- Tabel ECMWF IFS ENS per 3 jam untuk stasiun + hari terpilih ---
+function renderEcmwfEns(){
+  syncEnsembleControls();
+  const infoEl = document.getElementById('ecmwfEnsInfo');
+  const wrap = document.getElementById('ecmwfEnsTable');
+  if(!infoEl || !wrap) return;
+
+  if(!ECMWF_ENS){
+    infoEl.innerHTML = 'ECMWF ENS belum aktif — jalankan <code>pipeline/ingest_ecmwf_ens.py</code>, taruh <code>ecmwf_ens.js</code> di folder ini, lalu muat ulang.';
+    wrap.style.display = 'none';
+    return;
+  }
+  const point = POINTS[state.selectedIdx];
+  // sumber untuk titik terpilih: ens_multi (Open-Meteo) kalau titiknya ada di sana, kalau tidak GRIB ECMWF Open Data
+  const srcDs = (ECMWF_ENS.points && ECMWF_ENS.points[point.id]) ? ECMWF_ENS : (ECMWF_GRIB && ECMWF_GRIB.points && ECMWF_GRIB.points[point.id] ? ECMWF_GRIB : ECMWF_ENS);
+  const nMem = srcDs.n_members || 51;
+  const runTxt = (srcDs.run||'').replace('T',' ').replace('Z',' UTC');
+  const genTxt = (srcDs.generated||'').replace('T',' ').replace('Z',' UTC');
+  const mockTxt = srcDs.mock ? ' <b style="color:var(--warn)">— DATA CONTOH (sintetis), bukan prakiraan asli</b>' : '';
+  infoEl.innerHTML = `ECMWF · <b>${nMem} skenario</b> · sumber ${srcDs.source||'-'} · data terakhir <b>${runTxt}</b> · diperbarui ${genTxt}${mockTxt}`;
+
+  if(!ensHasPoint(state.selectedIdx)){
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Data ECMWF ENS belum ada untuk titik ini. Titik grid tercakup kalau pipeline dijalankan dengan grid diaktifkan.</div>`;
+    return;
+  }
+  if(state.param === 'rh'){
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Kelembapan tidak tersedia di ECMWF IFS ENS open-data. Untuk sebaran RH pakai GFS/ICON di tabel bawah.</div>`;
+    return;
+  }
+  const param = (state.param === 'hujan24') ? 'hujan' : state.param;
+  const isRain = (param === 'hujan');
+  const unit = PARAM_DEF[param].unit;
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  let any = false;
+  const rows = daySteps.map(s=>{
+    const e = ecmwfEnsParam(point.id, s.time, param);
+    if(!e || e.mean==null){
+      return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td><td colspan="2" style="color:var(--text-faint)">di luar jangkauan run</td></tr>`;
+    }
+    any = true;
+    const lo = e.p10!=null ? e.p10 : e.min;
+    const hi = e.p90!=null ? e.p90 : e.max;
+    const rowMax = Math.max(isRain?0.6:1, e.max!=null?e.max:hi);
+    const rowMin = isRain ? 0 : Math.min(e.min!=null?e.min:lo, lo);
+    const span = Math.max(rowMax - rowMin, 0.001);
+    const pL = ((lo - rowMin)/span*100).toFixed(1);
+    const pW = Math.max((hi - lo)/span*100, 1.5).toFixed(1);
+    const pM = ((e.mean - rowMin)/span*100).toFixed(1);
+    const pMinT = e.min!=null ? ((e.min - rowMin)/span*100).toFixed(1) : null;
+    const pMaxT = e.max!=null ? ((e.max - rowMin)/span*100).toFixed(1) : null;
+    const d = isRain ? 1 : 1;
+    const title = `Kisaran wajar (8 dari 10 skenario): ${lo.toFixed(d)}–${hi.toFixed(d)} ${unit} · perkiraan tengah: ${e.mean.toFixed(d)} ${unit}`
+      + (e.min!=null?` · paling kering–paling basah: ${e.min.toFixed(d)}–${e.max.toFixed(d)}`:'');
+    let poeTxt = '';
+    if(isRain && e.poe){
+      const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+      poeTxt = `<div class="ens-bar-label" style="margin-top:2px;color:var(--text-faint)">`
+        + `Peluang hujan: ≥1mm ${pct(e.poe['1'])} · ≥10mm ${pct(e.poe['10'])} · ≥20mm ${pct(e.poe['20'])}</div>`;
+    }
+    return `<tr>
+      <td>${String(s.hour).padStart(2,'0')}:00</td>
+      <td style="min-width:170px">
+        <div class="ens-bar-wrap" title="${title}">
+          <div class="ens-bar-track" style="width:150px">
+            ${pMinT!=null?`<div class="ens-bar-mean" style="left:${pMinT}%;background:var(--text-faint);height:9px;top:0"></div>`:''}
+            ${pMaxT!=null?`<div class="ens-bar-mean" style="left:${pMaxT}%;background:var(--text-faint);height:9px;top:0"></div>`:''}
+            <div class="ens-bar-fill" style="left:${pL}%;width:${pW}%;background:#7c5cbf"></div>
+            <div class="ens-bar-mean" style="left:${pM}%"></div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:left">
+        <span class="ens-bar-label">${lo.toFixed(d)}–${hi.toFixed(d)} ${unit} <span style="color:var(--text-faint)">(rata² ${e.mean.toFixed(d)})</span></span>
+        ${poeTxt}
+      </td>
+    </tr>`;
+  }).join('');
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="param-head">ECMWF ${nMem} skenario — ${PARAM_DEF[param].label} (${unit}) per 3 jam · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">Batang ungu = kisaran wajar (8 dari 10 skenario); garis tegak tengah = perkiraan tengah; dua garis abu tipis = skenario paling kering & paling basah. Panjang batang tidak dibandingkan lurus antar baris (skala per baris).${param==='suhu' && ECMWF_GRIB && ECMWF_GRIB.temp_corrected ? ' <b>Suhu sudah dikoreksi ketinggian titik</b> (6,5 °C/km, selisih DEM vs orografi model).' : ''}</div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th><th>Kisaran wajar</th><th>Nilai</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${any?'':'<div style="padding:12px 14px;font-size:12px;color:var(--text-faint)">Belum ada jam pada hari ini yang tercakup data ECMWF terakhir. Coba hari berikutnya.</div>'}`;
+}
+
+async function fetchEnsembleForPoint(point){
+  const modelsParam = ENSEMBLE_MODELS.map(m=>m.param).join(',');
+  const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${point.lat}&longitude=${point.lon}` +
+    `&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m` +
+    `&models=${modelsParam}&forecast_days=8&timezone=Asia%2FMakassar&wind_speed_unit=kmh`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const json = await res.json();
+  const parsed = parseEnsembleResponse(json);
+  parsed.rawKeys = Object.keys(json.hourly || {});
+  return parsed;
+}
+function isEnsembleEmpty(ensData){
+  return !ENSEMBLE_MODELS.some(m => ensData.byModel[m.key] && Object.keys(ensData.byModel[m.key]).length>0);
+}
+
+function parseEnsembleResponse(json){
+  const time = json.hourly.time;
+  const varNames = ['temperature_2m','relative_humidity_2m','precipitation','wind_speed_10m','wind_direction_10m'];
+  const byModel = {};
+  ENSEMBLE_MODELS.forEach(m=>{ byModel[m.key] = {}; });
+  const suffixToModelKey = (suffix) => {
+    const s = suffix.toLowerCase();
+    if(s.includes('ecmwf')) return 'ecmwf';
+    if(s.includes('gefs') || s.includes('gfs')) return 'gfs';
+    if(s.includes('icon')) return 'icon';
+    return null;
+  };
+  Object.keys(json.hourly).forEach(key=>{
+    if(key==='time') return;
+    const varName = varNames.find(v=> key===v || key.startsWith(v+'_'));
+    if(!varName) return;
+    const rest = key.slice(varName.length).replace(/^_/,''); // "member01_ncep_gefs_seamless" or "ecmwf_ifs04" (control, no member)
+    const memberMatch = rest.match(/^member(\d+)_(.+)$/);
+    let modelKey, memberIdx;
+    if(memberMatch){
+      memberIdx = parseInt(memberMatch[1],10);
+      modelKey = suffixToModelKey(memberMatch[2]);
+    } else {
+      // control/deterministic-only column (no per-member suffix) — treat as one sample (member 0)
+      modelKey = suffixToModelKey(rest);
+      memberIdx = 0;
+    }
+    if(!modelKey || !byModel[modelKey]) return;
+    if(!byModel[modelKey][varName]) byModel[modelKey][varName] = {};
+    byModel[modelKey][varName][memberIdx] = json.hourly[key];
+  });
+  return { time, byModel };
+}
+
+function statsForHours(ensData, modelKey, varName, hourIdxs, sumMode){
+  const memberSeries = ensData.byModel[modelKey] && ensData.byModel[modelKey][varName];
+  if(!memberSeries) return null;
+  const memberIdxs = Object.keys(memberSeries);
+  if(!memberIdxs.length) return null;
+  const values = memberIdxs.map(mi=>{
+    const arr = memberSeries[mi];
+    if(sumMode){
+      return hourIdxs.reduce((s,hi)=> s + (hi!=null && arr[hi]!=null ? arr[hi] : 0), 0);
+    }
+    const hi = hourIdxs[0];
+    return hi!=null ? arr[hi] : null;
+  }).filter(v=>v!=null && !isNaN(v));
+  if(!values.length) return null;
+  return { min:Math.min(...values), max:Math.max(...values), mean:values.reduce((s,v)=>s+v,0)/values.length, n:values.length };
+}
+
+// --- Tabel perbandingan ensemble multi-model (ECMWF · AIFS · GEFS · ICON · Gabungan) ---
+function renderEnsMulti(){
+  const wrap = document.getElementById('ensembleTable');
+  const point = POINTS[state.selectedIdx];
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+  const param = state.param==='hujan24' ? 'hujan' : state.param;
+  wrap.style.display = 'block';
+  if(param==='rh'){
+    wrap.innerHTML = `<div style="padding:14px;font-size:12.5px;color:var(--text-dim);">Kelembapan tidak tersedia pada ensemble. Pilih parameter hujan / suhu / angin.</div>`;
+    return;
+  }
+  const def = PARAM_DEF[param], unit = def.unit, isRain = (param==='hujan');
+  const keys = ENS_ORDER.filter(k=>ENS_MULTI.models[k]);
+  const hasPooled = isRain && ENS_MULTI.pooled && ENS_MULTI.pooled.points && ENS_MULTI.pooled.points[point.id];
+  const pct = v => v==null ? '–' : Math.round(v*100)+'%';
+
+  const head = keys.map(k=>{
+    const M = ENS_MULTI.models[k];
+    return `<th><span style="color:${ENS_CLR[k]}">${M.short}</span> (${M.n_members})<br>`
+      + `<span style="font-weight:400;color:var(--text-faint)">${fmtRunTag(M.run)}${M.stale?' · <b style="color:var(--bad)">lama</b>':''}</span></th>`;
+  }).join('') + (hasPooled ? `<th><span style="color:${ENS_CLR.pooled}">Gabungan</span><br><span style="font-weight:400;color:var(--text-faint)">peluang hujan</span></th>` : '');
+
+  const rows = daySteps.map(s=>{
+    const per = keys.map(k=> (k==='ecmwf' && param!=='hujan') ? ecmwfEnsParam(point.id, s.time, param) : ensModelParam(k, point.id, s.time, param));
+    const ok = per.filter(x=>x && x.mean!=null);
+    const hiOf = x => x.p90!=null ? x.p90 : x.max;
+    const loOf = x => x.p10!=null ? x.p10 : x.min;
+    const rowMax = Math.max(isRain?0.6:1, ...ok.map(x=> x.max!=null ? x.max : hiOf(x)));
+    const rowMin = isRain ? 0 : Math.min(...ok.map(x=> x.min!=null ? x.min : loOf(x)));
+    const span = Math.max(rowMax-rowMin, 0.001);
+    const cells = per.map((x,i)=>{
+      if(!x || x.mean==null) return `<td style="color:var(--text-faint)">—</td>`;
+      const lo = loOf(x), hi = hiOf(x);
+      const L = ((lo-rowMin)/span*100).toFixed(1), W = Math.max((hi-lo)/span*100,1.5).toFixed(1), Mn = ((x.mean-rowMin)/span*100).toFixed(1);
+      const title = `${ENS_MULTI.models[keys[i]].label}: kisaran wajar (P10–P90) ${lo.toFixed(1)}–${hi.toFixed(1)} ${unit} · rata² ${x.mean.toFixed(1)} ${unit}`;
+      const poeTxt = (isRain && x.poe) ? `<div class="ens-bar-label" style="margin-top:2px;color:var(--text-faint)">≥1mm ${pct(x.poe['1'])} · ≥10 ${pct(x.poe['10'])}</div>` : '';
+      return `<td><div class="ens-bar-wrap" title="${title}"><div class="ens-bar-track" style="width:90px"><div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:${ENS_CLR[keys[i]]}"></div><div class="ens-bar-mean" style="left:${Mn}%"></div></div></div>`
+        + `<div class="ens-bar-label">${lo.toFixed(1)}–${hi.toFixed(1)} <span style="color:var(--text-faint)">(rata² ${x.mean.toFixed(1)})</span></div>${poeTxt}</td>`;
+    }).join('');
+    let pooledCell = '';
+    if(hasPooled){
+      const pp = ensPooledAt(point.id, s.time);
+      if(pp && pp.mean!=null){
+        const L = (pp.p10/rowMax*100).toFixed(1), W = Math.max((pp.p90-pp.p10)/rowMax*100,1.5).toFixed(1), Mn = (pp.mean/rowMax*100).toFixed(1);
+        pooledCell = `<td><div class="ens-bar-wrap" title="Gabungan ${pp.nm} model (bobot sama per model): P10–P90 ${pp.p10.toFixed(1)}–${pp.p90.toFixed(1)} mm · rata² ${pp.mean.toFixed(1)} mm"><div class="ens-bar-track" style="width:90px"><div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:${ENS_CLR.pooled}"></div><div class="ens-bar-mean" style="left:${Mn}%"></div></div></div>`
+          + `<div class="ens-bar-label"><b>≥1mm ${pct(pp.poe['1'])}</b> · ≥10 ${pct(pp.poe['10'])} · ≥20 ${pct(pp.poe['20'])}</div>`
+          + `<div class="ens-bar-label" style="color:var(--text-faint)">rata² ${pp.mean.toFixed(1)} mm · ${pp.nm} model</div></td>`;
+      } else pooledCell = `<td style="color:var(--text-faint)">—</td>`;
+    }
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>${cells}${pooledCell}</tr>`;
+  }).join('');
+
+  const runs = keys.map(k=>{ const M=ENS_MULTI.models[k]; return `${M.short} ${fmtRunTag(M.run)}`; }).join(' · ');
+  wrap.innerHTML = `
+    <div class="param-head">Sebaran skenario antar model — ${def.label} (${unit}) · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);line-height:1.5;">
+      Batang = kisaran wajar (P10–P90, 8 dari 10 skenario); garis tegak = rata-rata. Skala per baris — batang antar jam tidak dibandingkan lurus.
+      <b>Gabungan</b> = peluang dari 4 model, bobot sama per model (bukan per skenario). Run: ${runs}.
+      ${isRain ? '' : '<br>Suhu & angin ensemble hanya tersedia untuk ECMWF (dari ECMWF Open Data).'}
+    </div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderEnsembleTable(){
+  if(ENS_MULTI){ renderEnsMulti(); return; }
+  const point = POINTS[state.selectedIdx];
+  const ensData = state.ensembleCache[point.id];
+  const wrap = document.getElementById('ensembleTable');
+  if(!ensData){ wrap.style.display='none'; document.getElementById('ensembleStatus').textContent=''; return; }
+  wrap.style.display='block';
+
+  const idxByTime = {};
+  ensData.time.forEach((t,i)=>{ idxByTime[t]=i; });
+
+  const dates = [...new Set(state.steps.map(s=>s.date))];
+  const date = dates[state.detailDayIdx] || dates[0];
+  const daySteps = state.steps.filter(s=>s.date===date);
+
+  const varMap = { hujan:'precipitation', hujan24:'precipitation', suhu:'temperature_2m', rh:'relative_humidity_2m', angin:'wind_speed_10m' };
+  const varName = varMap[state.param];
+  const sumMode = (state.param==='hujan'||state.param==='hujan24');
+  const decimals = sumMode ? 1 : (state.param==='rh' ? 0 : 1);
+  const unit = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].unit;
+  const label = PARAM_DEF[state.param==='hujan24'?'hujan':state.param].label;
+
+  const rows = daySteps.map(s=>{
+    let hourIdxs = [];
+    for(let k=1;k<=3;k++){           // jam T+1..T+3 (precip = jam sebelumnya), lewat tengah malam → hari berikut
+      const t = hourKeyOf(s.date, s.hour+k);
+      if(idxByTime[t]!=null) hourIdxs.push(idxByTime[t]);
+    }
+    if(!hourIdxs.length) hourIdxs = [idxByTime[s.time]];
+    const stByModel = ENSEMBLE_MODELS.map(m=> statsForHours(ensData, m.key, varName, hourIdxs, sumMode));
+    const rowMax = Math.max(0.4, ...stByModel.filter(Boolean).map(st=>st.max));
+    const cells = ENSEMBLE_MODELS.map((m,mi)=>{
+      const st = stByModel[mi];
+      if(!st) return `<td>—</td>`;
+      const leftPct = (st.min/rowMax*100).toFixed(1);
+      const widthPct = Math.max(((st.max-st.min)/rowMax*100), 1.5).toFixed(1);
+      const meanPct = (st.mean/rowMax*100).toFixed(1);
+      const title = `Rentang antar ${st.n} member: ${st.min.toFixed(decimals)}–${st.max.toFixed(decimals)} ${unit}. Rata-rata: ${st.mean.toFixed(decimals)} ${unit}. Garis tegak pada batang = posisi rata-rata.`;
+      return `<td>
+        <div class="ens-bar-wrap" title="${title}">
+          <div class="ens-bar-track">
+            <div class="ens-bar-fill" style="left:${leftPct}%;width:${widthPct}%;background:var(--${m.cls})"></div>
+            <div class="ens-bar-mean" style="left:${meanPct}%"></div>
+          </div>
+          <div class="ens-bar-label">${st.min.toFixed(decimals)}–${st.max.toFixed(decimals)} <span style="color:var(--text-faint)">(rata² ${st.mean.toFixed(decimals)}, n=${st.n})</span></div>
+        </div>
+      </td>`;
+    }).join('');
+    // kolom ECMWF ENS (data pra-proses per 3 jam dari pipeline)
+    let ecmwfCell = '<td>—</td>';
+    const ep = ecmwfEnsParam(POINTS[state.selectedIdx].id, s.time, state.param==='hujan24'?'hujan':state.param);
+    if(ep && ep.mean!=null){
+      const lo = ep.p10!=null?ep.p10:ep.min, hi = ep.p90!=null?ep.p90:ep.max;
+      const emax = Math.max(0.4, ep.max!=null?ep.max:hi);
+      const L=(lo/emax*100).toFixed(1), W=Math.max((hi-lo)/emax*100,1.5).toFixed(1), M=(ep.mean/emax*100).toFixed(1);
+      ecmwfCell = `<td>
+        <div class="ens-bar-wrap" title="P10–P90: ${lo.toFixed(decimals)}–${hi.toFixed(decimals)} ${unit}; rata²: ${ep.mean.toFixed(decimals)} ${unit}">
+          <div class="ens-bar-track">
+            <div class="ens-bar-fill" style="left:${L}%;width:${W}%;background:#7c5cbf"></div>
+            <div class="ens-bar-mean" style="left:${M}%"></div>
+          </div>
+          <div class="ens-bar-label">${lo.toFixed(decimals)}–${hi.toFixed(decimals)} <span style="color:var(--text-faint)">(rata² ${ep.mean.toFixed(decimals)})</span></div>
+        </div>
+      </td>`;
+    }
+    return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>${cells}${ecmwfCell}</tr>`;
+  }).join('');
+
+  const ecmwfHead = ECMWF_ENS ? `<th>ECMWF (${ECMWF_ENS.n_members||51} skenario)<br><span style="font-weight:400;color:var(--text-faint)">kisaran wajar</span></th>` : '';
+  wrap.innerHTML = `
+    <div class="param-head">Sebaran skenario antar model — ${label} (${unit}), ${fmtDateShort(date)}</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">GFS/ICON: batang = skenario terendah–tertinggi. ECMWF: batang ungu = kisaran wajar (8 dari 10 skenario). Garis tegak = perkiraan tengah. Skala per baris — panjang batang tidak dibandingkan lurus antar baris.</div>
+    <table class="ens-table">
+      <thead><tr><th>Jam</th>${ENSEMBLE_MODELS.map(m=>`<th>${m.label}</th>`).join('')}${ecmwfHead}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+document.getElementById('loadEnsembleBtn').addEventListener('click', async ()=>{
+  const point = POINTS[state.selectedIdx];
+  const btn = document.getElementById('loadEnsembleBtn');
+  const statusEl = document.getElementById('ensembleStatus');
+  btn.disabled = true;
+  statusEl.textContent = 'Memuat data ensemble untuk '+pointDisplayName(point)+'…';
+  try{
+    const data = await fetchEnsembleForPoint(point);
+    state.ensembleCache[point.id] = data;
+    if(isEnsembleEmpty(data)){
+      statusEl.innerHTML = `Data termuat tapi format kolomnya tidak cocok dugaan saya. Nama kolom asli dari API: <br><code style="font-size:10.5px;word-break:break-all;">${data.rawKeys.join(', ')}</code><br>Tolong salin baris kode di atas dan kirim ke saya biar parsernya saya perbaiki.`;
+    } else {
+      statusEl.textContent = 'Dimuat untuk '+pointDisplayName(point)+' (klik lagi untuk titik lain setelah pindah).';
+    }
+    renderEnsembleTable();
+  }catch(err){
+    statusEl.textContent = 'Gagal memuat data ensemble: '+err.message+'. Beri tahu saya kalau ini muncul terus, kemungkinan nama parameter model ensemble perlu disesuaikan.';
+  }
+  btn.disabled = false;
+});
+
+// Log verifikasi disimpan di localStorage (per-browser) supaya jalan di hosting
+// statis biasa. Kalau halaman dibuka di host lama yang punya window.storage,
+// datanya ikut dibaca sekali lalu dipindah ke localStorage.
+const LOG_KEY = 'verifikasi-log-peta';
+async function loadLog(){
+  try{ const v = localStorage.getItem(LOG_KEY); if(v) return JSON.parse(v); }catch(e){}
+  try{
+    if(window.storage && window.storage.get){
+      const r = await window.storage.get(LOG_KEY, false);
+      if(r && r.value){
+        try{ localStorage.setItem(LOG_KEY, r.value); }catch(_){}
+        return JSON.parse(r.value);
+      }
+    }
+  }catch(e){}
+  return [];
+}
+async function saveLog(entries){
+  const s = JSON.stringify(entries);
+  try{ localStorage.setItem(LOG_KEY, s); }
+  catch(e){ console.error('Gagal menyimpan log', e); }
+  try{ if(window.storage && window.storage.set) await window.storage.set(LOG_KEY, s, false); }catch(e){}
+}
+function diffClass(absDiff, scale){
+  const ratio = absDiff/scale;
+  if(ratio < 0.5) return 'diff-good';
+  if(ratio < 1.2) return 'diff-warn';
+  return 'diff-bad';
+}
+async function renderHistory(){
+  const wrap = document.getElementById('histWrap');
+  const log = await loadLog();
+  if(!log.length){
+    wrap.innerHTML = '<div class="empty-log">Belum ada entri. Isi form di atas setelah kejadian aktual diketahui.</div>';
+    return;
+  }
+  const sorted = [...log].sort((a,b)=> b.date.localeCompare(a.date));
+  let rows = sorted.map(e=>{
+    const origIdx = log.indexOf(e);
+    const cells = MODELS.map(m=>{
+      const f = e.forecasts[m.key];
+      if(!f) return `<td>—</td>`;
+      const fv = f.precipTotal!=null ? f.precipTotal : f.precip3;
+      const d = Math.abs((fv||0) - e.actual.hujan);
+      return `<td class="${diffClass(d,5)}">${d.toFixed(1)} mm</td>`;
+    }).join('');
+    return `<tr>
+      <td>${fmtDateShort(e.date)}</td><td>${e.pointName}</td>
+      <td>${e.actual.hujan} mm</td><td>${e.actual.suhu}°C</td><td>${e.actual.rh}%</td><td>${e.actual.angin}</td>
+      ${cells}
+      <td><button class="del-btn" data-idx="${origIdx}">hapus</button></td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<div class="param-panel"><table>
+    <thead><tr><th style="text-align:left">Tgl</th><th style="text-align:left">Titik</th>
+      <th>Hujan akt.</th><th>Suhu akt.</th><th>RH akt.</th><th style="text-align:left">Angin akt.</th>
+      <th>Δ ECMWF</th><th>Δ GFS</th><th>Δ ICON</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+  wrap.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('Hapus entri log ini?')) return;
+      const i = parseInt(btn.dataset.idx,10);
+      const current = await loadLog();
+      current.splice(i,1);
+      await saveLog(current);
+      renderHistory();
+    };
+  });
+}
+
+document.getElementById('logForm').addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  const step = state.steps[state.stepIdx];
+  const forecasts = {};
+  MODELS.forEach(m=>{ forecasts[m.key] = modelReading(state.selectedIdx, step, m.key); });
+  const entry = {
+    date: step.date,
+    pointId: POINTS[state.selectedIdx].id,
+    pointName: pointDisplayName(POINTS[state.selectedIdx]),
+    actual: {
+      hujan: parseFloat(document.getElementById('fHujan').value),
+      angin: document.getElementById('fAngin').value,
+      suhu: parseFloat(document.getElementById('fSuhu').value),
+      rh: parseFloat(document.getElementById('fRH').value),
+      catatan: document.getElementById('fCatatan').value
+    },
+    forecasts
+  };
+  const log = await loadLog();
+  log.push(entry);
+  await saveLog(log);
+  ev.target.reset();
+  renderHistory();
+});
+
+document.getElementById('paramSel').addEventListener('change', e=>{
+  state.param = e.target.value;
+  const g = stepGranularity();
+  document.getElementById('timeSlider').step = g;
+  state.stepIdx = Math.floor(state.stepIdx / g) * g;
+  render();
+});
+document.getElementById('modelSel').addEventListener('change', e=>{ state.modelSel=e.target.value; render(); });
+document.getElementById('timeSlider').addEventListener('input', e=>{ state.stepIdx=parseInt(e.target.value,10); render(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ const g=stepGranularity(); state.stepIdx=Math.max(0,state.stepIdx-g); render(); });
+document.getElementById('nextBtn').addEventListener('click', ()=>{ const g=stepGranularity(); state.stepIdx=Math.min(state.steps.length-1,state.stepIdx+g); render(); });
+document.getElementById('playBtn').addEventListener('click', (e)=>{
+  state.playing = !state.playing;
+  e.target.textContent = state.playing ? '❚❚' : '▶';
+  if(state.playing){
+    state.timer = setInterval(()=>{
+      const g = stepGranularity();
+      state.stepIdx = (state.stepIdx+g) % state.steps.length;
+      render();
+    }, 900);
+  } else { clearInterval(state.timer); }
+});
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.style.display='none'; return; }
+  const matches = STATION_POINTS.map((p,i)=>({p,i})).filter(o=>o.p.name.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){ searchResults.style.display='none'; return; }
+  searchResults.innerHTML = matches.map(o=>`<div data-idx="${o.i}">${o.p.name}</div>`).join('');
+  searchResults.style.display = 'block';
+  searchResults.querySelectorAll('div').forEach(div=>{
+    div.onclick = ()=>{
+      state.selectedIdx = parseInt(div.dataset.idx,10);
+      map.panTo([POINTS[state.selectedIdx].lat, POINTS[state.selectedIdx].lon]);
+      searchInput.value=''; searchResults.style.display='none';
+      render();
+    };
+  });
+});
+document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-box')) searchResults.style.display='none'; });
+
+const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], icon:[0,6,12,18], aifs:[0,6,12,18] };
+const RUN_LAG_HOURS = { ecmwf:8, gfs:5, icon:3, aifs:6 };
+function estimateLatestRun(modelKey){
+  const now = new Date();
+  const avail = new Date(now.getTime() - RUN_LAG_HOURS[modelKey]*3600000);
+  const schedule = RUN_SCHEDULE[modelKey];
+  const dayStart = Date.UTC(avail.getUTCFullYear(), avail.getUTCMonth(), avail.getUTCDate());
+  const candidates = schedule.filter(h=>h<=avail.getUTCHours());
+  if(candidates.length){
+    return new Date(dayStart + Math.max(...candidates)*3600000);
+  }
+  return new Date(dayStart - 86400000 + Math.max(...schedule)*3600000);
+}
+function renderRunInfo(){
+  const el = document.getElementById('runInfo');
+  const fetchedAt = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+  const runLines = MODELS.map(m=>{
+    const r = estimateLatestRun(m.key);
+    const lab = r.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
+    return `<b>${m.label}</b> ~${lab} UTC`;
+  }).join(' <span class="sep">·</span> ');
+  const detNote = state.detSource ? `<span>Data model dari pipeline (dibuat <b>${state.detSource.generated.replace('T',' ').replace('Z',' UTC')}</b>)</span><span class="sep">|</span>` : '';
+  el.innerHTML = `${detNote}<span>Halaman dibuka: <b>${fetchedAt}</b></span><span class="sep">|</span><span>Perkiraan run terpakai: ${runLines}</span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru">⟳</button>`;
+  document.getElementById('refreshBtn').onclick = refreshData;
+}
+async function refreshData(){
+  const btn = document.getElementById('refreshBtn');
+  if(btn){ btn.disabled = true; btn.textContent='…'; }
+  try{
+    state.pointsData = await fetchAll(true);       // tombol ⟳ = tarik langsung dari Open-Meteo (cuma saat diklik)
+    buildSteps();
+    document.getElementById('timeSlider').max = state.steps.length-1;
+    if(state.stepIdx > state.steps.length-1) state.stepIdx = 0;
+    renderRunInfo();
+    render();
+    if(window.renderAnalisis) window.renderAnalisis();
+  }catch(err){
+    alert('Gagal memuat ulang data: '+err.message);
+  }
+  if(btn){ btn.disabled=false; btn.textContent='⟳'; }
+}
+
+async function init(){
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = `Memuat data model untuk ${POINTS.length} titik (${STATION_COUNT} kecamatan/bandara + ${GRID_POINTS.length} grid)…`;
+  try{
+    state.pointsData = await fetchAll();
+    buildSteps();
+    document.getElementById('timeSlider').max = state.steps.length-1;
+    statusEl.style.display='none';
+    document.getElementById('content').style.display='block';
+    document.getElementById('mastheadSub').textContent =
+      `Wilayah Bima–Dompu — ${STATION_COUNT} titik kecamatan/bandara + ${GRID_POINTS.length} titik grid (~11km) = ${POINTS.length} sumber data — per 3 jam`;
+    initMap();
+    initProdukControls();
+    initEnsembleControls();
+    renderRunInfo();
+    render();
+    if(window.initAnalisis) window.initAnalisis();
+    if(window.initSinoptik) window.initSinoptik();
+  }catch(err){
+    statusEl.textContent = 'Gagal memuat data model: '+err.message+'. Periksa koneksi internet dan muat ulang.';
+    statusEl.classList.add('err');
+  }
+}
+init();
+</script>
+</body>
+</html>
