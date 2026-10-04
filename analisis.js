@@ -187,7 +187,8 @@ function parseBulletin(text){
 }
 function interpret(p){
   const items = [], add = (k,lab,val,side,txt)=> items.push({k,lab,val,side,txt});
-  if(p.soi!=null) add('soi','SOI',fmt(p.soi,1), p.soi>=7?'wet':(p.soi<=-7?'dry':'neu'), p.soi>=7?'mendukung peningkatan hujan':(p.soi<=-7?'fase El Niño — cenderung mengurangi hujan':'netral'));
+  if(p.soiStd!=null) add('soi','SOI (CPC)',fmt(p.soiStd,1), p.soiStd>=0.7?'wet':(p.soiStd<=-0.7?'dry':'neu'), p.soiStd>=0.7?'mendukung peningkatan hujan':(p.soiStd<=-0.7?'fase El Niño — cenderung mengurangi hujan':'netral'));
+  else if(p.soi!=null) add('soi','SOI',fmt(p.soi,1), p.soi>=7?'wet':(p.soi<=-7?'dry':'neu'), p.soi>=7?'mendukung peningkatan hujan':(p.soi<=-7?'fase El Niño — cenderung mengurangi hujan':'netral'));
   if(p.nino!=null) add('nino','Niño 3.4',fmt(p.nino,2), p.nino<=-0.8?'wet':(p.nino>=0.8?'dry':'neu'), p.nino<=-0.8?'La Niña — cenderung menambah hujan':(p.nino>=0.8?'El Niño — cenderung mengurangi hujan':'netral'));
   if(p.dmi!=null) add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
   if(p.mjoPhase!=null){
@@ -205,6 +206,31 @@ function dynOverall(items){
   if(dry===0 && wet===0) return { cls:'c-neutral', txt:'Faktor skala besar netral' };
   return { cls:'c-neutral', txt:'Sinyal skala besar campuran' };
 }
+// indeks otomatis dari NOAA (dinamika.js) — dasar; buletin yang ditempel menimpa per indeks
+function autoParams(){
+  const D = window.DINAMIKA; if(!D) return null;
+  const p = {};
+  if(D.nino34) p.nino = D.nino34.value;
+  if(D.soi) p.soiStd = D.soi.value;
+  if(D.dmi) p.dmi = D.dmi.value;
+  return p;
+}
+function mergedParams(b){
+  const a = autoParams() || {}, pb = b ? parseBulletin(b.text) : {};
+  const p = Object.assign({}, a);
+  Object.keys(pb).forEach(k=>{ if(pb[k]!=null && pb[k]!==false) p[k]=pb[k]; });
+  if(pb.soi!=null) p.soiStd = null;
+  return p;
+}
+function autoNote(b){
+  const D = window.DINAMIKA; if(!D) return '';
+  const bits = [];
+  const fromBul = k => b && parseBulletin(b.text)[k]!=null;
+  if(D.nino34 && !fromBul('nino')) bits.push(`Niño 3.4: ${D.nino34.src}, minggu ${D.nino34.date}`);
+  if(D.soi && !fromBul('soi')) bits.push(`SOI: ${D.soi.src}, bulan ${D.soi.month}`);
+  if(D.dmi && !fromBul('dmi')) bits.push(`DMI: ${D.dmi.src}, bulan ${D.dmi.month} (terlambat 1–2 bulan)`);
+  return bits.length ? `<div class="si-sub dim" style="margin-top:6px">Otomatis (bukan buletin BMKG): ${bits.join(' · ')}. Tempel buletin BMKG untuk menimpa dan menambah MJO, surge, belokan angin, SST.</div>` : '';
+}
 function bulletinFor(date){
   return load(KEY_DYN, []).filter(b=>b.date && b.date <= date).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
 }
@@ -214,17 +240,19 @@ function regionMention(p){
 }
 function renderDyn(date){
   const view = $('anDynView'); if(!view) return null;
-  const b = bulletinFor(date);
-  if(!b){ view.innerHTML = `<div class="si-sub">Belum ada buletin untuk tanggal ini. Tempel teks <b>Informasi Dinamika Atmosfer</b> BMKG di kotak bawah lalu simpan.</div>`; return null; }
-  const p = parseBulletin(b.text), items = interpret(p), ov = dynOverall(items), mn = regionMention(p);
+  const b = bulletinFor(date), auto = autoParams();
+  if(!b && !auto){ view.innerHTML = `<div class="si-sub">Belum ada data dinamika. Tempel teks <b>Informasi Dinamika Atmosfer</b> BMKG di kotak bawah lalu simpan.</div>`; return null; }
+  const p = mergedParams(b), items = interpret(p), ov = dynOverall(items), mn = regionMention(p);
   const tag = { wet:'c-good', dry:'c-warn', neu:'c-neutral' };
-  const age = Math.round((Date.parse(date)-Date.parse(b.date))/86400000);
-  view.innerHTML = `<div class="si-sub" style="margin-bottom:6px">Buletin tanggal <b>${dateLong(b.date,{day:'numeric',month:'long',year:'numeric'})}</b>${age>0?` <span style="color:var(--warn)">(${age} hari sebelum hari analisis — kondisi saat itu, bukan prakiraan)</span>`:''}</div>
-    <div class="an-chips">${items.map(i=>`<div class="an-chip"><div class="k">${i.lab}</div><div class="v">${i.val}</div><span class="si-chip ${tag[i.side]}">${i.txt}</span></div>`).join('')}</div>
-    ${ov?`<div style="margin:8px 0"><span class="si-chip ${ov.cls}">${ov.txt}</span></div>`:''}
-    <div class="si-sub" style="line-height:1.5">${mn.hit
+  const age = b ? Math.round((Date.parse(date)-Date.parse(b.date))/86400000) : 0;
+  view.innerHTML = (b ? `<div class="si-sub" style="margin-bottom:6px">Buletin tanggal <b>${dateLong(b.date,{day:'numeric',month:'long',year:'numeric'})}</b>${age>0?` <span style="color:var(--warn)">(${age} hari sebelum hari analisis — kondisi saat itu, bukan prakiraan)</span>`:''}</div>`
+      : `<div class="si-sub" style="margin-bottom:6px">Belum ada buletin BMKG untuk tanggal ini — memakai indeks otomatis.</div>`)
+    + `<div class="an-chips">${items.map(i=>`<div class="an-chip"><div class="k">${i.lab}</div><div class="v">${i.val}</div><span class="si-chip ${tag[i.side]}">${i.txt}</span></div>`).join('')}</div>`
+    + (ov?`<div style="margin:8px 0"><span class="si-chip ${ov.cls}">${ov.txt}</span></div>`:'')
+    + (b ? `<div class="si-sub" style="line-height:1.5">${mn.hit
       ? '⚠ Buletin menyebut wilayah NTB/Nusa Tenggara pada belokan/konvergensi/SST/gelombang: <i>'+esc(mn.text.slice(0,240))+'</i>'
-      : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin <b>tidak mencakup NTB</b> (Bima–Dompu).'}</div>`;
+      : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin <b>tidak mencakup NTB</b> (Bima–Dompu).'}</div>` : '')
+    + autoNote(b);
   return { p, items, ov, mn, b };
 }
 function initDynControls(){
@@ -307,14 +335,15 @@ function buildNarrative(date, reg, dyn, lv, R){
   if(dyn){
     const it = Object.fromEntries(dyn.items.map(i=>[i.k,i]));
     const bits = [];
-    if(it.soi) bits.push(`SOI ${it.soi.val}`); if(it.nino) bits.push(`Niño 3.4 ${it.nino.val}`); if(it.dmi) bits.push(`DMI ${it.dmi.val}`);
-    let s = `Dinamika atmosfer (buletin ${dateLong(dyn.b.date,{day:'numeric',month:'long'})}): ${bits.join(', ')}`;
+    if(it.soi) bits.push(`${it.soi.lab} ${it.soi.val}`); if(it.nino) bits.push(`Niño 3.4 ${it.nino.val}`); if(it.dmi) bits.push(`DMI ${it.dmi.val}`);
+    let s = `Dinamika atmosfer (${dyn.b ? 'buletin '+dateLong(dyn.b.date,{day:'numeric',month:'long'}) : 'indeks otomatis NOAA, bukan buletin BMKG'}): ${bits.join(', ')}`;
     if(dyn.ov) s += ` — ${dyn.ov.txt.toLowerCase()}`;
     if(it.mjo) s += `; MJO ${it.mjo.val}, ${it.mjo.txt}`;
     if(it.surge) s += `; indeks surge ${it.surge.val} (${it.surge.txt})`;
-    s += dyn.mn.hit ? '. Buletin menyebut wilayah NTB pada belokan/konvergensi/SST/gelombang atmosfer.' : '. Belokan angin/konvergensi dan SST anomali pada buletin tidak mencakup NTB.';
+    if(!dyn.b) s += '.';
+    else s += dyn.mn.hit ? '. Buletin menyebut wilayah NTB pada belokan/konvergensi/SST/gelombang atmosfer.' : '. Belokan angin/konvergensi dan SST anomali pada buletin tidak mencakup NTB.';
     par.push(s);
-  } else par.push('Dinamika atmosfer: belum ada buletin yang disimpan untuk tanggal ini.');
+  } else par.push('Dinamika atmosfer: belum ada data.');
   if(lv){
     const L = Object.fromEntries(lv.levels.map(l=>[l.f,l]));
     const f = k=> `${L[k].lab} ${L[k].cls||'—'} (RH ${fmt(L[k].avgMean)}%)`;
