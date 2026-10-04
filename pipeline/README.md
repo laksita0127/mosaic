@@ -199,3 +199,14 @@ Pipeline kedua, jauh lebih ringan (Python + numpy, tanpa GRIB), menulis **`../en
   `ecmwf_ens.js` (GRIB, 15–20 skenario).
 * Kunci API berbayar (opsional): set secret `OPENMETEO_API_KEY` → otomatis pakai host `customer-ensemble-api`.
 * Uji cepat: `python ingest_openmeteo_ens.py --limit-points 8 --models gefs --out %TEMP%\tes.js`
+
+---
+
+## 9. Koreksi ketinggian suhu (ENS GRIB)
+
+Suhu ECMWF 0,25° adalah suhu pada orografi sel model (±27 km), bukan di titik. `make_elevation.py` (jalankan
+sekali; hasilnya `elevation.json` ikut di repo) menyimpan selisih `dz = DEM titik − orografi model` per titik
+(bilinear 4 sel, sama dengan ekstraksi suhu). `ingest_ecmwf_ens.py` lalu menambah `−0,0065 × dz` °C pada semua
+skenario (flag `ELEVATION_CORRECTION`, `LAPSE_K_PER_M` di `config.py`; 6,5 K/km = downscaling Open-Meteo pada
+tabel deterministik). Contoh: Tambora (1.476 m vs 970 m) −3,3 °C; Bandara WADB (2 m vs 232 m) +1,5 °C.
+Median |dz| 159 m (≈1 °C), maks 865 m. Berlaku mulai run Actions berikutnya.

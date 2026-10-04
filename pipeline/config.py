@@ -44,6 +44,11 @@ PRECIP_POE_THRESHOLDS_MM = [0.5, 1, 2, 5, 10, 20, 50]
 # Persentil yang disimpan untuk tiap variabel.
 PERCENTILES = [10, 25, 50, 75, 90]
 
+# Koreksi ketinggian suhu: T_titik = T_model - LAPSE * (dem_titik - orografi_model). Selisih ketinggian per titik
+# ada di elevation.json (dibuat make_elevation.py). 6.5 K/km sama dengan downscaling Open-Meteo (tabel deterministik).
+ELEVATION_CORRECTION = True
+LAPSE_K_PER_M = 0.0065
+
 # Simpan nilai mentah tiap member untuk curah hujan (dipakai plot sebaran).
 # Suhu/angin hanya disimpan ringkasannya supaya file kecil.
 KEEP_RAW_MEMBERS_PRECIP = True

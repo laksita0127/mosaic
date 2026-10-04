@@ -1836,7 +1836,7 @@ function renderEcmwfEns(){
   wrap.style.display = 'block';
   wrap.innerHTML = `
     <div class="param-head">ECMWF ${nMem} skenario — ${PARAM_DEF[param].label} (${unit}) per 3 jam · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
-    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">Batang ungu = kisaran wajar (8 dari 10 skenario); garis tegak tengah = perkiraan tengah; dua garis abu tipis = skenario paling kering & paling basah. Panjang batang tidak dibandingkan lurus antar baris (skala per baris).</div>
+    <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);">Batang ungu = kisaran wajar (8 dari 10 skenario); garis tegak tengah = perkiraan tengah; dua garis abu tipis = skenario paling kering & paling basah. Panjang batang tidak dibandingkan lurus antar baris (skala per baris).${param==='suhu' && ECMWF_GRIB && ECMWF_GRIB.temp_corrected ? ' <b>Suhu sudah dikoreksi ketinggian titik</b> (6,5 °C/km, selisih DEM vs orografi model).' : ''}</div>
     <table class="ens-table">
       <thead><tr><th>Jam</th><th>Kisaran wajar</th><th>Nilai</th></tr></thead>
       <tbody>${rows}</tbody>

@@ -349,6 +349,17 @@ def collect_members(run_kwargs, members, add_control, source, cache_dir, keep_gr
     return per_param, valid_ref
 
 
+def _load_elev():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "elevation.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa
+        return {}
+
+
+ELEV = _load_elev()
+
+
 def build_payload(per_param, run_utc, horizon_h):
     steps_local = build_local_steps(run_utc, horizon_h)
     step_strs = [fmt_step(t) for t in steps_local]
@@ -384,9 +395,10 @@ def build_payload(per_param, run_utc, horizon_h):
         # ---- suhu per member (sesaat, interp) ----
         temp_members = []
         if have_temp:
+            corr = -C.LAPSE_K_PER_M * ELEV.get(sid, {}).get("dz", 0) if C.ELEVATION_CORRECTION else 0.0
             for mid in member_ids:
                 vt, arr = per_param["2t"][mid]
-                k_series = [float(arr[k, pi]) - 273.15 if k < arr.shape[0] else None for k in range(len(vt))]
+                k_series = [float(arr[k, pi]) - 273.15 + corr if k < arr.shape[0] else None for k in range(len(vt))]
                 temp_members.append([interp_instant(vt, k_series, t.astimezone(UTC)) for t in steps_local])
         else:
             temp_members = [[None] * nstep]
@@ -469,6 +481,7 @@ def build_payload(per_param, run_utc, horizon_h):
         "generated": dt.datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "timezone": "Asia/Makassar (UTC+8)",
         "n_members": n_members,
+        "temp_corrected": bool(C.ELEVATION_CORRECTION and ELEV),
         "horizon_hours": horizon_h,
         "thresholds_mm": C.PRECIP_POE_THRESHOLDS_MM,
         "percentiles": C.PERCENTILES,
