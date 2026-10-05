@@ -242,7 +242,8 @@ const SynLayer = L.Layer.extend({
   onRemove(m){ m.off('moveend zoomend resize', this._h); this._c.remove(); },
   redraw(){
     const m = this._map; if(!m || !S) return;
-    const sz = m.getSize(), c = this._c; c.width = sz.x; c.height = sz.y;
+    const sz = m.getSize(), c = this._c; if(!sz.x || !sz.y) return;          // wadah belum punya ukuran (tersembunyi / tata letak belum siap)
+    c.width = sz.x; c.height = sz.y;
     L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0,0]));
     const ctx = c.getContext('2d'); ctx.clearRect(0,0,sz.x,sz.y);
     const si = +stepSel.selectedIndex, lev = levelSel.value;
@@ -274,6 +275,18 @@ function hover(e){
 }
 function init(){
   const box = $('anSyn'); if(!box) return;
+  const mapEl = $('synMap');
+  if(mapEl && !mapEl.clientWidth){          // wadah belum tampil / belum punya ukuran -> tunggu sampai ada (ResizeObserver + polling cadangan)
+    let ro = null, tm = null, done = false;
+    const go = ()=>{ if(done || !mapEl.clientWidth) return; done = true; clearInterval(tm); if(ro) ro.disconnect(); build(); };
+    if(window.ResizeObserver){ ro = new ResizeObserver(go); ro.observe(mapEl); }
+    tm = setInterval(go, 500);
+    return;
+  }
+  build();
+}
+function build(){
+  const box = $('anSyn'); if(!box) return;
   S = window.SINOPTIK;
   if(!S || S.fmt !== 'packed1'){ $('synBody').innerHTML = '<div class="si-sub">Data sinoptik belum tersedia / format lama — jalankan workflow "Update peta sinoptik" lalu muat ulang.</div>'; return; }
   stepSel = $('synStep'); levelSel = $('synLevel'); dynSel = $('synDyn'); rhChk = $('synRH'); isoChk = $('synIso'); strChk = $('synStr');
@@ -282,9 +295,9 @@ function init(){
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution:'Tiles &copy; Esri · ECMWF open data (CC BY 4.0)', maxZoom:10 }).addTo(map);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom:10 }).addTo(map);
   [['Bima',-8.5418,118.6922],['Dompu',-8.5401,118.4647]].forEach(([n,la,lo])=>L.circleMarker([la,lo],{radius:4,color:'#b0402f',weight:2,fillColor:'#fff',fillOpacity:1}).bindTooltip(n).addTo(map));
-  layer = new SynLayer().addTo(map);
   const fresh = new Date(S.generated.replace('Z',':00Z'));
   $('synInfo').textContent = `${S.model} · run ${S.run.slice(0,10)} ${S.run.slice(11,13)}Z · diperbarui ${fresh.toISOString().slice(0,16).replace('T',' ')} UTC`;
+  layer = new SynLayer().addTo(map);
   const refresh = ()=>layer.redraw();
   [stepSel, rhChk, isoChk, strChk, dynSel].forEach(e=>e.addEventListener('change', refresh));
   levelSel.addEventListener('change', ()=>{ isoChk.checked = levelSel.value==='10'; refresh(); });   // isobar MSL hanya bermakna di permukaan
@@ -294,6 +307,7 @@ function init(){
   $('synNext').onclick = ()=>{ stepSel.selectedIndex = Math.min(stepSel.options.length-1, stepSel.selectedIndex+1); refresh(); };
   map.on('mousemove', hover);
   setTimeout(()=>{ map.invalidateSize(); layer.redraw(); }, 200);
+  if(window.ResizeObserver) new ResizeObserver(()=>{ map.invalidateSize(); layer.redraw(); }).observe($('synMap'));   // ukuran berubah / baru tampil
 }
 window.initSinoptik = init;
 })();
