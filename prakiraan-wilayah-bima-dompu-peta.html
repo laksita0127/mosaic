@@ -421,15 +421,19 @@
       <div class="an-card">
         <div class="syn-ctl">
           <label class="chk">Siklus <select id="tafCycle"></select></label>
+          <label class="chk">Sumber data <select id="tafSrc"></select></label>
           <label class="chk">Validitas <select id="tafHours"><option value="12">12 jam</option><option value="24" selected>24 jam</option><option value="30">30 jam</option></select></label>
           <label class="chk"><input type="checkbox" id="tafLight"> sertakan -RA (hujan ringan)</label>
           <label class="chk"><input type="checkbox" id="tafTX"> sertakan TX/TN</label>
+          <label class="chk"><input type="checkbox" id="tafClim" checked> koreksi lokal dari METAR beberapa hari</label>
         </div>
         <details style="margin-top:8px" open>
-          <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">METAR/SPECI WADB terbaru (tempel dari sistem stasiun) — dipakai untuk kondisi awal</summary>
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">METAR/SPECI WADB (tempel dari sistem stasiun) — boleh banyak baris / beberapa hari</summary>
           <textarea id="tafMetar" placeholder="METAR WADB 041000Z 12006KT 9999 FEW020 31/24 Q1010 NOSIG=" style="width:100%;box-sizing:border-box;min-height:54px;margin-top:6px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px"></textarea>
           <button class="produk-btn" id="tafMetarSave" type="button" style="margin-top:6px">Simpan METAR</button>
-          <span class="si-sub dim"> METAR bandara lain tidak dipakai. Hanya dipakai bila ≤3,5 jam sebelum validitas.</span>
+          <button class="produk-btn" id="tafMetarClear" type="button" style="margin-top:6px">Hapus semua</button>
+          <div id="tafMetarInfo" class="si-sub" style="margin-top:4px"></div>
+          <div class="si-sub dim" style="line-height:1.5">METAR terbaru (≤3,5 jam sebelum validitas) menentukan kondisi awal. METAR beberapa hari (≥3 hari) dipakai untuk koreksi lokal: pola angin & visibilitas yang biasa tercatat per jam, dan frekuensi TS per slot 3 jam (menambah PROB30 TEMPO TSRA bila TS tercatat ≥2 hari pada jam itu). Disimpan di browser ini. METAR bandara lain tidak dipakai.</div>
         </details>
         <div id="tafMeta" class="si-sub" style="color:var(--warn);margin-top:6px"></div>
         <textarea id="tafOut" spellcheck="false" style="width:100%;box-sizing:border-box;min-height:150px;margin-top:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6"></textarea>
@@ -440,6 +444,7 @@
           <span id="tafNote" class="si-sub"></span>
         </div>
         <div id="tafChecks" style="margin-top:8px"></div>
+        <div id="tafAgree" style="margin-top:8px"></div>
         <div id="tafBasis" style="margin-top:8px"></div>
         <div class="si-sub" style="margin-top:8px;line-height:1.5;color:var(--bad)"><b>DRAF otomatis berbasis model — bukan produk resmi BMKG.</b> Sesuai SOP, senior forecaster wajib memeriksa sandi dan kendali mutu sebelum TAF diterbitkan (kirim 1 jam sebelum validitas, paling lambat 15 menit setelahnya), dengan mempertimbangkan METAR, radar, dan satelit.</div>
       </div>

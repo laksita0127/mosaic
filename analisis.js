@@ -379,7 +379,21 @@ function renderWaveAuto(reg){
   const rows = ['mjo','kelvin','er','low'].map(k=>`<tr><td style="text-align:left"><b>${WAVE_NAMES[k]}</b></td>${dates.map(d=>chip(W.days[d][k] && W.days[d][k][pt])).join('')}</tr>`).join('');
   el.innerHTML = `<div class="si-sub" style="margin:8px 0 4px"><b>Analisis otomatis dari peta OLR di atas</b> — titik ${pt==='dompu'?'Dompu':'Bima'}; gambar NCICS ${W.image_time.replace('T',' ').replace('Z',' UTC')}</div>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="si-sub dim" style="margin-top:4px;line-height:1.5">"Di dalam / dekat" = kontur garis penuh (fase konvektif aktif, OLR tersaring ≤ −12 W/m²) menutupi atau ≤3° dari titik; "mendekat" ≤8°; "penekan" = hanya garis putus (fase kering) di dekat titik. Ini pembacaan otomatis dari gambar (perkiraan) — cocokkan dengan peta, penilaian prakirawan di bawah tetap yang utama.</div>`;
+    <details open style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Cara membaca tabel ini</summary>
+      <div class="si-sub" style="line-height:1.6;margin-top:4px">
+        Peta NCICS menyaring OLR (tanda tebal tipisnya awan) untuk tiap jenis gelombang, lalu menarik kontur tiap 12 W/m².<br>
+        <b>Garis penuh</b> = fase <b>aktif</b>: awan konvektif lebih banyak dari normal → mendukung hujan.<br>
+        <b>Garis putus</b> = fase <b>penekan</b>: lebih cerah/kering dari normal → menghambat hujan.<br>
+        Status dihitung dari jarak titik ${pt==='dompu'?'Dompu':'Bima'} ke garis penuh terdekat (1° ≈ 110 km; angka kecil di bawah status = jaraknya):
+        <ul style="margin:4px 0 0 18px;padding:0">
+          <li><span class="si-chip c-good">di dalam</span> titik berada di dalam lingkaran garis penuh — fase aktif sedang di atas NTB, mendukung hujan.</li>
+          <li><span class="si-chip c-good">dekat</span> garis penuh ≤3° (±330 km) — fase aktif ada di sekitar NTB.</li>
+          <li><span class="si-chip c-neutral">mendekat</span> garis penuh ≤8° (±900 km) — bisa bergeser ke NTB, pantau.</li>
+          <li><span class="si-chip c-neutral">jauh</span> tidak ada garis penuh dalam 8° — gelombang itu tidak berpengaruh.</li>
+          <li><span class="si-chip c-warn">penekan</span> tidak ada garis penuh di dekat, tapi ada garis putus ≤3° — fase kering sedang menekan awan, cenderung menghambat hujan.</li>
+        </ul>
+        <span class="dim">Pembacaan otomatis dari gambar (perkiraan; kontur yang terpotong tepi panel bisa kurang tepat). Cocokkan dengan peta di atas — penilaian prakirawan di bawah tetap yang utama.</span>
+      </div></details>`;
 }
 
 /* ---------- D. narasi otomatis: faktor pendukung / penghambat + kesimpulan 3 hari ---------- */
@@ -534,6 +548,27 @@ function buildNarrative(date, reg, dyn, lv, R){
     if(dyn.b) out.push(dyn.mn.hit ? 'Belokan angin/konvergensi/SST/gelombang pada buletin menyebut wilayah NTB (mendukung).' : 'Belokan angin/konvergensi, gelombang atmosfer, dan SST anomali pada buletin tidak mencakup NTB.');
     if(dyn.ov) out.push(`Ringkasan: ${dyn.ov.txt.toLowerCase()}.`);
   } else out.push('  Belum ada data dinamika atmosfer.');
+  // gelombang atmosfer dari peta OLR NCICS (MJO, Kelvin, Rossby ekuator, Low) — penjelasan + status per hari
+  const wdays = days.map(d=>({ d, w: waveAuto(d, reg), man: waveManual(d) })).filter(x=>x.w);
+  if(wdays.length){
+    out.push('');
+    out.push(`Gelombang atmosfer (peta OLR NCICS, titik ${wavePoint(reg)==='dompu'?'Dompu':'Bima'}):`);
+    out.push('  Cara membaca: garis penuh = fase aktif (awan konvektif lebih banyak dari normal, mendukung hujan); garis putus = fase penekan (lebih cerah/kering, menghambat hujan).');
+    out.push('  "di dalam" = fase aktif menutupi NTB; "dekat" = ≤3° (±330 km); "mendekat" = ≤8° (±900 km), bisa bergeser ke NTB; "jauh" = tidak berpengaruh; "penekan" = fase kering di dekat NTB.');
+    const lab = (v)=> !v ? '—' : (v.status==='inside' ? 'di dalam' : v.status==='near' ? 'dekat' : v.status==='approaching' ? 'mendekat' : (v.suppressed_near ? 'penekan' : 'jauh')) + (v.dist!=null && v.status!=='inside' ? ` (±${fmt(v.dist,0)}°)` : '');
+    wdays.forEach(x=>{
+      out.push(`  ${dShort(x.d)}: ` + ['mjo','kelvin','er','low'].map(k=>{
+        const man = (k==='kelvin'||k==='er') ? x.man[k] : null;
+        return `${WAVE_NAMES[k].replace(' (frek. rendah)','')} ${man ? WAVE_TXT[man]+' (penilaian prakirawan)' : lab(x.w[k])}`;
+      }).join('; ') + '.');
+    });
+    const act = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; const man = (k==='kelvin'||k==='er') ? x.man[k] : null; if(man || (v && (v.status==='inside' || v.status==='near'))) act.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    const sup = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; if(v && v.suppressed_near && v.status==='far') sup.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    const appr = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; if(v && v.status==='approaching') appr.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    if(act.length) out.push(`  Kesimpulan gelombang: fase aktif berada di dalam/dekat NTB — ${act.join(', ')} → mendukung peningkatan awan konvektif dan hujan.`);
+    else if(appr.length) out.push(`  Kesimpulan gelombang: belum ada fase aktif di dekat NTB, tetapi ${appr.join(', ')} mendekat (≤8°) → pantau, dapat meningkatkan peluang hujan bila bergeser ke NTB.`);
+    else out.push('  Kesimpulan gelombang: tidak ada gelombang (MJO, Kelvin, Rossby ekuator, Low) dengan fase aktif di dekat NTB pada periode ini → faktor gelombang tidak mendukung hujan.' + (sup.length ? ` Fase penekan (kering) terdeteksi di dekat NTB: ${sup.join(', ')}.` : ''));
+  }
   out.push('');
   // 2. per hari
   const infos = [];

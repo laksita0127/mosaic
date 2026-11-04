@@ -23,6 +23,11 @@ const hhmmUTC = ms => { const d = new Date(ms); return `${pad(d.getUTCDate())}/$
 const witaStr = ms => { const d = new Date(ms + 8*H); return `${pad(d.getUTCDate())}/${pad(d.getUTCHours())}.00 WITA`; };
 
 /* ---------------- data bandara ---------------- */
+const MODEL_LABEL = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS' };
+const ENSKEY = { ecmwf_ifs025:'ecmwf', ecmwf_aifs025_single:'aifs', gfs_seamless:'gefs', icon_seamless:'icon' };
+let ACTIVE = null;                                // model yang dipakai (null = semua / kesepakatan)
+const ACT = () => ACTIVE || AP.models;
+function withModels(list, fn){ const old = ACTIVE; ACTIVE = list; try{ return fn(); } finally { ACTIVE = old; } }
 let AP = null;                                   // { t:[epoch UTC ms], idx:Map, models:[...] }
 function loadAirport(){
   const D = window.DET_DATA && window.DET_DATA.airport;
@@ -32,20 +37,26 @@ function loadAirport(){
   return { t, idx, h:D.hourly, models: window.DET_DATA.models };
 }
 const col = (v, m, i) => { const a = AP.h[`${v}_${m}`]; return a ? a[i] : null; };
-const meanVar = (v, i) => avg(AP.models.map(m=>col(v,m,i)));
+const meanVar = (v, i) => avg(ACT().map(m=>col(v,m,i)));
 function windAt(i){                               // vektor rata² model (kt), hembusan
   let sx=0, sy=0, n=0, s=0;
-  AP.models.forEach(m=>{ const sp = col('wind_speed_10m',m,i), d = col('wind_direction_10m',m,i); if(sp==null||d==null) return;
+  ACT().forEach(m=>{ const sp = col('wind_speed_10m',m,i), d = col('wind_direction_10m',m,i); if(sp==null||d==null) return;
     const r = d*Math.PI/180; sx += sp*Math.sin(r); sy += sp*Math.cos(r); s += sp; n++; });
   if(!n) return null;
   const spd = Math.hypot(sx/n, sy/n)*KT, mean = s/n*KT, dir = (Math.atan2(sx,sy)*180/Math.PI+360)%360;
   const R = Math.hypot(sx/n, sy/n)/(s/n || 1);                         // konsistensi arah (0..1)
   return { dir, spd: Math.max(spd, mean*0.6), mean, R, gust: (()=>{ const g = meanVar('wind_gusts_10m', i); return g==null ? null : g*KT; })() };
 }
-function ensPoe(ms){                              // peluang gabungan ≥1/5/10/20 mm per 3 jam untuk slot 3-jam UTC yang memuat jam ini
-  if(typeof ensPooledAt !== 'function' || !window.ENS_MULTI) return null;
+function ensPoe(ms){                              // peluang ≥1/5/10/20 mm per 3 jam untuk slot 3-jam UTC yang memuat jam ini (gabungan, atau per model bila satu model dipilih)
+  if(!window.ENS_MULTI) return null;
   const d = new Date(ms), h = d.getUTCHours(), start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h - h%3);
   const w = new Date(start + 8*H), key = `${w.getUTCFullYear()}-${pad(w.getUTCMonth()+1)}-${pad(w.getUTCDate())}T${pad(w.getUTCHours())}:00`;
+  const act = ACT();
+  if(act.length === 1 && typeof ensModelAt === 'function'){
+    const e = ensModelAt(ENSKEY[act[0]], 'bandara', key), po = e && e.precip && e.precip.poe;
+    return po && po['1']!=null ? { p1:po['1'], p5:po['5'], p10:po['10'], p20:po['20'], slot:start } : null;
+  }
+  if(typeof ensPooledAt !== 'function') return null;
   const p = ensPooledAt('bandara', key);
   return p && p.nm>=2 && p.poe ? { p1:p.poe['1'], p5:p.poe['5'], p10:p.poe['10'], p20:p.poe['20'], slot:start } : null;
 }
@@ -56,7 +67,7 @@ function layerFrom(cover, base){
   const amt = cover>=87.5 ? 'OVC' : (cover>=50 ? 'BKN' : (cover>=25 ? 'SCT' : (cover>=12.5 ? 'FEW' : null)));
   return amt ? { amt, base } : null;
 }
-function stateAt(ms, opt){
+function stateAt(ms, opt, noClim){
   const i = AP.idx.get(ms); if(i==null) return null;
   const j = i+1;                                                   // precip Open-Meteo = jam sebelumnya -> jam [i,i+1) = nilai di i+1
   const w = windAt(i) || { dir:0, spd:0, mean:0, R:1, gust:null };
@@ -64,7 +75,7 @@ function stateAt(ms, opt){
   const cape = meanVar('cape', i) ?? 0, T = meanVar('temperature_2m', i), Td = meanVar('dew_point_2m', i), RH = meanVar('relative_humidity_2m', i) ?? 70;
   const sm = v => avg([i-1,i,i+1].map(k=> (k>=0 && k<AP.t.length) ? meanVar(v,k) : null));      // haluskan 3 jam agar awan tidak berkedip
   const cl = sm('cloud_cover_low') ?? 0, cm = sm('cloud_cover_mid') ?? 0;
-  const codes = AP.models.map(m=>col('weather_code', m, j)).filter(c=>c!=null);
+  const codes = ACT().map(m=>col('weather_code', m, j)).filter(c=>c!=null);
   const tsVotes = codes.filter(c=>c>=95).length;
   const poe = ensPoe(ms);
   // --- cuaca signifikan ---
@@ -79,7 +90,7 @@ function stateAt(ms, opt){
   let vis = 9999, br = false;
   if(cls===3) vis = 4000; else if(cls===2) vis = 3000; else if(cls===1) vis = 5000; else if(cls===0.5) vis = 8000;
   if(!cls && RH>=96 && w.spd<4){ vis = 5000; br = true; }
-  const gv = AP.h['visibility_gfs_seamless'] ? AP.h['visibility_gfs_seamless'][i] : null;
+  const gv = (AP.h['visibility_gfs_seamless'] && ACT().includes('gfs_seamless')) ? AP.h['visibility_gfs_seamless'][i] : null;
   if(gv!=null && gv<4500) vis = Math.min(vis, gv);
   vis = roundVis(vis);
   if(br && !wx) wx = 'BR';
@@ -92,14 +103,14 @@ function stateAt(ms, opt){
   if(ts) conv = { amt: cls>=2 ? 'SCT' : 'FEW', base: lcl, type:'CB' };
   else if(cape>=800 && rain>=0.5) conv = { amt:'FEW', base: lcl, type:'TCU' };
   const ceil = (()=>{ const c = layers.find(l=>l.amt==='BKN'||l.amt==='OVC'); return c ? c.base : 99999; })();
-  return { ms, w, wx, cls, vis, layers, conv, ceil, cape, rain, poe, T, Td, RH, ts };
+  const st = { ms, w, wx, cls, vis, layers, conv, ceil, cape, rain, poe, T, Td, RH, ts };
+  return noClim ? st : applyClim(st);
 }
 
 /* ---------------- METAR ---------------- */
-function parseMetar(txt){
-  const lines = txt.split(/\n+/).map(l=>l.trim()).filter(l=>/\b(METAR|SPECI)\b/.test(l) && new RegExp('\\b'+ICAO+'\\b').test(l));
-  if(!lines.length) return null;
-  const ln = lines[lines.length-1].replace(/=/g,'').split(/\s+/), r = { raw: ln.join(' '), layers:[], wx:[], vis:null, w:null, ms:null };
+const KEY_DB = 'mosaic-metar-db';
+function parseMetarLine(line){
+  const ln = line.replace(/=/g,'').trim().split(/\s+/), r = { raw: ln.join(' '), layers:[], wx:[], vis:null, w:null };
   ln.forEach(tk=>{
     let m;
     if((m = tk.match(/^(\d{2})(\d{2})(\d{2})Z$/))) r.t = { d:+m[1], h:+m[2], m:+m[3] };
@@ -112,6 +123,68 @@ function parseMetar(txt){
     else if((m = tk.match(/^(M?\d{2})\/(M?\d{2})$/))) r.temp = m[1], r.dew = m[2];
   });
   return r;
+}
+function inferMs(t, ref){                          // tanggal+jam tanpa bulan -> epoch terdekat (<= ref+2 jam)
+  const d = new Date(ref); let best = null;
+  [-1,0,1].forEach(dm=>{ const c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth()+dm, t.d, t.h, t.m); if(c <= ref + 2*H && (best==null || c > best)) best = c; });
+  return best;
+}
+function parseMetarAll(txt, ref){                  // semua baris METAR/SPECI WADB di kotak
+  const out = [];
+  txt.split(/\n+/).map(l=>l.trim()).filter(l=>/\b(METAR|SPECI)\b/.test(l) && new RegExp('\\b'+ICAO+'\\b').test(l)).forEach(l=>{
+    const r = parseMetarLine(l); if(!r.t) return;
+    r.ms = inferMs(r.t, ref); if(r.ms!=null) out.push(r);
+  });
+  return out;
+}
+function parseMetar(txt){ const a = parseMetarAll(txt, Date.now()); return a.length ? a[a.length-1] : null; }
+const loadDB = () => load(KEY_DB, []);
+function mergeDB(list){
+  const db = loadDB(), key = m => m.ms + '|' + m.raw, have = new Set(db.map(key));
+  list.forEach(m=>{ if(!have.has(key(m))){ db.push(m); have.add(key(m)); } });
+  const cut = Date.now() - 45*24*H, keep = db.filter(m=>m.ms >= cut).sort((a,b)=>a.ms-b.ms);
+  save(KEY_DB, keep); return keep;
+}
+let CLIM = null;                                    // klimatologi lokal dari METAR beberapa hari
+function computeClim(db, now){
+  const rows = db.filter(m=>m.ms >= now - 14*24*H && m.ms <= now + H);
+  const days = new Set(rows.map(m=>Math.floor(m.ms/(24*H))));
+  if(days.size < 3) return null;
+  const byHour = {};
+  rows.forEach(m=>{ const hh = new Date(m.ms).getUTCHours(); (byHour[hh] = byHour[hh] || []).push(m); });
+  const out = { days: days.size, n: rows.length, byHour: {}, tsDays: {}, from: rows[0].ms, to: rows[rows.length-1].ms };
+  Object.keys(byHour).forEach(hh=>{
+    const arr = byHour[hh], nd = new Set(arr.map(m=>Math.floor(m.ms/(24*H)))).size; if(nd < 3) return;
+    const ws = arr.filter(m=>m.w), spd = ws.map(m=>m.w.spd).sort((a,b)=>a-b);
+    let sx=0, sy=0, sw=0, nd2=0;
+    ws.forEach(m=>{ if(m.w.dir!=null){ const r = m.w.dir*Math.PI/180; sx += m.w.spd*Math.sin(r); sy += m.w.spd*Math.cos(r); sw += m.w.spd; nd2++; } });
+    const R = sw ? Math.hypot(sx/nd2, sy/nd2)/(sw/nd2) : 0;
+    const bad = arr.filter(m=>m.vis!=null && m.vis < 9000), tokens = {};
+    bad.forEach(m=>m.wx.forEach(t=>{ const k = /BR|HZ|FG|FU/.exec(t); if(k) tokens[k[0]] = (tokens[k[0]]||0)+1; }));
+    const tok = Object.keys(tokens).sort((a,b)=>tokens[b]-tokens[a])[0] || null;
+    out.byHour[hh] = { n: nd, spd: spd.length ? spd[Math.floor(spd.length/2)] : 0, dir: nd2 ? (Math.atan2(sx,sy)*180/Math.PI+360)%360 : null, R,
+      visShare: bad.length/arr.length, visMed: bad.length ? bad.map(m=>m.vis).sort((a,b)=>a-b)[Math.floor(bad.length/2)] : null, tok };
+  });
+  for(let slot=0; slot<24; slot+=3){
+    const ds = new Set(rows.filter(m=>{ const h = new Date(m.ms).getUTCHours(); return h>=slot && h<slot+3 && m.wx.some(t=>/TS/.test(t)); }).map(m=>Math.floor(m.ms/(24*H))));
+    out.tsDays[slot] = ds.size;
+  }
+  return out;
+}
+function applyClim(s){
+  if(!CLIM) return s;
+  const hh = new Date(s.ms).getUTCHours(), c = CLIM.byHour[hh]; if(!c) return s;
+  const lam = c.n >= 5 ? 0.5 : 0.35, w = s.w;
+  const mv = [w.spd*Math.sin(w.dir*Math.PI/180), w.spd*Math.cos(w.dir*Math.PI/180)];
+  let nw;
+  if(c.dir!=null && c.R >= 0.5){
+    const ov = [c.spd*Math.sin(c.dir*Math.PI/180), c.spd*Math.cos(c.dir*Math.PI/180)];
+    const vx = (1-lam)*mv[0] + lam*ov[0], vy = (1-lam)*mv[1] + lam*ov[1];
+    nw = { dir:(Math.atan2(vx,vy)*180/Math.PI+360)%360, spd: Math.max(Math.hypot(vx,vy), (1-lam)*w.spd + lam*c.spd*0.8), mean:w.mean, R: Math.max(w.R, 0.5), gust:w.gust };
+  } else nw = Object.assign({}, w, { spd: (1-lam)*w.spd + lam*c.spd });
+  const o = Object.assign({}, s, { w: nw, climHour: hh });
+  if(c.tok && c.visShare >= 0.5 && c.visMed!=null && o.vis >= 9999 && o.cls < 1){ o.vis = roundVis(c.visMed); if(!o.wx) o.wx = c.tok; }
+  return o;
 }
 function metarState(mt, base){                      // METAR -> bentuk keadaan jam yang sama
   const wxs = mt.wx.join(' '); const ts = /TS/.test(wxs);
@@ -177,7 +250,7 @@ function buildTaf(start, hours, opt, metar){
   for(let k=0;k<hours;k++){ const s = stateAt(start + k*H, opt); if(!s) return { err:`Data model bandara tidak mencakup ${witaStr(start + k*H)} — tunggu pembaruan data.` }; S.push(s); }
   const notes = [];
   if(metar){
-    const age = (start - metarMs(metar, start))/H;
+    const age = (start - metar.ms)/H;
     if(age <= 3.5 && age >= -1){ const ms = metarState(metar, S[0]); S[0] = Object.assign({}, ms, { ms:S[0].ms }); S[1] = Object.assign({}, metarState(metar, S[1]), { ms:S[1].ms });
       notes.push(`Kondisi awal mengikuti ${metar.raw.slice(0,90)} (2 jam pertama), lalu mengikuti konsensus model.`); }
     else notes.push('METAR yang ditempel terlalu lama/di luar jendela penerbitan — tidak dipakai.');
@@ -212,18 +285,22 @@ function buildTaf(start, hours, opt, metar){
   }
   // PROB30/40 TEMPO dari ensemble: peluang hujan sedang (>=5 mm/3 jam) 30–49% pada slot yang belum diprakirakan hujan
   for(let k=0;k<hours;k+=1){
-    const s = S[k], p = s.poe; if(!p) continue;
+    const s = S[k];
+    const dd = new Date(s.ms), slotMs = Date.UTC(dd.getUTCFullYear(), dd.getUTCMonth(), dd.getUTCDate(), dd.getUTCHours() - dd.getUTCHours()%3);
+    const p = s.poe || (CLIM ? { p1:0, p5:0, p10:0, p20:0, slot:slotMs } : null); if(!p) continue;
     const slotIdx = Math.floor((s.ms - start)/H);
-    if(s.cls >= 1 || p.p5 < 0.30 || p.p5 >= 0.50) continue;
+    const tsHist = CLIM ? (CLIM.tsDays[new Date(p.slot).getUTCHours()] || 0) : 0;
+    const byEns = p.p5 >= 0.30 && p.p5 < 0.50, byHist = tsHist >= 2 && s.cls < 3 && (p.p5 >= 0.15 || s.cape >= 600);
+    if(s.cls >= 1 || (!byEns && !byHist) || p.p5 >= 0.50) continue;
     if(k>0 && S[k-1].poe && S[k-1].poe.slot === p.slot && S[k-1].cls < 1 && S[k-1].poe.p5>=0.30) continue;      // sudah dicakup slot yang sama
     const from = Math.max(0, Math.floor((p.slot - start)/H)), to = Math.min(hours, from + 3);
     if(to - from < 1) continue;
     if(groups.some(g=> g.from < to && g.to > from)) continue;                                              // hindari tumpang tindih
-    const tsl = (p.p10 >= 0.2 && s.cape >= 800);
+    const tsl = (p.p10 >= 0.2 && s.cape >= 800) || (byHist && !byEns);
     const base = ref0; const st = Object.assign({}, base, { cls: tsl ? 3 : 1, wx: tsl ? 'TSRA' : 'RA', vis: tsl ? 4000 : 5000,
       conv: tsl ? { amt:'FEW', base: s.layers[0] ? s.layers[0].base : 1800, type:'CB' } : null,
       layers: [{ amt: tsl ? 'SCT' : 'BKN', base: s.layers[0] ? s.layers[0].base : 1800 }] });
-    groups.push({ type:'PROB', pct: p.p5 >= 0.40 ? 40 : 30, from, to, st, prev: base, why:['peluang ensemble'] });
+    groups.push({ type:'PROB', pct: (byEns && p.p5 >= 0.40) ? 40 : 30, from, to, st, prev: base, why:[byHist && !byEns ? `METAR ${CLIM.days} hari: TS tercatat ${tsHist} hari pada jam ini` : 'peluang ensemble'] });
   }
   groups.sort((a,b)=>a.from-b.from || (a.type==='PROB') - (b.type==='PROB'));
   return { S, groups, ref0, notes };
@@ -277,14 +354,6 @@ function signifWind(a,b){
   const as = Math.round(a.w.spd), bs = Math.round(b.w.spd), both = a.w.R>0.35 && b.w.R>0.35;
   return (both && dirDiff(a.w.dir,b.w.dir)>=60 && (as>=10 || bs>=10)) || Math.abs(as-bs)>=10 || ((gustOf(a)!=null)!==(gustOf(b)!=null) && Math.max(as,bs)>=15);
 }
-function metarMs(m, near){
-  if(!m.t) return near;
-  const d = new Date(near); let c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), m.t.d, m.t.h, m.t.m);
-  if(c - near > 15*24*H) c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth()-1, m.t.d, m.t.h, m.t.m);
-  if(near - c > 15*24*H) c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth()+1, m.t.d, m.t.h, m.t.m);
-  return c;
-}
-
 /* ---------------- pemeriksa aturan SOP ---------------- */
 function checkTaf(txt, hours){
   const res = [], ok = (c,msg)=> res.push({ ok:!!c, msg });
@@ -324,28 +393,83 @@ function cycles(){
   return out;
 }
 function defaultCycle(list){ const now = Date.now(); return list.find(s=> s - 0.75*H > now) || list[0]; }
+function latestMetar(db, start){                    // METAR terbaru yang masih relevan (<= 3,5 jam sebelum validitas)
+  const c = db.filter(m=>m.ms <= start + 30*60e3).sort((x,y)=>y.ms-x.ms)[0];
+  return c && (start - c.ms)/H <= 3.5 ? c : null;
+}
+function ranges(hs){                                // daftar jam -> "05–07Z, 10Z"
+  if(!hs.length) return '';
+  const out = []; let a = hs[0], b = hs[0];
+  hs.slice(1).forEach(h=>{ if(h === b+1 || (b===23 && h===0)) b = h; else { out.push([a,b]); a = b = h; } });
+  out.push([a,b]);
+  return out.map(([x,y])=> x===y ? pad(x)+'Z' : pad(x)+'–'+pad(y)+'Z').join(', ');
+}
+function agreementHTML(start, hours, opt, src){
+  const N = AP.models.length;
+  const per = AP.models.map(m=>withModels([m], ()=>Array.from({ length:hours }, (_,k)=>stateAt(start + k*H, opt, true))));
+  const lab = c => c===3 ? 'TS' : c===2 ? '+RA' : c===1 ? 'RA' : c===0.5 ? '–' : '·';
+  const bg = c => c===3 ? '#e7b3a8' : c===2 ? '#f0c9a5' : c===1 ? '#f6dcb0' : c===0.5 ? '#eef3d0' : 'transparent';
+  const hrs = Array.from({ length:hours }, (_,k)=> new Date(start + k*H).getUTCHours());
+  const rows = AP.models.map((m,mi)=>`<tr><td style="text-align:left"><b${src===m?' style="color:var(--accent)"':''}>${MODEL_LABEL[m]||m}${src===m?' ◀':''}</b></td>${per[mi].map(s=>`<td style="background:${bg(s.cls)};padding:2px 3px">${lab(s.cls)}</td>`).join('')}</tr>`).join('');
+  const splitHrs = [], windHrs = [];
+  const agr = Array.from({ length:hours }, (_,k)=>{
+    const n = per.filter(P=>P[k].cls >= 1).length;
+    if(n>0 && n<N) splitHrs.push(hrs[k]);
+    return n===0 || n===N ? `<td style="color:#2f7d5a;padding:2px 3px">✓</td>` : `<td style="color:var(--warn);font-weight:700;padding:2px 3px" title="${n} dari ${N} model menunjukkan hujan sedang/petir">*${n}/${N}</td>`;
+  }).join('');
+  const wag = Array.from({ length:hours }, (_,k)=>{
+    const ref = withModels(null, ()=>stateAt(start + k*H, opt, true)).w;
+    const act = per.map(P=>P[k].w).filter(w=>w.spd >= 6);
+    const bad = act.length >= 2 && act.some(w=>dirDiff(w.dir, ref.dir) > 60);
+    if(bad) windHrs.push(hrs[k]);
+    return bad ? `<td style="color:var(--warn);font-weight:700;padding:2px 3px" title="arah angin antar model berbeda >60°">*</td>` : `<td style="color:#2f7d5a;padding:2px 3px">✓</td>`;
+  }).join('');
+  const sum = [];
+  sum.push(splitHrs.length ? `Hujan sedang/petir: model <b>tidak sepakat</b> pada ${ranges(splitHrs)} (${splitHrs.length} jam)` : 'Hujan sedang/petir: model sepakat sepanjang periode');
+  sum.push(windHrs.length ? `Arah angin berbeda >60° antar model pada ${ranges(windHrs)}` : 'Arah angin: model sepakat');
+  return `<details open><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Kesepakatan model per jam (UTC)</summary>
+    <div class="produk-wrap" style="margin-top:6px"><table class="an-tbl" style="font-size:10.5px"><thead><tr><th></th>${hrs.map(h=>`<th style="padding:2px 3px">${pad(h)}</th>`).join('')}</tr></thead><tbody>${rows}
+      <tr><td style="text-align:left"><b>Hujan/petir</b></td>${agr}</tr><tr><td style="text-align:left"><b>Arah angin</b></td>${wag}</tr></tbody></table></div>
+    <div class="si-sub" style="margin-top:4px;line-height:1.5">${sum.join('<br>')}<br><span class="dim">· = tanpa hujan signifikan, – = hujan ringan, RA / +RA = sedang / lebat, TS = petir. <b>*n/N</b> = hanya n dari N model menunjukkan hujan sedang/petir. ◀ = model yang dipakai menyusun TAF.</span></div></details>`;
+}
 function render(){
   const list = cycles(), sel = $('tafCycle');
-  if(!sel.options.length){ sel.innerHTML = list.map(s=>`<option value="${s}">${hhmmUTC(s)} UTC (${witaStr(s)}) — kirim ${witaStr(s-H).replace('/', '/')} s.d. +15 mnt</option>`).join(''); sel.value = defaultCycle(list); }
+  if(!sel.options.length){ sel.innerHTML = list.map(s=>`<option value="${s}">${hhmmUTC(s)} UTC (${witaStr(s)}) — kirim ${witaStr(s-H)} s.d. +15 mnt</option>`).join(''); sel.value = defaultCycle(list); }
   AP = loadAirport();
-  const box = $('tafOut'), chk = $('tafChecks'), basis = $('tafBasis'), meta = $('tafMeta');
-  if(!AP){ box.value = ''; meta.textContent = 'Data bandara (det_data.js › airport) belum tersedia — jalankan workflow "Update model deterministik".'; chk.innerHTML = ''; basis.innerHTML = ''; return; }
+  const box = $('tafOut'), chk = $('tafChecks'), basis = $('tafBasis'), meta = $('tafMeta'), agree = $('tafAgree');
+  if(!AP){ box.value = ''; meta.textContent = 'Data bandara (det_data.js › airport) belum tersedia — jalankan workflow "Update model deterministik".'; chk.innerHTML = ''; basis.innerHTML = ''; agree.innerHTML = ''; return; }
+  const sset = $('tafSrc');
+  if(!sset.options.length){ sset.innerHTML = `<option value="avg">Kesepakatan (rata-rata ${AP.models.length} model)</option>` + AP.models.map(m=>`<option value="${m}">${MODEL_LABEL[m]||m}</option>`).join(''); }
+  const src = sset.value === 'avg' ? null : sset.value;
   const start = +sel.value, hours = +$('tafHours').value, opt = { light: $('tafLight').checked, tx: $('tafTX').checked };
-  const metarTxt = $('tafMetar').value, metar = metarTxt.trim() ? parseMetar(metarTxt) : null;
-  if(metarTxt.trim() && !metar) meta.textContent = 'METAR WADB tidak terbaca di kotak (pastikan baris diawali METAR/SPECI WADB …).'; else meta.textContent = '';
-  const res = buildTaf(start, hours, opt, metar);
-  if(res.err){ box.value = ''; meta.textContent = res.err; chk.innerHTML = ''; basis.innerHTML = ''; return; }
+  // --- METAR: basis data tersimpan + yang sedang diketik (belum disimpan) ---
+  const typed = $('tafMetar').value, typedList = typed.trim() ? parseMetarAll(typed, Date.now()) : [];
+  meta.textContent = (typed.trim() && !typedList.length) ? 'METAR WADB tidak terbaca di kotak (pastikan baris diawali METAR/SPECI WADB …).' : '';
+  const key = m => m.ms + '|' + m.raw, all = new Map(); loadDB().concat(typedList).forEach(m=>all.set(key(m), m));
+  const db = [...all.values()].sort((a,b)=>a.ms-b.ms);
+  CLIM = $('tafClim').checked ? computeClim(db, start) : null;
+  const metar = latestMetar(db, start);
+  const days = new Set(db.map(m=>Math.floor(m.ms/(24*H)))).size;
+  $('tafMetarInfo').textContent = db.length ? `${db.length} laporan METAR (${days} hari, ${hhmmUTC(db[0].ms)}–${hhmmUTC(db[db.length-1].ms)}). ` + (CLIM ? `Koreksi lokal AKTIF (${CLIM.n} laporan / ${CLIM.days} hari).` : ($('tafClim').checked ? 'Koreksi lokal belum aktif — butuh METAR dari ≥3 hari.' : 'Koreksi lokal dimatikan.')) : 'Belum ada METAR.';
+  ACTIVE = src ? [src] : null;
+  let res;
+  try{ res = buildTaf(start, hours, opt, metar); } finally { ACTIVE = null; }
+  if(res.err){ box.value = ''; meta.textContent = res.err; chk.innerHTML = ''; basis.innerHTML = ''; agree.innerHTML = ''; return; }
   const issue = start - 1*H;
-  const auto = formatTaf(res, start, hours, issue, opt);
-  const saved = (load(KEY_OUT, {}))[`${start}|${hours}`];
+  ACTIVE = src ? [src] : null;
+  let auto; try{ auto = formatTaf(res, start, hours, issue, opt); } finally { ACTIVE = null; }
+  const saved = (load(KEY_OUT, {}))[`${start}|${hours}|${sset.value}`];
   box.dataset.auto = auto; box.value = saved && saved.text ? saved.text : auto;
-  $('tafNote').textContent = (saved && saved.text ? 'Menampilkan versi yang kamu edit (tombol "Susun ulang" untuk kembali ke otomatis). ' : '') + res.notes.join(' ');
+  const climNotes = [];
+  if(CLIM){ const hrs = [...new Set(res.S.map(x=>new Date(x.ms).getUTCHours()))].filter(h=>CLIM.byHour[h]); climNotes.push(`Angin/visibilitas dikoreksi dengan klimatologi METAR ${CLIM.days} hari pada ${hrs.length} jam validitas.`); }
+  $('tafNote').textContent = (saved && saved.text ? 'Menampilkan versi yang kamu edit (tombol "Susun ulang" untuk kembali ke otomatis). ' : '') + `Sumber: ${src ? (MODEL_LABEL[src]||src) : 'kesepakatan ' + AP.models.length + ' model'}. ` + res.notes.concat(climNotes).join(' ');
   updateChecks(hours);
+  agree.innerHTML = agreementHTML(start, hours, opt, src);
   // tabel dasar penyusunan
-  const rows = res.S.map((s,k)=>`<tr><td>${pad(new Date(s.ms).getUTCHours())}Z</td><td>${windCode(s.w)}</td><td>${s.vis}</td><td>${s.wx||'—'}</td><td>${[...cloudCodes(s)].join(' ')||'NSC'}</td><td>${s.poe ? Math.round(s.poe.p5*100)+'%' : '—'}</td><td>${Math.round(s.cape)}</td><td>${s.rain.toFixed(1)}</td></tr>`).join('');
-  basis.innerHTML = `<details><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Dasar penyusunan per jam (konsensus 4 model${metar?' + METAR':''})</summary>
-    <div class="produk-wrap" style="margin-top:6px"><table class="an-tbl"><thead><tr><th>UTC</th><th>Angin</th><th>Vis</th><th>Cuaca</th><th>Awan</th><th>P(≥5 mm/3j)</th><th>CAPE</th><th>Hujan mm/j</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="si-sub dim" style="margin-top:4px;line-height:1.5">Visibilitas, dasar awan, dan CB/TCU diturunkan dengan aturan sederhana dari hujan, RH, selisih suhu–titik embun (LCL), tutupan awan, dan CAPE — model tidak memprakirakannya langsung. Periksa terhadap METAR, radar, dan satelit.</div></details>`;
+  const rows = res.S.map((s,k)=>{ const hh = new Date(s.ms).getUTCHours(), c = CLIM && CLIM.byHour[hh]; return `<tr><td>${pad(hh)}Z</td><td>${windCode(s.w)}</td><td>${s.vis}</td><td>${s.wx||'—'}</td><td>${[...cloudCodes(s)].join(' ')||'NSC'}</td><td>${s.poe ? Math.round(s.poe.p5*100)+'%' : '—'}</td><td>${Math.round(s.cape)}</td><td>${s.rain.toFixed(1)}</td><td>${c ? `${c.dir==null?'VRB':pad(Math.round(c.dir/10)*10%360||360,3)}/${Math.round(c.spd)}kt (n=${c.n})` : '—'}</td></tr>`; }).join('');
+  basis.innerHTML = `<details><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Dasar penyusunan per jam (${src ? (MODEL_LABEL[src]||src) : 'konsensus '+AP.models.length+' model'}${metar?' + METAR terbaru':''}${CLIM?' + klimatologi METAR':''})</summary>
+    <div class="produk-wrap" style="margin-top:6px"><table class="an-tbl"><thead><tr><th>UTC</th><th>Angin</th><th>Vis</th><th>Cuaca</th><th>Awan</th><th>P(≥5 mm/3j)</th><th>CAPE</th><th>Hujan mm/j</th><th>METAR biasa</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="si-sub dim" style="margin-top:4px;line-height:1.5">Visibilitas, dasar awan, dan CB/TCU diturunkan dengan aturan sederhana dari hujan, RH, selisih suhu–titik embun (LCL), tutupan awan, dan CAPE — model tidak memprakirakannya langsung. Kolom terakhir = angin METAR yang biasa tercatat pada jam itu (median kecepatan, arah rata²) bila ≥3 hari METAR tersedia. Periksa terhadap METAR, radar, dan satelit.</div></details>`;
 }
 function updateChecks(hours){
   const items = checkTaf($('tafOut').value, hours);
@@ -354,16 +478,18 @@ function updateChecks(hours){
 function init(){
   if(!$('tafSection')) return;
   const refresh = ()=>render();
-  ['tafCycle','tafHours','tafLight','tafTX'].forEach(id=>$(id).addEventListener('change', refresh));
-  const mt = load(KEY_METAR, {}); $('tafMetar').value = mt.text || '';
-  $('tafMetarSave').onclick = ()=>{ save(KEY_METAR, { text:$('tafMetar').value, ts:Date.now() }); render(); flash('tafMetarSave','Tersimpan ✓'); };
-  $('tafBuild').onclick = ()=>{ const a = load(KEY_OUT, {}); delete a[`${$('tafCycle').value}|${$('tafHours').value}`]; save(KEY_OUT, a); render(); };
-  $('tafSave').onclick = ()=>{ const a = load(KEY_OUT, {}); a[`${$('tafCycle').value}|${$('tafHours').value}`] = { text:$('tafOut').value, ts:Date.now() }; save(KEY_OUT, a); updateChecks(+$('tafHours').value); flash('tafSave','Tersimpan ✓'); };
+  ['tafCycle','tafHours','tafLight','tafTX','tafSrc','tafClim'].forEach(id=>$(id).addEventListener('change', refresh));
+  $('tafMetar').addEventListener('input', ()=>{ clearTimeout(init._t); init._t = setTimeout(render, 400); });
+  $('tafMetarSave').onclick = ()=>{ const list = parseMetarAll($('tafMetar').value, Date.now()); if(list.length) mergeDB(list); $('tafMetar').value = ''; render(); flash('tafMetarSave', list.length ? `Tersimpan ${list.length} ✓` : 'Tidak ada METAR terbaca'); };
+  $('tafMetarClear').onclick = ()=>{ if(confirm('Hapus semua METAR yang tersimpan di browser ini?')){ save(KEY_DB, []); render(); } };
+  const keyOf = ()=>`${$('tafCycle').value}|${$('tafHours').value}|${$('tafSrc').value}`;
+  $('tafBuild').onclick = ()=>{ const a = load(KEY_OUT, {}); delete a[keyOf()]; save(KEY_OUT, a); render(); };
+  $('tafSave').onclick = ()=>{ const a = load(KEY_OUT, {}); a[keyOf()] = { text:$('tafOut').value, ts:Date.now() }; save(KEY_OUT, a); updateChecks(+$('tafHours').value); flash('tafSave','Tersimpan ✓'); };
   $('tafCopy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('tafOut').value); flash('tafCopy','Tersalin ✓'); }catch(e){ flash('tafCopy','Clipboard diblokir'); } };
   $('tafOut').addEventListener('input', ()=>updateChecks(+$('tafHours').value));
   render();
 }
 function flash(id,msg){ const b = $(id); if(!b) return; const o = b.dataset.o || b.textContent; b.dataset.o = o; b.textContent = msg; setTimeout(()=>{ b.textContent = o; }, 1500); }
 window.initTaf = init;
-window.__taf = { parseMetar, checkTaf };
+window.__taf = { parseMetar, parseMetarAll, checkTaf, computeClim };
 })();
