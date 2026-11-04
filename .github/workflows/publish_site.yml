@@ -20,6 +20,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Beri nomor versi pada skrip kode (agar browser tidak memakai cache lama)
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i -E 's#src="(analisis|peta_sinoptik|taf|kecamatan)\.js"#src="\1.js?v='"${V}"'"#g' prakiraan-wilayah-bima-dompu-peta.html
+          grep -o 'src="[a-z_]*\.js[^"]*"' prakiraan-wilayah-bima-dompu-peta.html | head -12
       - name: Terbitkan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
