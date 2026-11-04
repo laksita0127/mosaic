@@ -226,3 +226,9 @@ yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & n
   `peta_sinoptik.js` menggambar isobar (marching squares) dan streamline di canvas Leaflet.
 - Kelvin/Rossby/indeks surge: belum ada sumber data terbuka yang andal -> tetap lewat buletin yang ditempel.
 - Deteksi konvergensi/belokan (di `peta_sinoptik.js`): dari medan angin 850 hPa ECMWF 1° dihitung divergensi (konvergensi = -div) dan vortisitas (siklonik di BBS = negatif); lapisan peta "Zona konvergensi/belokan siklonik" + faktor di narasi (kotak NTB tengah 117–120°BT, 7–10°LS) + pusat konvergensi terkuat dengan nama daerah terdekat. Ambang `ZONE_MIN` = 0,6×10⁻⁵ s⁻¹ (awal, sesuaikan).
+
+### 11. Gelombang atmosfer (waves.js) & draf TAF WADB (taf.js)
+- `pipeline/ingest_waves.py` (dalam workflow *Update indeks iklim*): membaca peta OLR NCICS (MJO/Kelvin/ER/Low), menghitung posisi Bima/Dompu dari geometri panel,
+  mencari kontur garis-penuh (fase konvektif aktif) terdekat per hari (4 hari obs + 4 hari prakiraan CFS) -> `waves.js`. Estimasi dari gambar (bukan data angka resmi).
+- `taf.js`: draf TAF WADB 12/24/30 jam, siklus 00/06/12/18 UTC, sesuai Peraturan BMKG 6/2024 + SOP Aerodrome Forecast 2025 (kriteria perubahan signifikan, BECMG/TEMPO/PROB, pembulatan,
+  pemeriksa aturan). Bahan: konsensus 4 model titik bandara (`det_data.js › airport`), peluang ensemble, METAR WADB yang ditempel. Wajib diperiksa senior forecaster.

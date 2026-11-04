@@ -371,6 +371,7 @@
           </div>
           <div style="margin-top:8px"><img id="waveImg" alt="Peta gelombang atmosfer NCICS" style="max-width:100%;height:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff"></div>
           <div id="waveMsg" class="si-sub" style="margin-top:6px;line-height:1.5"></div>
+          <div id="waveAuto"></div>
           <div class="syn-ctl" style="margin-top:8px">
             <b class="si-sub">Penilaian prakirawan (dari peta di atas):</b>
             <label class="chk">Kelvin <select id="waveKelvin"><option value="">tidak berpengaruh</option><option value="near">mendekat (≤2 hari)</option><option value="over">di sekitar NTB</option></select></label>
@@ -412,6 +413,35 @@
           </div>
           <div class="si-sub" style="margin-top:6px">Narasi ini bantuan berbasis aturan sederhana — bukan produk resmi BMKG. Prakirawan tetap yang memutuskan.</div>
         </div>
+      </div>
+    </section>
+
+    <section id="tafSection">
+      <div class="sec-title">TAF WADB (draf) — Bandara Sultan Muhammad Salahuddin, Bima</div>
+      <div class="an-card">
+        <div class="syn-ctl">
+          <label class="chk">Siklus <select id="tafCycle"></select></label>
+          <label class="chk">Validitas <select id="tafHours"><option value="12">12 jam</option><option value="24" selected>24 jam</option><option value="30">30 jam</option></select></label>
+          <label class="chk"><input type="checkbox" id="tafLight"> sertakan -RA (hujan ringan)</label>
+          <label class="chk"><input type="checkbox" id="tafTX"> sertakan TX/TN</label>
+        </div>
+        <details style="margin-top:8px" open>
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">METAR/SPECI WADB terbaru (tempel dari sistem stasiun) — dipakai untuk kondisi awal</summary>
+          <textarea id="tafMetar" placeholder="METAR WADB 041000Z 12006KT 9999 FEW020 31/24 Q1010 NOSIG=" style="width:100%;box-sizing:border-box;min-height:54px;margin-top:6px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px"></textarea>
+          <button class="produk-btn" id="tafMetarSave" type="button" style="margin-top:6px">Simpan METAR</button>
+          <span class="si-sub dim"> METAR bandara lain tidak dipakai. Hanya dipakai bila ≤3,5 jam sebelum validitas.</span>
+        </details>
+        <div id="tafMeta" class="si-sub" style="color:var(--warn);margin-top:6px"></div>
+        <textarea id="tafOut" spellcheck="false" style="width:100%;box-sizing:border-box;min-height:150px;margin-top:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6"></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
+          <button class="produk-btn" id="tafBuild" type="button">Susun ulang</button>
+          <button class="produk-btn" id="tafSave" type="button">Simpan edit</button>
+          <button class="produk-btn" id="tafCopy" type="button">Salin sandi</button>
+          <span id="tafNote" class="si-sub"></span>
+        </div>
+        <div id="tafChecks" style="margin-top:8px"></div>
+        <div id="tafBasis" style="margin-top:8px"></div>
+        <div class="si-sub" style="margin-top:8px;line-height:1.5;color:var(--bad)"><b>DRAF otomatis berbasis model — bukan produk resmi BMKG.</b> Sesuai SOP, senior forecaster wajib memeriksa sandi dan kendali mutu sebelum TAF diterbitkan (kirim 1 jam sebelum validitas, paling lambat 15 menit setelahnya), dengan mempertimbangkan METAR, radar, dan satelit.</div>
       </div>
     </section>
 
@@ -508,9 +538,11 @@
 <!-- Analisis harian (dinamika atmosfer, kelembapan lapisan, narasi) -->
 <script src="dinamika.js" onerror="window.__dinamikaMissing=true;"></script>
 <script src="det_data.js" onerror="window.__detMissing=true;"></script>
+<script src="waves.js" onerror="window.__wavesMissing=true;"></script>
 <script src="sinoptik.js" onerror="window.__sinoptikMissing=true;"></script>
 <script src="analisis.js"></script>
 <script src="peta_sinoptik.js"></script>
+<script src="taf.js"></script>
 
 <script>
 const STATION_POINTS = [
@@ -2411,6 +2443,7 @@ async function init(){
     render();
     if(window.initAnalisis) window.initAnalisis();
     if(window.initSinoptik) window.initSinoptik();
+    if(window.initTaf) window.initTaf();
   }catch(err){
     statusEl.textContent = 'Gagal memuat data model: '+err.message+'. Periksa koneksi internet dan muat ulang.';
     statusEl.classList.add('err');

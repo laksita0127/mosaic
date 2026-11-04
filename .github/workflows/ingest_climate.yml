@@ -22,9 +22,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install deps
+        run: pip install numpy pillow
       - name: Run
-        run: python pipeline/ingest_climate.py
+        run: |
+          python pipeline/ingest_climate.py
+          python pipeline/ingest_waves.py || echo "analisis gelombang gagal — waves.js lama dipakai"
       - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh "indeks iklim" dinamika.js
+        run: bash pipeline/publish_site.sh "indeks iklim" dinamika.js waves.js

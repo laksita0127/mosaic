@@ -346,6 +346,42 @@ function renderRain(date, reg){
   return R;
 }
 
+
+/* ---------- gelombang atmosfer dari peta OLR NCICS (waves.js: hasil analisis gambar oleh pipeline/ingest_waves.py) ---------- */
+const WAVE_NAMES = { mjo:'MJO', kelvin:'Kelvin', er:'Rossby ekuator (ER)', low:'Low (frek. rendah)' };
+const WAVE_STAT = { inside:'di dalam fase konvektif aktif', near:'dekat (≤3°)', approaching:'mendekat (≤8°)', far:'jauh dari NTB' };
+function wavePoint(reg){ return reg==='KABUPATEN DOMPU' ? 'dompu' : 'bima'; }
+function waveAuto(date, reg){
+  const W = window.WAVES; if(!W || !W.days || !W.days[date]) return null;
+  const d = W.days[date], pt = wavePoint(reg), out = {};
+  ['mjo','kelvin','er','low'].forEach(k=>{ if(d[k] && d[k][pt]) out[k] = d[k][pt]; });
+  return Object.keys(out).length ? Object.assign(out, { obs: !!d.obs }) : null;
+}
+function waveSide(v){            // -> 'pro' | 'con' | 'neu'
+  if(!v) return 'neu';
+  if(v.status==='inside' || v.status==='near') return 'pro';
+  if(v.suppressed_near) return 'con';
+  return 'neu';
+}
+function waveText(k, v){
+  const n = WAVE_NAMES[k];
+  if(v.status==='far' && v.suppressed_near) return `${n}: tidak ada kontur aktif di dekat NTB; fase penekan (kering) berada ≤3° dari titik`;
+  if(v.status==='far') return `${n}: kontur aktif jauh dari NTB${v.dist!=null ? ` (terdekat ±${fmt(v.dist,0)}°)` : ''}`;
+  return `${n}: ${WAVE_STAT[v.status]}${v.dist!=null && v.status!=='inside' ? ` (kontur aktif ±${fmt(v.dist,1)}°)` : ''}`;
+}
+function renderWaveAuto(reg){
+  const el = $('waveAuto'); if(!el) return;
+  const W = window.WAVES;
+  if(!W){ el.innerHTML = '<div class="si-sub">Analisis otomatis gelombang (waves.js) belum tersedia — jalankan workflow "Update indeks iklim".</div>'; return; }
+  const dates = Object.keys(W.days).sort(), pt = wavePoint(reg);
+  const chip = (v)=> !v ? '<td>—</td>' : `<td><span class="si-chip ${v.status==='inside'||v.status==='near'?'c-good':(v.suppressed_near?'c-warn':'c-neutral')}">${v.status==='inside'?'di dalam':v.status==='near'?'dekat':v.status==='approaching'?'mendekat':(v.suppressed_near?'penekan':'jauh')}</span>${v.dist!=null?`<div class="dim" style="font-size:10px">${fmt(v.dist,1)}°</div>`:''}</td>`;
+  const head = dates.map(d=>`<th>${dShort(d)}${W.days[d].obs?'<div class="dim" style="font-size:10px">obs</div>':'<div class="dim" style="font-size:10px">prakiraan</div>'}</th>`).join('');
+  const rows = ['mjo','kelvin','er','low'].map(k=>`<tr><td style="text-align:left"><b>${WAVE_NAMES[k]}</b></td>${dates.map(d=>chip(W.days[d][k] && W.days[d][k][pt])).join('')}</tr>`).join('');
+  el.innerHTML = `<div class="si-sub" style="margin:8px 0 4px"><b>Analisis otomatis dari peta OLR di atas</b> — titik ${pt==='dompu'?'Dompu':'Bima'}; gambar NCICS ${W.image_time.replace('T',' ').replace('Z',' UTC')}</div>
+    <div class="produk-wrap"><table class="an-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="si-sub dim" style="margin-top:4px;line-height:1.5">"Di dalam / dekat" = kontur garis penuh (fase konvektif aktif, OLR tersaring ≤ −12 W/m²) menutupi atau ≤3° dari titik; "mendekat" ≤8°; "penekan" = hanya garis putus (fase kering) di dekat titik. Ini pembacaan otomatis dari gambar (perkiraan) — cocokkan dengan peta, penilaian prakirawan di bawah tetap yang utama.</div>`;
+}
+
 /* ---------- D. narasi otomatis: faktor pendukung / penghambat + kesimpulan 3 hari ---------- */
 const NARR_DAYS = 3;
 const dLong = d => dateLong(d, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
@@ -376,8 +412,16 @@ function wxShort(peak, peak10, rainDet){
 }
 
 // faktor lokal (lapisan atas, CAPE, angin 850, geser, ensemble) satu hari -> [{side:'pro'|'con'|'neu', txt}]
-function localFactors(lv, R, date){
+function localFactors(lv, R, date, reg){
   const F = [], add = (side, txt)=> F.push({ side, txt });
+  const wa = waveAuto(date, reg), wm = waveManual(date);
+  if(wa){
+    ['mjo','kelvin','er','low'].forEach(k=>{
+      const man = (k==='kelvin'||k==='er') ? wm[k] : null;       // penilaian prakirawan menimpa otomatis
+      if(man) add('pro', `${WAVE_NAMES[k]}: ${WAVE_TXT[man]} (penilaian prakirawan) — fase konvektif aktif, mendukung`);
+      else if(wa[k]){ const sd = waveSide(wa[k]); add(sd, waveText(k, wa[k]) + (sd==='pro' ? ' — mendukung hujan' : (sd==='con' ? ' — menghambat' : ''))); }
+    });
+  }
   if(lv){
     const L = Object.fromEntries(lv.levels.map(l=>[l.f,l]));
     const rh = (k, lab, pro, con)=>{
@@ -420,7 +464,7 @@ function localFactors(lv, R, date){
 function bulletList(arr, mark){ return arr.length ? arr.map(f=>`  ${mark} ${f.txt}`).join('\n') : '  (tidak ada)'; }
 
 function dayBlock(date, idx, reg, dyn){
-  const lv = levelStats(reg, date), R = rainStats(date, reg), F = localFactors(lv, R, date);
+  const lv = levelStats(reg, date), R = rainStats(date, reg), F = localFactors(lv, R, date, reg);
   const pro = F.filter(f=>f.side==='pro'), con = F.filter(f=>f.side==='con'), neu = F.filter(f=>f.side==='neu');
   const lines = [`HARI ${idx+1} — ${dLong(date)}`];
   lines.push('Faktor yang mendukung hujan:', bulletList(pro,'✔'));
@@ -527,6 +571,7 @@ function render(){
     daySel.innerHTML = dates.map((d,i)=>`<option value="${d}">Hari ${i+1} — ${dateLong(d,{weekday:'short',day:'numeric',month:'short'})}</option>`).join('');
   }
   const date = daySel.value || dates[0], reg = $('anReg').value;
+  renderWaveAuto(reg);
   const dyn = renderDyn(date), lv = renderHum(reg, date), R = renderRain(date, reg);
   const auto = buildNarrative(date, reg, dyn, lv, R);
   const saved = load(KEY_NARR, {})[`${date}|${reg}`];

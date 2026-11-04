@@ -26,6 +26,11 @@ LEVEL_VARS = ["relative_humidity_850hPa", "relative_humidity_700hPa", "relative_
               "temperature_200hPa", "wind_speed_850hPa", "wind_direction_850hPa", "wind_speed_200hPa", "wind_direction_200hPa",
               "cape", "total_column_integrated_water_vapour"]
 LEVEL_PTS = [("bima", -8.5418, 118.6922), ("dompu", -8.5401, 118.4647)]
+# Variabel tambahan HANYA untuk titik Bandara WADB (bahan penyusun TAF): hembusan angin, awan per lapisan, titik embun, CAPE, visibilitas, tekanan
+AIRPORT = ("bandara", -8.5418, 118.6922)
+AIRPORT_VARS = ["temperature_2m", "relative_humidity_2m", "dew_point_2m", "precipitation", "weather_code", "wind_speed_10m",
+                "wind_direction_10m", "wind_gusts_10m", "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
+                "visibility", "cape", "pressure_msl"]
 DAYS = 8
 BATCH = 20
 API_KEY = os.environ.get("OPENMETEO_API_KEY", "").strip()
@@ -88,8 +93,11 @@ def main():
     for p, entry in zip(LEVEL_PTS, fetch(LEVEL_PTS, LEVEL_VARS)):
         lv[p[0]] = {k: v for k, v in entry["hourly"].items() if k != "time"}
         lv_times = entry["hourly"]["time"]
+    log("variabel tambahan titik bandara (untuk TAF)")
+    ap = fetch([AIRPORT], AIRPORT_VARS)[0]["hourly"]
+    airport = {"time": ap["time"], "hourly": {k: v for k, v in ap.items() if k != "time"}}
     out = {"schema": "mosaic-det/1", "generated": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ"), "models": MODELS,
-           "time": times, "points": out_pts, "levels": {"time": lv_times, "points": lv}}
+           "time": times, "points": out_pts, "levels": {"time": lv_times, "points": lv}, "airport": airport}
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("// dibuat otomatis oleh pipeline/ingest_deterministic.py - JANGAN diedit tangan" + chr(10))
         f.write("window.DET_DATA = " + json.dumps(out, separators=(",", ":")) + ";" + chr(10))
