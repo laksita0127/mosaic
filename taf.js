@@ -432,12 +432,24 @@ function agreementHTML(start, hours, opt, src){
       <tr><td style="text-align:left"><b>Hujan/petir</b></td>${agr}</tr><tr><td style="text-align:left"><b>Arah angin</b></td>${wag}</tr></tbody></table></div>
     <div class="si-sub" style="margin-top:4px;line-height:1.5">${sum.join('<br>')}<br><span class="dim">· = tanpa hujan signifikan, – = hujan ringan, RA / +RA = sedang / lebat, TS = petir. <b>*n/N</b> = hanya n dari N model menunjukkan hujan sedang/petir. ◀ = model yang dipakai menyusun TAF.</span></div></details>`;
 }
+function compareHTML(start, hours, opt, metar, cur){
+  const items = [{ k:'avg', lab:`Kesepakatan ${AP.models.length} model`, list:null }].concat(AP.models.map(m=>({ k:m, lab:MODEL_LABEL[m]||m, list:[m] })));
+  const issue = start - H;
+  const rows = items.map(it=>{
+    let txt;
+    try{ ACTIVE = it.list; const r = buildTaf(start, hours, opt, metar); txt = r.err ? r.err : formatTaf(r, start, hours, issue, opt); }
+    catch(e){ txt = '(gagal: ' + e.message + ')'; } finally { ACTIVE = null; }
+    return `<div style="margin:6px 0"><div class="si-sub"><b>${it.lab}</b> ${cur===it.k ? '<span style="color:var(--accent)">◀ dipakai di atas</span>' : `<a href="#" data-src="${it.k}">pakai ini</a>`}</div>`
+      + `<pre style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-size:12px;white-space:pre-wrap;background:var(--panel-alt);padding:6px 8px;border-radius:var(--radius)">${esc(txt)}</pre></div>`;
+  }).join('');
+  return `<details open><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Bandingkan TAF dari semua sumber (kesepakatan + tiap model)</summary>${rows}</details>`;
+}
 function render(){
   const list = cycles(), sel = $('tafCycle');
   if(!sel.options.length){ sel.innerHTML = list.map(s=>`<option value="${s}">${hhmmUTC(s)} UTC (${witaStr(s)}) — kirim ${witaStr(s-H)} s.d. +15 mnt</option>`).join(''); sel.value = defaultCycle(list); }
   AP = loadAirport();
   const box = $('tafOut'), chk = $('tafChecks'), basis = $('tafBasis'), meta = $('tafMeta'), agree = $('tafAgree');
-  if(!AP){ box.value = ''; meta.textContent = 'Data bandara (det_data.js › airport) belum tersedia — jalankan workflow "Update model deterministik".'; chk.innerHTML = ''; basis.innerHTML = ''; agree.innerHTML = ''; return; }
+  if(!AP){ box.value = ''; meta.textContent = 'Data bandara (det_data.js › airport) belum tersedia — jalankan workflow "Update model deterministik".'; chk.innerHTML = ''; basis.innerHTML = ''; agree.innerHTML = ''; if($('tafCompare')) $('tafCompare').innerHTML = ''; return; }
   const sset = $('tafSrc');
   if(!sset.options.length){ sset.innerHTML = `<option value="avg">Kesepakatan (rata-rata ${AP.models.length} model)</option>` + AP.models.map(m=>`<option value="${m}">${MODEL_LABEL[m]||m}</option>`).join(''); }
   const src = sset.value === 'avg' ? null : sset.value;
@@ -465,6 +477,11 @@ function render(){
   $('tafNote').textContent = (saved && saved.text ? 'Menampilkan versi yang kamu edit (tombol "Susun ulang" untuk kembali ke otomatis). ' : '') + `Sumber: ${src ? (MODEL_LABEL[src]||src) : 'kesepakatan ' + AP.models.length + ' model'}. ` + res.notes.concat(climNotes).join(' ');
   updateChecks(hours);
   agree.innerHTML = agreementHTML(start, hours, opt, src);
+  const cmpEl = $('tafCompare');
+  if(cmpEl){
+    cmpEl.innerHTML = compareHTML(start, hours, opt, metar, sset.value);
+    cmpEl.querySelectorAll('a[data-src]').forEach(a=>{ a.onclick = e=>{ e.preventDefault(); sset.value = a.dataset.src; render(); }; });
+  }
   // tabel dasar penyusunan
   const rows = res.S.map((s,k)=>{ const hh = new Date(s.ms).getUTCHours(), c = CLIM && CLIM.byHour[hh]; return `<tr><td>${pad(hh)}Z</td><td>${windCode(s.w)}</td><td>${s.vis}</td><td>${s.wx||'—'}</td><td>${[...cloudCodes(s)].join(' ')||'NSC'}</td><td>${s.poe ? Math.round(s.poe.p5*100)+'%' : '—'}</td><td>${Math.round(s.cape)}</td><td>${s.rain.toFixed(1)}</td><td>${c ? `${c.dir==null?'VRB':pad(Math.round(c.dir/10)*10%360||360,3)}/${Math.round(c.spd)}kt (n=${c.n})` : '—'}</td></tr>`; }).join('');
   basis.innerHTML = `<details><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Dasar penyusunan per jam (${src ? (MODEL_LABEL[src]||src) : 'konsensus '+AP.models.length+' model'}${metar?' + METAR terbaru':''}${CLIM?' + klimatologi METAR':''})</summary>

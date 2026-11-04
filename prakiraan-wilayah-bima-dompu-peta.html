@@ -423,7 +423,7 @@
           <label class="chk">Siklus <select id="tafCycle"></select></label>
           <label class="chk">Sumber data <select id="tafSrc"></select></label>
           <label class="chk">Validitas <select id="tafHours"><option value="12">12 jam</option><option value="24" selected>24 jam</option><option value="30">30 jam</option></select></label>
-          <label class="chk"><input type="checkbox" id="tafLight"> sertakan -RA (hujan ringan)</label>
+          <label class="chk" title="SOP BMKG 2025 hanya mewajibkan cuaca signifikan: RA/+RA (sedang/lebat), TS, dll. Hujan ringan (-RA) tidak termasuk daftar itu, jadi opsional (awalnya mati). Nyalakan bila praktik stasiun mencantumkannya."><input type="checkbox" id="tafLight"> sertakan -RA (hujan ringan) <span class="dim">ⓘ</span></label>
           <label class="chk"><input type="checkbox" id="tafTX"> sertakan TX/TN</label>
           <label class="chk"><input type="checkbox" id="tafClim" checked> koreksi lokal dari METAR beberapa hari</label>
         </div>
@@ -445,6 +445,7 @@
         </div>
         <div id="tafChecks" style="margin-top:8px"></div>
         <div id="tafAgree" style="margin-top:8px"></div>
+        <div id="tafCompare" style="margin-top:8px"></div>
         <div id="tafBasis" style="margin-top:8px"></div>
         <div class="si-sub" style="margin-top:8px;line-height:1.5;color:var(--bad)"><b>DRAF otomatis berbasis model — bukan produk resmi BMKG.</b> Sesuai SOP, senior forecaster wajib memeriksa sandi dan kendali mutu sebelum TAF diterbitkan (kirim 1 jam sebelum validitas, paling lambat 15 menit setelahnya), dengan mempertimbangkan METAR, radar, dan satelit.</div>
       </div>
