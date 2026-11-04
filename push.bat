@@ -54,11 +54,12 @@ git add -A
 git diff --cached --quiet
 if not errorlevel 1 (
   echo      Tidak ada perubahan lokal untuk di-commit.
+  echo      ^(Artinya semua sudah terkirim ke GitHub - bukan error.^)
   echo.
   echo == Tetap sinkronkan ke GitHub ==
   git push -u origin HEAD
   echo.
-  echo === Selesai. ===
+  echo === Selesai. Kalau situs belum berubah: tunggu 2-3 menit lalu tekan Ctrl+F5. ===
   pause & exit /b 0
 )
 
@@ -76,6 +77,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo === BERES. GitHub Pages akan memuat ulang dalam ~1 menit. ===
+echo === BERES. Kode masuk ke GitHub ^(cabang main^). Workflow "Terbitkan kode ke cabang site"
+echo     menyalinnya ke situs, lalu GitHub Pages memuat ulang: tunggu 2-3 menit, lalu tekan Ctrl+F5. ===
 pause
 endlocal
