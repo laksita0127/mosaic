@@ -555,6 +555,15 @@
         <div class="produk-wrap" id="vfTable"></div>
         <div class="produk-wrap" id="vfSlots" style="margin-top:10px"></div>
         <div id="vfChart" style="margin-top:10px"></div>
+        <details class="note" style="margin-top:8px"><summary>ⓘ Uji awal: apakah "+ kondisi atmosfer" memperbaiki prakiraan?</summary>
+          <div class="si-sub" style="line-height:1.6;margin-top:4px">
+            Uji sederhana (27 Sep – 10 Nov 2026, 6 titik, 2.124 jendela 3 jam; skor atmosfer direkonstruksi hanya dari kelembapan 850/700/500 hPa, uap air, CAPE, angin 850 hPa, dan geser — tanpa konvergensi, gelombang, indeks skala besar, dan ensemble):
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li><b>Skor atmosfer membedakan hari berhujan dan tidak:</b> pada hari "menghambat" hujan ≥1 mm/3 jam teramati di 0,5% jendela, pada hari "netral" 4,1% (±8 kali lebih sering).</li>
+              <li><b>Menerapkan penyesuaian mengurangi alarm palsu,</b> misalnya ECMWF 247 → 144, AIFS 139 → 101, GFS 110 → 92, kesepakatan 30 → 26, dengan harga 1–2 kejadian lebih banyak terlewat. CSI naik tipis: ECMWF 0,10 → 0,15, AIFS 0,18 → 0,22, GFS 0,20 → 0,21; kesepakatan tetap 0,26.</li>
+              <li><b>Kesepakatan 4 model sudah yang terbaik</b> (bias ±1,2); model tunggal tanpa filter terlalu sering memprakirakan hujan (bias 3–6×) pada musim kemarau ini.</li>
+              <li><b>Belum teruji:</b> mode "mendukung" (tidak ada hari seperti itu selama periode ini) dan musim hujan. Hasil di atas hanya satu periode kemarau dengan 42 kejadian hujan.</li>
+            </ul></div></details>
         <details class="note" style="margin-top:8px"><summary>ⓘ Cara membaca &amp; keterbatasan</summary>
           <div class="si-sub" style="line-height:1.6;margin-top:4px">
             <b>CSI</b> (0–1, makin besar makin baik) = hujan yang diprakirakan dan benar-benar terjadi dibanding semua kejadian ditambah alarm palsu. <b>POD</b> = persen hujan yang berhasil diprakirakan. <b>FAR</b> = persen prakiraan hujan yang meleset. <b>Bias</b> = 1 berarti frekuensi prakiraan hujan sama dengan kejadian; di atas 1 model terlalu sering memprakirakan hujan, di bawah 1 terlalu jarang. T/L/AP = tepat / terlewat / alarm palsu.<br>
