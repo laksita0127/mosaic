@@ -205,6 +205,7 @@
   #sectionNav a:hover{color:var(--text);}
   #sectionNav a.on{background:var(--accent);border-color:var(--accent);color:#fff;}
   section, .map-panel, #anSyn, #anWave, #anRain{scroll-margin-top:56px;}
+  [data-tab][hidden]{display:none !important;}
   /* kartu yang bisa dilipat */
   .an-card.fold > h4{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;}
   .an-card.fold > h4::after{content:"▾";font-size:12px;color:var(--text-faint);}
@@ -291,7 +292,7 @@
         </ul>
       </div>
     </details>
-    <div class="controls">
+    <div class="controls" data-tab="peta">
       <div class="field">
         <label>Parameter</label>
         <select id="paramSel">
@@ -318,14 +319,14 @@
       </div>
     </div>
 
-    <nav id="sectionNav" aria-label="Bagian halaman">
-      <a href="#map-panel">Peta</a><a href="#analisisSection">Analisis harian</a><a href="#anSyn">Peta sinoptik</a><a href="#tafSection">TAF WADB</a>
-      <a href="#produkSection">Tabel produk</a><a href="#secEnsemble">Ensemble</a><a href="#secLog">Verifikasi</a>
+    <nav id="sectionNav" aria-label="Bagian halaman" role="tablist">
+      <a href="#peta" data-go="peta" role="tab">Peta &amp; titik</a><a href="#analisis" data-go="analisis" role="tab">Analisis harian</a><a href="#taf" data-go="taf" role="tab">TAF WADB</a>
+      <a href="#produk" data-go="produk" role="tab">Tabel produk</a><a href="#verifikasi" data-go="verifikasi" role="tab">Verifikasi</a>
     </nav>
     <div class="run-info" id="runInfo"></div>
     <div id="ensStaleBanner" class="stale-banner" hidden></div>
 
-    <div class="map-panel" id="map-panel">
+    <div class="map-panel" id="map-panel" data-tab="peta">
       <div id="map"></div>
       <div class="legend-bar">
         <div class="legend-title" id="legendTitle"></div>
@@ -337,7 +338,7 @@
       </div>
     </div>
 
-    <div class="time-panel">
+    <div class="time-panel" data-tab="peta">
       <div class="time-readout">
         <span class="now" id="timeNow">—</span>
         <span class="rel" id="timeRel">—</span>
@@ -351,17 +352,29 @@
       <div class="day-ticks"><span>H+0</span><span>H+1</span><span>H+2</span><span>H+3</span><span>H+4</span><span>H+5</span><span>H+6</span><span>H+7</span></div>
     </div>
 
-    <div class="selected-note" id="selectedNote"></div>
+    <div class="selected-note" id="selectedNote" data-tab="peta"></div>
 
-    <div class="summary-card" id="summaryCard"></div>
+    <div class="summary-card" id="summaryCard" data-tab="peta"></div>
 
-    <section id="analisisSection">
+    <section id="analisisSection" data-tab="analisis">
       <div class="sec-title">Analisis harian — Kota Bima · Kab. Bima · Kab. Dompu</div>
       <div class="produk-controls">
         <div class="field"><label>Hari</label><select id="anDay"></select></div>
         <div class="field"><label>Wilayah</label><select id="anReg"></select></div>
       </div>
       <div class="an-grid">
+        <div class="an-card an-wide">
+          <h4>Ringkasan &amp; prakiraan 3 hari (otomatis, dapat diedit)</h4>
+          <textarea id="anNarrText" style="min-height:430px;font-size:13.5px;line-height:1.65"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <button class="produk-btn" id="anNarrSave" type="button">Simpan edit</button>
+            <button class="produk-btn" id="anNarrReset" type="button">Susun ulang</button>
+            <button class="produk-btn" id="anNarrCopy" type="button">Salin</button>
+            <span id="anNarrMsg" class="si-sub"></span>
+          </div>
+          <div class="si-sub" style="margin-top:6px">Bantuan berbasis aturan sederhana — bukan produk resmi BMKG. Prakirawan tetap yang memutuskan.
+          <details class="note" style="margin-top:8px"><summary>Rincian teknis (untuk prakirawan): faktor, angka, dan istilah lengkap</summary><textarea id="anNarrTech" readonly style="min-height:420px;margin-top:6px;font-size:12px"></textarea></details></div>
+        </div>
         <div class="an-card">
           <h4>Dinamika atmosfer (skala besar)</h4>
           <div id="anDynView"></div>
@@ -426,21 +439,11 @@
             <details class="note"><summary>ⓘ Tentang peta ini</summary><div class="si-sub dim" style="margin-top:2px">Model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, tekanan, dan lapisan lembap/kering. RH 200/500 hPa dinyatakan terhadap air. Arahkan kursor untuk nilai di titik. Bukan analisis cuaca resmi.</div></details>
           </div>
         </div>
-        <div class="an-card an-wide">
-          <h4>Narasi analisis (otomatis, dapat diedit)</h4>
-          <textarea id="anNarrText" style="min-height:560px"></textarea>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-            <button class="produk-btn" id="anNarrSave" type="button">Simpan edit</button>
-            <button class="produk-btn" id="anNarrReset" type="button">Susun ulang</button>
-            <button class="produk-btn" id="anNarrCopy" type="button">Salin</button>
-            <span id="anNarrMsg" class="si-sub"></span>
-          </div>
-          <div class="si-sub" style="margin-top:6px">Narasi ini bantuan berbasis aturan sederhana — bukan produk resmi BMKG. Prakirawan tetap yang memutuskan.</div>
-        </div>
+
       </div>
     </section>
 
-    <section id="tafSection">
+    <section id="tafSection" data-tab="taf">
       <div class="sec-title">TAF WADB (draf) — Bandara Sultan Muhammad Salahuddin, Bima</div>
       <div class="an-card">
         <div class="syn-ctl">
@@ -475,13 +478,14 @@
       </div>
     </section>
 
-    <section id="produkSection">
+    <section id="produkSection" data-tab="produk">
       <div class="sec-title">Tabel produk — format prakiraan BMKG (semua kecamatan sekaligus)</div>
       <div class="produk-controls">
         <div class="field">
           <label>Sumber data</label>
           <select id="produkSrc">
             <option value="avg">Kesepakatan (rata-rata 4 model)</option>
+            <option value="ana">Hasil analisis (kesepakatan + kondisi atmosfer)</option>
             <option value="ecmwf">ECMWF</option>
             <option value="gfs">GFS</option>
             <option value="icon">ICON</option>
@@ -496,6 +500,7 @@
         <button class="produk-btn" id="produkCopy">Salin tabel (TSV)</button>
         <button class="produk-btn" id="produkPrint">Cetak</button>
       </div>
+      <div id="produkEnv" class="si-sub" style="margin-bottom:8px"></div>
       <div id="produkPrintHead"></div>
       <div class="produk-wrap">
         <table class="produk" id="produkTable"></table>
@@ -503,19 +508,19 @@
       <div class="produk-legend" id="produkLegend"></div>
     </section>
 
-    <section>
+    <section data-tab="peta">
       <div class="sec-title">Rincian per model — titik terpilih</div>
       <div class="agree-banner" id="agreeBanner"></div>
       <div class="model-cards" id="modelCards"></div>
     </section>
 
-    <section>
+    <section data-tab="peta">
       <div class="sec-title">Detail titik terpilih — H+0 s/d H+7, tiap 3 jam</div>
       <div class="day-tabs" id="detailDayTabs"></div>
       <div class="param-panel" id="detailTable"></div>
     </section>
 
-    <section id="secEnsemble">
+    <section id="secEnsemble" data-tab="peta">
       <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
         Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
@@ -532,7 +537,7 @@
       <div class="param-panel" id="ensembleTable" style="margin-top:10px;display:none;"></div>
     </section>
 
-    <section id="secLog">
+    <section id="secLog" data-tab="verifikasi">
       <div class="sec-title">Log verifikasi — catat kejadian aktual di titik &amp; waktu terpilih</div>
       <form class="logform" id="logForm">
         <div class="form-hint">Mencatat untuk <b id="logTargetLabel">—</b>.</div>
@@ -545,7 +550,7 @@
       </form>
     </section>
 
-    <section>
+    <section data-tab="verifikasi">
       <div class="sec-title">Riwayat verifikasi (semua titik)</div>
       <div id="histWrap"></div>
     </section>
@@ -1403,6 +1408,7 @@ function buildHourIndex(){
 // nilai satu sumber pada satu jam
 function srcHour(rec, src){
   if(!rec) return null;
+  if(src==='ana') src = 'avg';
   if(MODELS.some(m=>m.key===src)) return rec[src] || null;
   if(src==='avg'){
     const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
@@ -1425,6 +1431,17 @@ function ensSlot(stationId, dateStr, slotHour){
   return ecmwfEnsAt(stationId, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
 }
 function slotAgg(pi, hidx, dateStr, slotHour, src){
+  if(src==='ana'){                                    // kesepakatan model + penyesuaian oleh analisis kondisi atmosfer
+    const base = slotAgg(pi, hidx, dateStr, slotHour, 'avg'); if(!base) return null;
+    let grp = stationGroup(STATION_POINTS[pi].name); if(grp==='BANDARA / LAINNYA') grp = 'KABUPATEN BIMA';
+    const env = window.anEnv ? window.anEnv(dateStr, grp) : { mode:'neutral' };
+    const out = Object.assign({}, base, { env });
+    if(env.mode!=='neutral'){
+      out.wcat = consensusCat(pi, hidx, dateStr, slotHour, base.precip3, env.mode);
+      const dr = out.wcat.rank - base.wcat.rank; if(dr>0) out.shift = 'up'; else if(dr<0) out.shift = 'down';
+    }
+    return out;
+  }
   if(src==='ens'){
     const e = ensSlot(STATION_POINTS[pi].id, dateStr, slotHour);
     if(!e) return null;
@@ -1467,7 +1484,7 @@ function slotVotes(pi, hidx, dateStr, slotHour){
 }
 // Ambang "model basah": >= 1 mm per 3 jam (sama dengan ambang peluang ensemble)
 const WET_MM = 1.0;
-function consensusCat(pi, hidx, dateStr, slotHour, mm){
+function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
   const V = slotVotes(pi, hidx, dateStr, slotHour);
   const wet = V.filter(v=>v.mm!=null && v.mm>=WET_MM).length;
   const ts = V.filter(v=>v.rainRank>=7).length;
@@ -1477,10 +1494,13 @@ function consensusCat(pi, hidx, dateStr, slotHour, mm){
     if(pooled && pooled.nm>=2 && pooled.poe['1']!=null) poe1 = pooled.poe['1'];
   }
   // hujan hanya bila: >=2 model basah (atau rata² >=3 mm) DAN, bila ada ensemble, peluang >=20% (atau rata² >=3 mm)
-  const strong = mm!=null && mm>=3;
-  if((wet>=2 || strong) && (poe1==null || poe1>=0.2 || strong)){
+  // mode 'dry'  (analisis: atmosfer menghambat hujan) -> syarat hujan diperketat
+  // mode 'wet'  (analisis: atmosfer mendukung hujan)   -> syarat hujan dilonggarkan
+  const needWet = mode==='wet' ? 1 : 2, poeMin = mode==='dry' ? 0.35 : (mode==='wet' ? 0.15 : 0.2), strongMm = mode==='dry' ? 5 : (mode==='wet' ? 1.5 : 3);
+  const strong = mm!=null && mm>=strongMm;
+  if((wet>=needWet || strong) && (poe1==null || poe1>=poeMin || strong)){
     let cat = wxFromPrecip3(mm);
-    if(cat){ if(ts>=2 && mm>=5) cat = WX_CATS.hujanlebatpetir; return cat; }
+    if(cat){ if(ts>=(mode==='wet'?1:2) && mm>=(mode==='wet'?3:5)) cat = WX_CATS.hujanlebatpetir; return cat; }
   }
   // tanpa hujan signifikan -> kategori awan = median pangkat awan antar model
   const ranks = V.map(v=>v.cloudRank).filter(r=>r>=0).sort((a,b)=>a-b);
@@ -1695,7 +1715,7 @@ function renderProdukTable(){
       const cells = PRODUK_SLOTS.map(sh=>{
         const a = slotAgg(pi, hidx, date, sh, src);
         if(!a) return `<td>—</td>`;
-        const dis = (src==='avg') && slotDisagree(pi, hidx, date, sh);
+        const dis = (src==='avg' || src==='ana') && slotDisagree(pi, hidx, date, sh);
         const jk = justKey(date, pi, sh);
         const jr = JUST[jk];
         let w = a.wcat || WX_CATS.berawan;
@@ -1708,8 +1728,8 @@ function renderProdukTable(){
         if(clickable) cls += ' justcell';
         const tip = jr
           ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
-          : (dis?'Model terbelah — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
-        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${badge}</td>`;
+          : (dis?'Model terbelah — klik untuk justifikasi. ':'') + (a.shift ? (a.shift==='up' ? 'Dinaikkan oleh analisis atmosfer (mendukung hujan). ' : 'Diturunkan oleh analisis atmosfer (menghambat hujan). ') : '') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${a.shift==='up'?' <sup style="color:var(--bad)">▲</sup>':(a.shift==='down'?' <sup style="color:var(--good)">▼</sup>':'')}${badge}</td>`;
       }).join('');
       body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
         `<td class="num">${ext.tmin??'—'}</td><td class="num">${ext.tmax??'—'}</td>` +
@@ -1718,11 +1738,22 @@ function renderProdukTable(){
     });
   });
   tbl.innerHTML = head + '<tbody>' + body + '</tbody>';
+  const envEl = document.getElementById('produkEnv');
+  if(envEl){
+    if(src==='ana' && window.anEnv){
+      const MODE = { dry:['menghambat hujan','var(--good)','syarat hujan DIPERKETAT'], wet:['mendukung hujan','var(--bad)','syarat hujan DILONGGARKAN'], neutral:['netral','var(--text-dim)','tanpa penyesuaian'] };
+      envEl.innerHTML = '<b>Analisis kondisi atmosfer hari ini</b> (kelembapan lapisan, CAPE, angin, geser, konvergensi, gelombang, indeks skala besar): ' + ['KOTA BIMA','KABUPATEN BIMA','KABUPATEN DOMPU'].map(g=>{
+        const e = window.anEnv(date, g), m = MODE[e.mode];
+        return `<span style="white-space:nowrap"><b>${g.replace('KABUPATEN','Kab.').replace('KOTA','Kota')}</b>: <span style="color:${m[1]};font-weight:600">${m[0]}</span> (${e.pro} pendukung / ${e.con} penghambat → ${m[2]})</span>`;
+      }).join(' · ') + (()=>{ const e = window.anEnv(date,'KABUPATEN BIMA'); return e.note ? `<div style="color:var(--text-faint);margin-top:2px">${e.mode==='dry'?'Penghambat utama':'Pendukung utama'}: ${e.note}</div>` : ''; })();
+    } else envEl.innerHTML = '';
+  }
 
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
-    + (src==='avg' ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + (src==='ana' ? '<br><b>Hasil analisis</b> = kesepakatan 4 model yang <b>disesuaikan dengan kondisi atmosfer</b> hari itu: bila atmosfer menghambat hujan, kategori hujan hanya dipakai bila peluang ensemble ≥35% dan ≥2 model basah (atau rata² ≥5 mm); bila mendukung, syaratnya dilonggarkan (≥1 model basah dan peluang ≥15%). <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding kesepakatan biasa. Tanda <b style="color:var(--warn)">*</b> = model terbelah. ' : '')
+    + ((src==='avg') ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
