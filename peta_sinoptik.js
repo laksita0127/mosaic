@@ -196,7 +196,9 @@ function drawIsobars(ctx, m, g){
 }
 
 /* ---- streamline: seeded, jarak antar garis dijaga (occupancy grid) ---- */
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function drawStreamlines(ctx, m, U, V, vmax, dark){
+  const rnd = mulberry(20261104);                       // acak tetap -> pola streamline stabil (tidak berubah tiap digambar ulang)
   const size = m.getSize(), CELL = 9, gw = Math.ceil(size.x/CELL), gh = Math.ceil(size.y/CELL), occ = new Uint8Array(gw*gh);
   const wind = (x,y)=>{
     const ll = m.containerPointToLatLng([x,y]), u = sample(U, ll.lat, ll.lng), v = sample(V, ll.lat, ll.lng);
@@ -204,10 +206,10 @@ function drawStreamlines(ctx, m, U, V, vmax, dark){
   };
   const mark = (x,y)=>{ const i = Math.floor(x/CELL), j = Math.floor(y/CELL); if(i>=0&&j>=0&&i<gw&&j<gh) occ[j*gw+i] = 1; };
   const busy = (x,y,own)=>{ const i = Math.floor(x/CELL), j = Math.floor(y/CELL); return i<0||j<0||i>=gw||j>=gh ? true : (occ[j*gw+i] && !own.has(j*gw+i)); };
-  const seeds = []; for(let y=10;y<size.y;y+=20) for(let x=10;x<size.x;x+=20) seeds.push([x+(Math.random()-.5)*12, y+(Math.random()-.5)*12]);
-  for(let k=seeds.length-1;k>0;k--){ const r = Math.floor(Math.random()*(k+1)); [seeds[k],seeds[r]] = [seeds[r],seeds[k]]; }
+  const seeds = []; for(let y=10;y<size.y;y+=20) for(let x=10;x<size.x;x+=20) seeds.push([x+(rnd()-.5)*12, y+(rnd()-.5)*12]);
+  for(let k=seeds.length-1;k>0;k--){ const r = Math.floor(rnd()*(k+1)); [seeds[k],seeds[r]] = [seeds[r],seeds[k]]; }
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const col = sp => dark ? '#1b2530' : speedColor(sp, vmax);          // di atas RH berwarna: garis gelap agar terbaca
+  const col = sp => dark ? 'rgba(20,30,42,0.72)' : speedColor(sp, vmax);          // di atas RH berwarna: garis gelap agar terbaca
   seeds.forEach(([sx,sy])=>{
     if(busy(sx,sy,new Set())) return;
     const w0 = wind(sx,sy); if(!w0) return;

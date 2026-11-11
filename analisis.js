@@ -168,7 +168,7 @@ function renderHum(reg, date){
     <div class="si-sub" style="margin-bottom:6px"><b>Profil per jam</b> (rata² model, RH %) — kolom = jam WITA</div>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th></th>${PRODUK_SLOTS.map(h=>`<th>${String(h).padStart(2,'0')}</th>`).join('')}</tr></thead><tbody>${heat}</tbody></table></div>
     <div class="si-sub" style="margin-top:8px;line-height:1.5">${profileSentence(lv)}<br>
-      <span class="dim">Ambang kering/lembap: 850 hPa &lt;${TH.rh850[0]}/≥${TH.rh850[1]}%, 700 hPa &lt;${TH.rh700[0]}/≥${TH.rh700[1]}%, 500 hPa &lt;${TH.rh500[0]}/≥${TH.rh500[1]}%, 200 hPa &lt;${TH.rh200[0]}/≥${TH.rh200[1]}%, uap air &lt;${TH.pw[0]}/≥${TH.pw[1]} mm (usulan awal). RH 200 hPa ECMWF/GFS dikonversi dari basis es ke air agar sebanding dengan ICON. Titik acuan: ${levelPts(reg).map(p=>p.name).join(' + ')}. Tanda * = model berbeda kelas.</span></div>`;
+      <details class="note"><summary>ⓘ Ambang & catatan</summary><span class="dim">Ambang kering/lembap: 850 hPa &lt;${TH.rh850[0]}/≥${TH.rh850[1]}%, 700 hPa &lt;${TH.rh700[0]}/≥${TH.rh700[1]}%, 500 hPa &lt;${TH.rh500[0]}/≥${TH.rh500[1]}%, 200 hPa &lt;${TH.rh200[0]}/≥${TH.rh200[1]}%, uap air &lt;${TH.pw[0]}/≥${TH.pw[1]} mm (usulan awal). RH 200 hPa ECMWF/GFS dikonversi dari basis es ke air agar sebanding dengan ICON. Titik acuan: ${levelPts(reg).map(p=>p.name).join(' + ')}. Tanda * = model berbeda kelas.</span></details></div>`;
   return lv;
 }
 
@@ -195,11 +195,14 @@ function parseBulletin(text){
   };
 }
 function interpret(p){
-  const items = [], add = (k,lab,val,side,txt)=> items.push({k,lab,val,side,txt});
+  const items = [], add = (k,lab,val,side,txt)=> items.push({k,lab,val,side,txt,fb:!!(p.fb && p.fb[k])});
   if(p.soiStd!=null) add('soi','SOI (CPC)',fmt(p.soiStd,1), p.soiStd>=0.7?'wet':(p.soiStd<=-0.7?'dry':'neu'), p.soiStd>=0.7?'mendukung peningkatan hujan':(p.soiStd<=-0.7?'fase El Niño — cenderung mengurangi hujan':'netral'));
   else if(p.soi!=null) add('soi','SOI',fmt(p.soi,1), p.soi>=7?'wet':(p.soi<=-7?'dry':'neu'), p.soi>=7?'mendukung peningkatan hujan':(p.soi<=-7?'fase El Niño — cenderung mengurangi hujan':'netral'));
   if(p.nino!=null) add('nino','Niño 3.4',fmt(p.nino,2), p.nino<=-0.8?'wet':(p.nino>=0.8?'dry':'neu'), p.nino<=-0.8?'La Niña — cenderung menambah hujan':(p.nino>=0.8?'El Niño — cenderung mengurangi hujan':'netral'));
-  if(p.dmi!=null) add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
+  if(p.dmi!=null){
+    if(p.dmiStale) add('dmi','DMI',fmt(p.dmi,2),'neu',`data ${p.dmiMonth} (usang) — tidak dipakai menyimpulkan`);
+    else add('dmi','DMI',fmt(p.dmi,2), p.dmi<=-0.4?'wet':(p.dmi>=0.4?'dry':'neu'), p.dmi<=-0.4?'IOD negatif — cenderung menambah hujan':(p.dmi>=0.4?'IOD positif — cenderung mengurangi hujan':'netral'));
+  }
   if(p.mjoPhase!=null){
     const ph = p.mjoPhase, side = p.mjoInactive ? 'neu' : ([4,5].includes(ph)?'wet':([1,2,7,8].includes(ph)?'dry':'neu'));
     add('mjo','MJO',`fase ${ph}${p.mjoAmp!=null?' · amp '+fmt(p.mjoAmp,2):''}`, side, p.mjoInactive?(p.mjoStale?`data ROMI ${p.mjoDate} (tertinggal) — tidak dipakai menyimpulkan`:(p.mjoAmp!=null?'lemah (amp < 1) — tidak berkontribusi':'tidak aktif / tidak berkontribusi (buletin)')):(side==='wet'?'aktif di Benua Maritim — mendukung hujan':(side==='dry'?'menekan konveksi di Benua Maritim':'pengaruh sebagian')));
@@ -222,13 +225,19 @@ function dynOverall(items){
 function autoParams(){
   const D = window.DINAMIKA; if(!D) return null;
   const p = {};
-  if(D.nino34) p.nino = D.nino34.value;
-  if(D.soi){ if(D.soi.scale==='bom') p.soi = D.soi.value; else p.soiStd = D.soi.value; }
-  if(D.dmi) p.dmi = D.dmi.value;
+  p.fb = {};
+  if(D.nino34){ p.nino = D.nino34.value; if(D.nino34.scale!=='bom') p.fb.nino = true; }
+  if(D.soi){ if(D.soi.scale==='bom') p.soi = D.soi.value; else { p.soiStd = D.soi.value; p.fb.soi = true; } }
+  if(D.dmi){
+    p.dmi = D.dmi.value; if(D.dmi.scale!=='bom') p.fb.dmi = true;
+    const dm = D.dmi.date || (D.dmi.month ? D.dmi.month + '-15' : null);
+    p.dmiMonth = D.dmi.month || D.dmi.date;
+    p.dmiStale = dm ? (Date.now() - Date.parse(dm))/86400000 > 45 : false;     // bulanan & terlambat -> jangan dipakai menyimpulkan
+  }
   if(D.mjo){
     p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoDate = D.mjo.date;
     p.mjoStale = (Date.now()-Date.parse(D.mjo.date))/86400000 > 3;      // ROMI tertinggal beberapa hari -> jangan dipakai menyimpulkan
-    p.mjoInactive = D.mjo.amp < 1 || p.mjoStale;
+    p.mjoInactive = D.mjo.amp < 1 || p.mjoStale; p.fb.mjo = true;
   }
   return p;
 }
@@ -236,20 +245,22 @@ function mergedParams(b, date){
   const a = autoParams() || {}, pb = b ? parseBulletin(b.text) : {};
   const p = Object.assign({}, a);
   Object.keys(pb).forEach(k=>{ if(pb[k]!=null && pb[k]!==false) p[k]=pb[k]; });
-  if(pb.soi!=null) p.soiStd = null;
+  p.fb = Object.assign({}, a.fb || {});
+  if(pb.nino!=null) delete p.fb.nino; if(pb.dmi!=null){ delete p.fb.dmi; p.dmiStale = false; } if(pb.soi!=null){ delete p.fb.soi; p.soiStd = null; } if(pb.mjoPhase!=null) delete p.fb.mjo;
   if(pb.mjoPhase!=null){ p.mjoPhase = pb.mjoPhase; p.mjoAmp = null; p.mjoStale = false; p.mjoInactive = pb.mjoInactive; }
   const wm = waveManual(date); p.kelvinMan = wm.kelvin || null; p.erMan = wm.er || null;
   return p;
 }
 function autoNote(b){
   const D = window.DINAMIKA; if(!D) return '';
-  const bits = [];
   const fromBul = k => b && parseBulletin(b.text)[k]!=null;
-  if(D.nino34 && !fromBul('nino')) bits.push(`Niño 3.4: ${D.nino34.src}, ${D.nino34.date}`);
-  if(D.soi && !fromBul('soi')) bits.push(`SOI: ${D.soi.src}, ${D.soi.date||D.soi.month}`);
-  if(D.mjo && !fromBul('mjoPhase')) bits.push(`MJO: ${D.mjo.src} ${D.mjo.date} — indeks berbasis OLR, bisa berbeda dari RMM BMKG/BoM`);
-  if(D.dmi && !fromBul('dmi')) bits.push(`DMI: ${D.dmi.src}, ${D.dmi.date||D.dmi.month}`);
-  return bits.length ? `<div class="si-sub dim" style="margin-top:6px">Otomatis (bukan buletin BMKG): ${bits.join(' · ')}. Tempel buletin BMKG untuk menimpa dan menambah surge, Kelvin/Rossby, belokan angin, SST.</div>` : '';
+  const rows = [];
+  const add = (lab, o, bulKey, extra) => { if(o && !fromBul(bulKey)) rows.push(`<li><b>${lab}</b>: ${esc(o.src)}, ${o.date||o.month}${extra||''}</li>`); };
+  add('Niño 3.4', D.nino34, 'nino'); add('SOI', D.soi, 'soi'); add('DMI', D.dmi, 'dmi'); add('MJO', D.mjo, 'mjoPhase', ' — indeks berbasis OLR, bisa berbeda dari RMM BMKG/BoM');
+  if(!rows.length) return '';
+  const fb = [D.nino34, D.soi, D.dmi].some(o=>o && o.scale && o.scale!=='bom');
+  return (fb ? `<div class="si-sub" style="margin-top:8px;padding:6px 8px;border-left:3px solid var(--warn);background:var(--panel-alt)">Sumber BoM (acuan buletin BMKG) tidak terjangkau dari server — angka bertanda <b>NOAA</b> adalah cadangan dan <b>bisa berbeda</b> dari buletin (skala/tanggal). Tempel buletin BMKG untuk angka resmi.</div>` : '')
+    + `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:11.5px;color:var(--text-dim)">Sumber & tanggal data otomatis</summary><ul class="si-sub dim" style="margin:4px 0 0 16px;padding:0;line-height:1.5">${rows.join('')}</ul></details>`;
 }
 function bulletinFor(date){
   return load(KEY_DYN, []).filter(b=>b.date && b.date <= date).sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
@@ -274,8 +285,8 @@ function renderDyn(date){
   const tag = { wet:'c-good', dry:'c-warn', neu:'c-neutral' };
   const age = b ? Math.round((Date.parse(date)-Date.parse(b.date))/86400000) : 0;
   view.innerHTML = (b ? `<div class="si-sub" style="margin-bottom:6px">Buletin tanggal <b>${dateLong(b.date,{day:'numeric',month:'long',year:'numeric'})}</b>${age>0?` <span style="color:var(--warn)">(${age} hari sebelum hari analisis — kondisi saat itu, bukan prakiraan)</span>`:''}</div>`
-      : `<div class="si-sub" style="margin-bottom:6px">Belum ada buletin BMKG untuk tanggal ini — memakai indeks otomatis.</div>`)
-    + `<div class="an-chips">${items.map(i=>`<div class="an-chip"><div class="k">${i.lab}</div><div class="v">${i.val}</div><span class="si-chip ${tag[i.side]}">${i.txt}</span></div>`).join('')}</div>`
+      : `<div class="si-sub" style="margin-bottom:6px">Belum ada buletin BMKG untuk tanggal ini — memakai indeks otomatis (lihat catatan sumber di bawah).</div>`)
+    + `<div class="an-chips">${items.map(i=>`<div class="an-chip${i.fb?' fb':''}"><div class="k">${i.lab}${i.fb?' · NOAA (cadangan)':''}</div><div class="v">${i.val}</div><span class="si-chip ${tag[i.side]}">${i.txt}</span></div>`).join('')}</div>`
     + (ov?`<div style="margin:8px 0"><span class="si-chip ${ov.cls}">${ov.txt}</span></div>`:'')
     + (b && waveLines(p).length ? `<table class="an-tbl" style="margin:8px 0;text-align:left"><tbody>${waveLines(p).map(([k,v])=>`<tr><td style="text-align:left"><b>${k}</b></td><td style="text-align:left;white-space:normal">${esc(v.length>230?v.slice(0,230)+'…':v)}</td></tr>`).join('')}</tbody></table>` : '')
     + (b ? `<div class="si-sub" style="line-height:1.5">${mn.hit
@@ -342,7 +353,7 @@ function renderRain(date, reg){
   const srcTxt = R.src==='gabungan' ? 'ensemble <b>gabungan</b> ECMWF·AIFS·GEFS·ICON (bobot sama per model)' : (R.src==='ECMWF' ? 'ensemble ECMWF' : '<b>tidak ada data ensemble</b> untuk hari ini (hanya deterministik)');
   el.innerHTML = `<h4>Hujan, suhu &amp; angin per kecamatan — ${REGS[reg]}</h4>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th>Kecamatan</th><th>Peluang hujan maks (≥1 mm/3 jam)</th><th>Jam puncak</th><th>Peluang ≥10 mm</th><th>Hujan 3 jam maks (det.)</th><th>Suhu</th><th>Angin maks</th><th>Sel *</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="si-sub" style="margin-top:6px">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata model deterministik; suhu/angin = rata-rata 4 model; sel * = jumlah slot (dari 8) saat 4 model tak sepakat ada/tidaknya hujan.</div>`;
+    <details class="note" style="margin-top:6px"><summary>ⓘ Cara membaca tabel ini</summary><div class="si-sub">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata model deterministik; suhu/angin = rata-rata 4 model; sel * = jumlah slot (dari 8) saat 4 model tak sepakat ada/tidaknya hujan.</div></details>`;
   return R;
 }
 
@@ -636,8 +647,37 @@ function initWave(){
   $('waveKelvin').addEventListener('change', store); $('waveER').addEventListener('change', store);
   $('anDay').addEventListener('change', sync); sync(); upd();
 }
+const KEY_FOLD = 'mosaic-fold';
+function initFolds(){
+  const saved = load(KEY_FOLD, {});
+  document.querySelectorAll('.an-card.fold').forEach(c=>{
+    const id = c.id; if(!id) return;
+    if(id in saved) c.classList.toggle('collapsed', !!saved[id]);
+    const h = c.querySelector(':scope > h4'); if(!h) return;
+    h.setAttribute('role','button'); h.tabIndex = 0;
+    const tog = ()=>{ c.classList.toggle('collapsed'); const st = load(KEY_FOLD, {}); st[id] = c.classList.contains('collapsed'); save(KEY_FOLD, st); window.dispatchEvent(new Event('resize')); };
+    h.addEventListener('click', tog); h.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tog(); } });
+  });
+}
+function initNav(){
+  const nav = $('sectionNav'); if(!nav || !window.IntersectionObserver) return;
+  const links = [...nav.querySelectorAll('a')], map = {};
+  links.forEach(a=>{ const el = document.querySelector(a.getAttribute('href')); if(el) map[a.getAttribute('href')] = { a, el }; });
+  const visible = new Set();
+  const io = new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting) visible.add(e.target); else visible.delete(e.target); });
+    const vis = Object.values(map).filter(x=>visible.has(x.el)).map(x=>({ x, top:x.el.getBoundingClientRect().top })).sort((a,b)=>a.top-b.top);
+    const above = vis.filter(v=>v.top <= innerHeight*0.4);              // bagian yang sudah melewati 40% tinggi layar = bagian aktif
+    const pick = above.length ? above[above.length-1] : vis[0];
+    const first = pick ? pick.x : null;
+    links.forEach(a=>a.classList.toggle('on', !!first && first.a===a));
+    if(first){ const r = first.a.getBoundingClientRect(), nr = nav.getBoundingClientRect(); if(r.left<nr.left || r.right>nr.right) nav.scrollLeft += r.left - nr.left - 20; }
+  }, { rootMargin:'-60px 0px -55% 0px' });
+  Object.values(map).forEach(x=>io.observe(x.el));
+}
 function init(){
   if(!$('analisisSection')) return;
+  initFolds(); initNav();
   $('anReg').innerHTML = Object.entries(REGS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
   $('anDay').addEventListener('change', render);
   $('anReg').addEventListener('change', render);

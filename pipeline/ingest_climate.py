@@ -66,25 +66,44 @@ def bom_text():
     return _bom_text
 
 
+_N = r"([%s+]?\s*\d+(?:\.\d+)?)" % re.escape(MINUS)
+_D = r"(\d{1,2} \w+ \d{4})"
+
+
+def _bom_find(label, pats):
+    """Coba beberapa pola kalimat BoM (wording berubah dari waktu ke waktu). Tiap pola: (regex, urutan_grup) -> (nilai, tanggal)."""
+    t = bom_text()
+    for rx, order in pats:
+        m = re.search(rx, t, re.I)
+        if m:
+            g = m.groups()
+            val, d = (g[0], g[1]) if order == "vd" else (g[1], g[0])
+            return {"value": sgn(val), "date": iso(d)}
+    raise RuntimeError(f"{label} BoM tidak terbaca (format halaman berubah?)")
+
+
 def bom_nino34():
-    m = re.search(r"relative\s+Ni.{1,3}o\s?3\.4 index value for the week ending (\d{1,2} \w+ \d{4}) is\s*([%s+]?\s*[\d.]+)" % re.escape(MINUS), bom_text(), re.I)
-    if not m:
-        raise RuntimeError("Niño 3.4 BoM tidak terbaca")
-    return {"value": sgn(m.group(2)), "date": iso(m.group(1)), "src": "BoM, Niño3.4 relatif mingguan", "scale": "bom"}
+    r = _bom_find("Niño 3.4", [
+        (r"relative\s+Ni.{1,3}o\s?3\.4 index (?:value )?was\s*" + _N + r"\s*.{0,3}C for the week ending " + _D, "vd"),
+        (r"relative\s+Ni.{1,3}o\s?3\.4 index value for the week ending " + _D + r" is\s*" + _N, "dv"),
+    ])
+    return dict(r, src="BoM, Niño3.4 relatif mingguan", scale="bom")
 
 
 def bom_soi():
-    m = re.search(r"30-day SOI to (\d{1,2} \w+ \d{4}) (?:at|of|is)\s*([%s+]?\s*[\d.]+)" % re.escape(MINUS), bom_text(), re.I)
-    if not m:
-        raise RuntimeError("SOI BoM tidak terbaca")
-    return {"value": sgn(m.group(2)), "date": iso(m.group(1)), "src": "BoM, SOI 30-hari", "scale": "bom"}
+    r = _bom_find("SOI", [
+        (r"30-day (?:value of the )?(?:Southern Oscillation Index|SOI)[^()]{0,60}\(\s*" + _N + r"\s*to\s*" + _D + r"\)", "vd"),
+        (r"30-day SOI to " + _D + r" (?:at|of|is)\s*" + _N, "dv"),
+    ])
+    return dict(r, src="BoM, SOI 30-hari", scale="bom")
 
 
 def bom_dmi():
-    m = re.search(r"IOD index value for the week ending (\d{1,2} \w+ \d{4}) is\s*([%s+]?\s*[\d.]+)" % re.escape(MINUS), bom_text(), re.I)
-    if not m:
-        raise RuntimeError("IOD BoM tidak terbaca")
-    return {"value": sgn(m.group(2)), "date": iso(m.group(1)), "src": "BoM, IOD (DMI) mingguan", "scale": "bom"}
+    r = _bom_find("IOD", [
+        (r"IOD index (?:was|is)\s*" + _N + r"\s*.{0,3}C for the week ending " + _D, "vd"),
+        (r"IOD index value for the week ending " + _D + r" is\s*" + _N, "dv"),
+    ])
+    return dict(r, src="BoM, IOD (DMI) mingguan", scale="bom")
 
 
 # ------------------------------------------------------------------ NOAA (cadangan)
@@ -158,6 +177,8 @@ def main():
             try:
                 out[k] = fn()
                 print(k, "<-", fn.__name__, out[k])
+                if fn.__name__.startswith("noaa"):
+                    print(f"::warning::{k}: sumber BoM gagal dibaca, memakai cadangan NOAA (angka bisa beda dari buletin BMKG)")
                 break
             except Exception as e:                       # satu sumber gagal -> coba cadangan
                 print("GAGAL", fn.__name__, e, file=sys.stderr)

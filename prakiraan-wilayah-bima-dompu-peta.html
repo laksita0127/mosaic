@@ -18,7 +18,7 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;padding:28px 20px 60px;}
-  .wrap{max-width:1040px;margin:0 auto;}
+  .wrap{max-width:1180px;margin:0 auto;}
   .masthead{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
   .masthead-logo{width:46px;height:46px;object-fit:contain;flex:none;}
   .masthead-logo-fallback{
@@ -184,12 +184,13 @@
   td.disagree{box-shadow:inset 3px 0 0 var(--warn);}
   td.disagree::after{content:" *";color:var(--warn);font-weight:700;}
   /* --- Analisis harian --- */
-  .an-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+  .an-grid{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);gap:14px;margin-bottom:14px;}
   .an-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;min-width:0;}
   .an-card h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:0.6px;color:var(--accent);}
   .an-card textarea{width:100%;box-sizing:border-box;min-height:110px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical;}
-  .an-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .an-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
   .an-chip{background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius);padding:6px 9px;min-width:92px;}
+  .an-chip.fb{opacity:.75;border-style:dashed;}
   .an-chip .k{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
   .an-chip .v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin:1px 0 3px;}
   table.an-tbl{border-collapse:collapse;width:100%;font-size:11.5px;}
@@ -198,6 +199,25 @@
   table.an-tbl td.kec{text-align:left;}
   .an-card .dim{color:var(--text-faint);}
   .an-wide{grid-column:1/-1;}
+  /* navigasi bagian (menempel di atas) */
+  #sectionNav{position:sticky;top:0;z-index:900;display:flex;gap:6px;overflow-x:auto;white-space:nowrap;background:var(--bg);padding:8px 0;margin:0 0 12px;border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch;}
+  #sectionNav a{flex:none;padding:6px 12px;border:1px solid var(--border);border-radius:14px;background:var(--panel);color:var(--text-dim);text-decoration:none;font-size:12.5px;}
+  #sectionNav a:hover{color:var(--text);}
+  #sectionNav a.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  section, .map-panel, #anSyn, #anWave, #anRain{scroll-margin-top:56px;}
+  /* kartu yang bisa dilipat */
+  .an-card.fold > h4{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .an-card.fold > h4::after{content:"▾";font-size:12px;color:var(--text-faint);}
+  .an-card.fold.collapsed > h4{margin-bottom:0;}
+  .an-card.fold.collapsed > h4::after{content:"▸";}
+  .an-card.fold.collapsed > :not(h4){display:none !important;}
+  details.note > summary{cursor:pointer;font-size:11.5px;color:var(--text-faint);}
+  details.note[open] > summary{margin-bottom:4px;}
+  @media (max-width:640px){
+    button, select, .produk-btn, .step-btn{min-height:40px;}
+    .chk{min-height:36px;}
+    #sectionNav a{padding:8px 14px;}
+  }
   .syn-canvas{position:absolute;left:0;top:0;pointer-events:none;}
   #synMap{height:480px;border:1px solid var(--border);border-radius:var(--radius);margin-top:8px;}
   .syn-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
@@ -298,10 +318,14 @@
       </div>
     </div>
 
+    <nav id="sectionNav" aria-label="Bagian halaman">
+      <a href="#map-panel">Peta</a><a href="#analisisSection">Analisis harian</a><a href="#anSyn">Peta sinoptik</a><a href="#tafSection">TAF WADB</a>
+      <a href="#produkSection">Tabel produk</a><a href="#secEnsemble">Ensemble</a><a href="#secLog">Verifikasi</a>
+    </nav>
     <div class="run-info" id="runInfo"></div>
     <div id="ensStaleBanner" class="stale-banner" hidden></div>
 
-    <div class="map-panel">
+    <div class="map-panel" id="map-panel">
       <div id="map"></div>
       <div class="legend-bar">
         <div class="legend-title" id="legendTitle"></div>
@@ -355,7 +379,7 @@
         </div>
         <div class="an-card" id="anHum"></div>
         <div class="an-card an-wide" id="anRain"></div>
-        <div class="an-card an-wide" id="anWave">
+        <div class="an-card an-wide fold collapsed" id="anWave">
           <h4>Gelombang atmosfer — MJO · Kelvin · Rossby ekuator (NCICS)</h4>
           <div class="syn-ctl">
             <select id="waveVar">
@@ -379,7 +403,7 @@
             <span class="si-sub dim">tersimpan per hari analisis; ikut ke ringkasan dinamika &amp; narasi</span>
           </div>
         </div>
-        <div class="an-card an-wide" id="anSyn">
+        <div class="an-card an-wide fold" id="anSyn">
           <h4>Peta sinoptik — isobar &amp; streamline</h4>
           <div id="synBody">
             <div class="syn-ctl">
@@ -399,7 +423,7 @@
             <div id="synMap"></div>
             <div id="synHover" class="si-sub" style="margin-top:6px;min-height:16px;font-family:'IBM Plex Mono',monospace"></div>
             <div id="synLegend" class="si-sub" style="margin-top:2px;line-height:1.5"></div>
-            <div class="si-sub dim" style="margin-top:2px">Model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, tekanan, dan lapisan lembap/kering. RH 200/500 hPa dinyatakan terhadap air. Arahkan kursor untuk nilai di titik. Bukan analisis cuaca resmi.</div>
+            <details class="note"><summary>ⓘ Tentang peta ini</summary><div class="si-sub dim" style="margin-top:2px">Model deterministik ECMWF IFS (0,25° dijarangkan ke 1°) — untuk melihat belokan angin/konvergensi, monsun, tekanan, dan lapisan lembap/kering. RH 200/500 hPa dinyatakan terhadap air. Arahkan kursor untuk nilai di titik. Bukan analisis cuaca resmi.</div></details>
           </div>
         </div>
         <div class="an-card an-wide">
@@ -433,7 +457,7 @@
           <button class="produk-btn" id="tafMetarSave" type="button" style="margin-top:6px">Simpan METAR</button>
           <button class="produk-btn" id="tafMetarClear" type="button" style="margin-top:6px">Hapus semua</button>
           <div id="tafMetarInfo" class="si-sub" style="margin-top:4px"></div>
-          <div class="si-sub dim" style="line-height:1.5">METAR terbaru (≤3,5 jam sebelum validitas) menentukan kondisi awal. METAR beberapa hari (≥3 hari) dipakai untuk koreksi lokal: pola angin & visibilitas yang biasa tercatat per jam, dan frekuensi TS per slot 3 jam (menambah PROB30 TEMPO TSRA bila TS tercatat ≥2 hari pada jam itu). Disimpan di browser ini. METAR bandara lain tidak dipakai.</div>
+          <details class="note"><summary>ⓘ Cara METAR dipakai</summary><div class="si-sub dim" style="line-height:1.5">METAR terbaru (≤3,5 jam sebelum validitas) menentukan kondisi awal. METAR beberapa hari (≥3 hari) dipakai untuk koreksi lokal: pola angin & visibilitas yang biasa tercatat per jam, dan frekuensi TS per slot 3 jam (menambah PROB30 TEMPO TSRA bila TS tercatat ≥2 hari pada jam itu). Disimpan di browser ini. METAR bandara lain tidak dipakai.</div></details>
         </details>
         <div id="tafMeta" class="si-sub" style="color:var(--warn);margin-top:6px"></div>
         <textarea id="tafOut" spellcheck="false" style="width:100%;box-sizing:border-box;min-height:150px;margin-top:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6"></textarea>
@@ -491,7 +515,7 @@
       <div class="param-panel" id="detailTable"></div>
     </section>
 
-    <section>
+    <section id="secEnsemble">
       <div class="sec-title">Rentang kemungkinan (ensemble) — seberapa lebar peluangnya?</div>
       <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">
         Tiap model dijalankan puluhan kali dengan sedikit variasi kondisi awal. Hasilnya bukan satu angka, tapi <b>sebaran skenario</b>: batang panjang = kemungkinan lebar (kurang pasti), batang pendek = skenario rapat (lebih pasti).
@@ -508,7 +532,7 @@
       <div class="param-panel" id="ensembleTable" style="margin-top:10px;display:none;"></div>
     </section>
 
-    <section>
+    <section id="secLog">
       <div class="sec-title">Log verifikasi — catat kejadian aktual di titik &amp; waktu terpilih</div>
       <form class="logform" id="logForm">
         <div class="form-hint">Mencatat untuk <b id="logTargetLabel">—</b>.</div>
@@ -1420,23 +1444,55 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
   }
   if(pn===0 && temp==null) return null;
   const mm = pn?precip3:null;
+  if(src==='avg') return { precip3:mm, wcat: consensusCat(pi, hidx, dateStr, slotHour, mm), temp, speed, dir };
   return { precip3:mm, wcat: wxCombine(wxFromCode(wcode), wxFromPrecip3(mm), mm), temp, speed, dir };
 }
-function slotDisagree(pi, hidx, dateStr, slotHour){
-  const sums = MODELS.map(m=>{
-    let s=0,n=0;
+// Suara per model untuk satu slot 3-jam: jumlah hujan 3 jam + pangkat kategori kode cuaca tertinggi (hujan & awan dipisah)
+function slotVotes(pi, hidx, dateStr, slotHour){
+  const out = [];
+  MODELS.forEach(m=>{
+    let s=0, n=0, rainRank=-1, cloudRank=-1;
     for(let k=1;k<=3;k++){
       let hh=slotHour+k, dd=dateStr;
       if(hh>=24){ hh-=24; dd=addDays(dateStr,1); }
-      const rec = hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`);
-      const v = rec && rec[m.key] && rec[m.key].precip;
-      if(v!=null){ s+=v; n++; }
+      const rec = hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`), r = rec && rec[m.key];
+      if(!r) continue;
+      if(r.precip!=null){ s+=r.precip; n++; }
+      const c = wxFromCode(r.wcode);
+      if(c){ if(c.rank>=4) rainRank = Math.max(rainRank, c.rank); else cloudRank = Math.max(cloudRank, c.rank); }
     }
-    return n?s:null;
-  }).filter(v=>v!=null);
+    if(n || rainRank>=0 || cloudRank>=0) out.push({ key:m.key, mm: n?s:null, rainRank, cloudRank });
+  });
+  return out;
+}
+// Ambang "model basah": >= 1 mm per 3 jam (sama dengan ambang peluang ensemble)
+const WET_MM = 1.0;
+function consensusCat(pi, hidx, dateStr, slotHour, mm){
+  const V = slotVotes(pi, hidx, dateStr, slotHour);
+  const wet = V.filter(v=>v.mm!=null && v.mm>=WET_MM).length;
+  const ts = V.filter(v=>v.rainRank>=7).length;
+  let poe1 = null;
+  if(ENS_MULTI){
+    const pooled = ensPooledAt(STATION_POINTS[pi].id, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
+    if(pooled && pooled.nm>=2 && pooled.poe['1']!=null) poe1 = pooled.poe['1'];
+  }
+  // hujan hanya bila: >=2 model basah (atau rata² >=3 mm) DAN, bila ada ensemble, peluang >=20% (atau rata² >=3 mm)
+  const strong = mm!=null && mm>=3;
+  if((wet>=2 || strong) && (poe1==null || poe1>=0.2 || strong)){
+    let cat = wxFromPrecip3(mm);
+    if(cat){ if(ts>=2 && mm>=5) cat = WX_CATS.hujanlebatpetir; return cat; }
+  }
+  // tanpa hujan signifikan -> kategori awan = median pangkat awan antar model
+  const ranks = V.map(v=>v.cloudRank).filter(r=>r>=0).sort((a,b)=>a-b);
+  const med = ranks.length ? ranks[Math.floor(ranks.length/2)] : 2;
+  return Object.values(WX_CATS).find(c=>c.rank===med) || WX_CATS.berawan;
+}
+// Tanda *: model terbelah secara bermakna = 2..N-1 model basah (>=1 mm/3 jam), atau 1 model basah dengan >=3 mm (outlier kuat)
+function slotDisagree(pi, hidx, dateStr, slotHour){
+  const sums = slotVotes(pi, hidx, dateStr, slotHour).map(v=>v.mm).filter(v=>v!=null);
   if(sums.length<2) return false;
-  const wet = sums.filter(v=>v>=0.5).length;
-  return wet>0 && wet<sums.length;
+  const wet = sums.filter(v=>v>=WET_MM).length;
+  return (wet>=2 && wet<sums.length) || (wet===1 && Math.max(...sums)>=3);
 }
 function dayExtent(pi, hidx, dateStr, src){
   let tmin=Infinity,tmax=-Infinity,rmin=Infinity,rmax=-Infinity,spdMax=0,sx=0,sy=0,nW=0,haveT=false,haveR=false;
@@ -1652,7 +1708,7 @@ function renderProdukTable(){
         if(clickable) cls += ' justcell';
         const tip = jr
           ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
-          : (dis?'4 model tidak sepakat — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+          : (dis?'Model terbelah — klik untuk justifikasi. ':'') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
         return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}"><span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${badge}</td>`;
       }).join('');
       body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
@@ -1666,7 +1722,7 @@ function renderProdukTable(){
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
-    + (src==='avg' ? '<br>Sel bertanda <b style="color:var(--warn)">*</b> = 4 model tidak sepakat soal hujan — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + (src==='avg' ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
