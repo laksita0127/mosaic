@@ -486,6 +486,10 @@
           <select id="produkSrc">
             <option value="avg">Kesepakatan (rata-rata 4 model)</option>
             <option value="ana">Hasil analisis (kesepakatan + kondisi atmosfer)</option>
+            <option value="ana:ecmwf">ECMWF + kondisi atmosfer</option>
+            <option value="ana:gfs">GFS + kondisi atmosfer</option>
+            <option value="ana:icon">ICON + kondisi atmosfer</option>
+            <option value="ana:aifs">AIFS + kondisi atmosfer</option>
             <option value="ecmwf">ECMWF</option>
             <option value="gfs">GFS</option>
             <option value="icon">ICON</option>
@@ -1409,6 +1413,7 @@ function buildHourIndex(){
 function srcHour(rec, src){
   if(!rec) return null;
   if(src==='ana') src = 'avg';
+  else if(src && src.startsWith('ana:')) src = src.slice(4);
   if(MODELS.some(m=>m.key===src)) return rec[src] || null;
   if(src==='avg'){
     const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
@@ -1430,7 +1435,46 @@ function ensSlot(stationId, dateStr, slotHour){
   // toleransi kalau ternyata data belum sinkron.
   return ecmwfEnsAt(stationId, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
 }
+// kunci model di data ensemble (ens_multi.js) untuk tiap model deterministik
+const ENS_KEY_OF = { ecmwf:'ecmwf', aifs:'aifs', gfs:'gefs', icon:'icon' };
+// Satu model + kondisi atmosfer: syarat kategori hujan dari model itu sendiri diperketat/dilonggarkan sesuai penilaian atmosfer,
+// dengan peluang ensemble model yang sama (bila ada) sebagai penentu tambahan.
+function modelCatWithEnv(pi, hidx, dateStr, slotHour, mk, base, mode){
+  const V = slotVotes(pi, hidx, dateStr, slotHour).find(v=>v.key===mk);
+  const mm = V ? V.mm : null;
+  let poe1 = null;
+  if(ENS_MULTI && ENS_KEY_OF[mk]){
+    const e = ensModelAt(ENS_KEY_OF[mk], STATION_POINTS[pi].id, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
+    if(e && e.precip && e.precip.poe && e.precip.poe['1']!=null) poe1 = e.precip.poe['1'];
+  }
+  const isRain = base.rank>=4;
+  if(mode==='dry'){
+    if(!isRain) return base;
+    const ok = mm!=null && (mm>=5 || (mm>=2 && (poe1==null || poe1>=0.35)));       // diperketat
+    if(ok) return base;
+    const r = V && V.cloudRank>=0 ? V.cloudRank : 2;
+    return Object.values(WX_CATS).find(c=>c.rank===r) || WX_CATS.berawan;
+  }
+  if(mode==='wet'){
+    if(mm==null || mm<1.0 || (poe1!=null && poe1<0.15 && mm<1.5)) return base;       // dilonggarkan: model basah ≥1 mm dan peluang ≥15%
+    const up = wxFromPrecip3(mm);
+    return (up && up.rank>base.rank) ? up : base;
+  }
+  return base;
+}
 function slotAgg(pi, hidx, dateStr, slotHour, src){
+  if(src && src.startsWith('ana:')){
+    const mk = src.slice(4);
+    const base = slotAgg(pi, hidx, dateStr, slotHour, mk); if(!base) return null;
+    let grp = stationGroup(STATION_POINTS[pi].name); if(grp==='BANDARA / LAINNYA') grp = 'KABUPATEN BIMA';
+    const env = window.anEnv ? window.anEnv(dateStr, grp) : { mode:'neutral' };
+    const out = Object.assign({}, base, { env });
+    if(env.mode!=='neutral'){
+      out.wcat = modelCatWithEnv(pi, hidx, dateStr, slotHour, mk, base.wcat, env.mode);
+      const dr = out.wcat.rank - base.wcat.rank; if(dr>0) out.shift = 'up'; else if(dr<0) out.shift = 'down';
+    }
+    return out;
+  }
   if(src==='ana'){                                    // kesepakatan model + penyesuaian oleh analisis kondisi atmosfer
     const base = slotAgg(pi, hidx, dateStr, slotHour, 'avg'); if(!base) return null;
     let grp = stationGroup(STATION_POINTS[pi].name); if(grp==='BANDARA / LAINNYA') grp = 'KABUPATEN BIMA';
@@ -1740,7 +1784,7 @@ function renderProdukTable(){
   tbl.innerHTML = head + '<tbody>' + body + '</tbody>';
   const envEl = document.getElementById('produkEnv');
   if(envEl){
-    if(src==='ana' && window.anEnv){
+    if(src && src.startsWith('ana') && window.anEnv){
       const MODE = { dry:['menghambat hujan','var(--good)','syarat hujan DIPERKETAT'], wet:['mendukung hujan','var(--bad)','syarat hujan DILONGGARKAN'], neutral:['netral','var(--text-dim)','tanpa penyesuaian'] };
       envEl.innerHTML = '<b>Analisis kondisi atmosfer hari ini</b> (kelembapan lapisan, CAPE, angin, geser, konvergensi, gelombang, indeks skala besar): ' + ['KOTA BIMA','KABUPATEN BIMA','KABUPATEN DOMPU'].map(g=>{
         const e = window.anEnv(date, g), m = MODE[e.mode];
@@ -1752,6 +1796,7 @@ function renderProdukTable(){
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
+    + (src && src.startsWith('ana:') ? `<br><b>${srcName}</b> = hasil <b>${srcName.split(' +')[0]} saja</b> yang disesuaikan dengan kondisi atmosfer hari itu: bila atmosfer menghambat hujan, kategori hujan model ini hanya dipakai bila hujannya ≥2 mm/3 jam dan peluang ensemble model yang sama ≥35% (atau ≥5 mm); bila mendukung, hujan ≥1 mm/3 jam dengan peluang ≥15% dinaikkan kategorinya. <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding model itu sendiri. ` : '')
     + (src==='ana' ? '<br><b>Hasil analisis</b> = kesepakatan 4 model yang <b>disesuaikan dengan kondisi atmosfer</b> hari itu: bila atmosfer menghambat hujan, kategori hujan hanya dipakai bila peluang ensemble ≥35% dan ≥2 model basah (atau rata² ≥5 mm); bila mendukung, syaratnya dilonggarkan (≥1 model basah dan peluang ≥15%). <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding kesepakatan biasa. Tanda <b style="color:var(--warn)">*</b> = model terbelah. ' : '')
     + ((src==='avg') ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
