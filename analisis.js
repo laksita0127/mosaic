@@ -235,6 +235,11 @@ function autoParams(){
     p.dmiMonth = D.dmi.month || D.dmi.date;
     p.dmiStale = dm ? (Date.now() - Date.parse(dm))/86400000 > 45 : false;     // bulanan & terlambat -> jangan dipakai menyimpulkan
   }
+  if(D.mjo){
+    p.mjoPhase = D.mjo.phase; p.mjoAmp = D.mjo.amp; p.mjoDate = D.mjo.date;
+    p.mjoStale = (Date.now()-Date.parse(D.mjo.date))/86400000 > 3;      // ROMI tertinggal beberapa hari -> jangan dipakai menyimpulkan
+    p.mjoInactive = D.mjo.amp < 1 || p.mjoStale; p.fb.mjo = true;
+  }
   return p;
 }
 function mergedParams(b, date){
@@ -252,7 +257,7 @@ function autoNote(b){
   const fromBul = k => b && parseBulletin(b.text)[k]!=null;
   const rows = [];
   const add = (lab, o, bulKey, extra) => { if(o && !fromBul(bulKey)) rows.push(`<li><b>${lab}</b>: ${esc(o.src)}, ${o.date||o.month}${extra||''}</li>`); };
-  add('Niño 3.4', D.nino34, 'nino'); add('SOI', D.soi, 'soi'); add('DMI', D.dmi, 'dmi'); 
+  add('Niño 3.4', D.nino34, 'nino'); add('SOI', D.soi, 'soi'); add('DMI', D.dmi, 'dmi'); add('MJO', D.mjo, 'mjoPhase', ' — indeks berbasis OLR, bisa berbeda dari RMM BMKG/BoM'); 
   if(!rows.length) return '';
   const fb = [D.nino34, D.soi, D.dmi].some(o=>o && o.scale && o.scale!=='bom');
   return (fb ? `<div class="si-sub" style="margin-top:8px;padding:6px 8px;border-left:3px solid var(--warn);background:var(--panel-alt)">Sumber BoM (acuan buletin BMKG) tidak terjangkau dari server — angka bertanda <b>NOAA</b> adalah cadangan dan <b>bisa berbeda</b> dari buletin (skala/tanggal). Tempel buletin BMKG untuk angka resmi.</div>` : '')
@@ -361,7 +366,7 @@ function wavePoint(reg){ return reg==='KABUPATEN DOMPU' ? 'dompu' : 'bima'; }
 function waveAuto(date, reg){
   const W = window.WAVES; if(!W || !W.days || !W.days[date]) return null;
   const d = W.days[date], pt = wavePoint(reg), out = {};
-  ['mjo','kelvin','er'].forEach(k=>{ if(d[k] && d[k][pt]) out[k] = d[k][pt]; });
+  ['mjo','kelvin','er','low'].forEach(k=>{ if(d[k] && d[k][pt]) out[k] = d[k][pt]; });
   return Object.keys(out).length ? Object.assign(out, { obs: !!d.obs }) : null;
 }
 function waveSide(v){            // -> 'pro' | 'con' | 'neu'
@@ -383,7 +388,7 @@ function renderWaveAuto(reg){
   const dates = Object.keys(W.days).sort(), pt = wavePoint(reg);
   const chip = (v)=> !v ? '<td>—</td>' : `<td><span class="si-chip ${v.status==='inside'||v.status==='near'?'c-good':(v.suppressed_near?'c-warn':'c-neutral')}">${v.status==='inside'?'di dalam':v.status==='near'?'dekat':v.status==='approaching'?'mendekat':(v.suppressed_near?'penekan':'jauh')}</span>${v.dist!=null?`<div class="dim" style="font-size:10px">${fmt(v.dist,1)}°</div>`:''}</td>`;
   const head = dates.map(d=>`<th>${dShort(d)}${W.days[d].obs?'<div class="dim" style="font-size:10px">obs</div>':'<div class="dim" style="font-size:10px">prakiraan</div>'}</th>`).join('');
-  const rows = ['mjo','kelvin','er'].map(k=>`<tr><td style="text-align:left"><b>${WAVE_NAMES[k]}</b></td>${dates.map(d=>chip(W.days[d][k] && W.days[d][k][pt])).join('')}</tr>`).join('');
+  const rows = ['mjo','kelvin','er','low'].map(k=>`<tr><td style="text-align:left"><b>${WAVE_NAMES[k]}</b></td>${dates.map(d=>chip(W.days[d][k] && W.days[d][k][pt])).join('')}</tr>`).join('');
   el.innerHTML = `<div class="si-sub" style="margin:8px 0 4px"><b>Analisis otomatis dari peta OLR di atas</b> — titik ${pt==='dompu'?'Dompu':'Bima'}; gambar NCICS ${W.image_time.replace('T',' ').replace('Z',' UTC')}</div>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
     <details open style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Cara membaca tabel ini</summary>
@@ -439,7 +444,7 @@ function localFactors(lv, R, date, reg){
   const F = [], add = (side, kind, txt, plain)=> F.push({ side, kind, txt, plain: plain===undefined ? txt : plain });
   const wa = waveAuto(date, reg), wm = waveManual(date);
   if(wa){
-    ['mjo','kelvin','er'].forEach(k=>{
+    ['mjo','kelvin','er','low'].forEach(k=>{
       const man = (k==='kelvin'||k==='er') ? wm[k] : null;       // penilaian prakirawan menimpa otomatis
       const nm = WAVE_PLAIN[k];
       if(man) add('pro', 'wave-'+k, `${WAVE_NAMES[k]}: ${WAVE_TXT[man]} (penilaian prakirawan) — fase konvektif aktif, mendukung`, `Gelombang ${nm} dinilai aktif di sekitar NTB (penilaian prakirawan) sehingga mendukung pembentukan awan hujan.`);
@@ -597,14 +602,14 @@ function buildNarrative(date, reg, dyn, lv, R){
     out.push('  "di dalam" = fase aktif menutupi NTB; "dekat" = ≤3° (±330 km); "mendekat" = ≤8° (±900 km), bisa bergeser ke NTB; "jauh" = tidak berpengaruh; "penekan" = fase kering di dekat NTB.');
     const lab = (v)=> !v ? '—' : (v.status==='inside' ? 'di dalam' : v.status==='near' ? 'dekat' : v.status==='approaching' ? 'mendekat' : (v.suppressed_near ? 'penekan' : 'jauh')) + (v.dist!=null && v.status!=='inside' ? ` (±${fmt(v.dist,0)}°)` : '');
     wdays.forEach(x=>{
-      out.push(`  ${dShort(x.d)}: ` + ['mjo','kelvin','er'].map(k=>{
+      out.push(`  ${dShort(x.d)}: ` + ['mjo','kelvin','er','low'].map(k=>{
         const man = (k==='kelvin'||k==='er') ? x.man[k] : null;
         return `${WAVE_NAMES[k].replace(' (frek. rendah)','')} ${man ? WAVE_TXT[man]+' (penilaian prakirawan)' : lab(x.w[k])}`;
       }).join('; ') + '.');
     });
-    const act = []; wdays.forEach(x=>['mjo','kelvin','er'].forEach(k=>{ const v = x.w[k]; const man = (k==='kelvin'||k==='er') ? x.man[k] : null; if(man || (v && (v.status==='inside' || v.status==='near'))) act.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
-    const sup = []; wdays.forEach(x=>['mjo','kelvin','er'].forEach(k=>{ const v = x.w[k]; if(v && v.suppressed_near && v.status==='far') sup.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
-    const appr = []; wdays.forEach(x=>['mjo','kelvin','er'].forEach(k=>{ const v = x.w[k]; if(v && v.status==='approaching') appr.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    const act = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; const man = (k==='kelvin'||k==='er') ? x.man[k] : null; if(man || (v && (v.status==='inside' || v.status==='near'))) act.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    const sup = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; if(v && v.suppressed_near && v.status==='far') sup.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
+    const appr = []; wdays.forEach(x=>['mjo','kelvin','er','low'].forEach(k=>{ const v = x.w[k]; if(v && v.status==='approaching') appr.push(`${WAVE_NAMES[k].replace(' (frek. rendah)','')} (${dShort(x.d)})`); }));
     if(act.length) out.push(`  Kesimpulan gelombang: fase aktif berada di dalam/dekat NTB — ${act.join(', ')} → mendukung peningkatan awan konvektif dan hujan.`);
     else if(appr.length) out.push(`  Kesimpulan gelombang: belum ada fase aktif di dekat NTB, tetapi ${appr.join(', ')} mendekat (≤8°) → pantau, dapat meningkatkan peluang hujan bila bergeser ke NTB.`);
     else out.push('  Kesimpulan gelombang: tidak ada gelombang (MJO, Kelvin, Rossby ekuator, Low) dengan fase aktif di dekat NTB pada periode ini → faktor gelombang tidak mendukung hujan.' + (sup.length ? ` Fase penekan (kering) terdeteksi di dekat NTB: ${sup.join(', ')}.` : ''));
