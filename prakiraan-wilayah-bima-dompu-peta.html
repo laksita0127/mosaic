@@ -541,8 +541,31 @@
       <div class="param-panel" id="ensembleTable" style="margin-top:10px;display:none;"></div>
     </section>
 
+    <section id="verifAuto" data-tab="verifikasi">
+      <div class="sec-title">Verifikasi otomatis — model mana yang paling sesuai dengan hujan sebenarnya?</div>
+      <div class="an-card">
+        <div class="syn-ctl">
+          <label class="chk">Periode <select id="vfPeriod"></select></label>
+          <label class="chk">Prakiraan dibuat <select id="vfLead"></select></label>
+          <label class="chk">Hujan ≥ <select id="vfThr"><option value="1">1 mm / 3 jam</option><option value="5">5 mm / 3 jam</option><option value="10">10 mm / 3 jam</option></select></label>
+          <label class="chk">Titik <select id="vfPt"></select></label>
+        </div>
+        <div id="vfInfo" class="si-sub" style="margin-top:8px;line-height:1.5"></div>
+        <div id="vfVerdict" style="margin:8px 0;padding:8px 10px;border-left:3px solid var(--accent);background:var(--panel-alt);line-height:1.55"></div>
+        <div class="produk-wrap" id="vfTable"></div>
+        <div class="produk-wrap" id="vfSlots" style="margin-top:10px"></div>
+        <div id="vfChart" style="margin-top:10px"></div>
+        <details class="note" style="margin-top:8px"><summary>ⓘ Cara membaca &amp; keterbatasan</summary>
+          <div class="si-sub" style="line-height:1.6;margin-top:4px">
+            <b>CSI</b> (0–1, makin besar makin baik) = hujan yang diprakirakan dan benar-benar terjadi dibanding semua kejadian ditambah alarm palsu. <b>POD</b> = persen hujan yang berhasil diprakirakan. <b>FAR</b> = persen prakiraan hujan yang meleset. <b>Bias</b> = 1 berarti frekuensi prakiraan hujan sama dengan kejadian; di atas 1 model terlalu sering memprakirakan hujan, di bawah 1 terlalu jarang. T/L/AP = tepat / terlewat / alarm palsu.<br>
+            <b>Jendela</b> = 3 jam sesuai slot tabel produk (02.00, 05.00, … WITA). <b>Prakiraan dibuat</b>: 0–24 jam = run model terbaru, 24–48 jam = run sehari sebelumnya, dan seterusnya.<br>
+            <b>Pengamatan = estimasi satelit CMORPH 0,25° (±28 km), bukan pos hujan resmi.</b> Hujan konvektif lokal kecil bisa terlewat atau meleset pada satelit. Hanya 6 titik yang dibandingkan, dan hasilnya bergantung musim (kemarau dan penghujan bisa menghasilkan model terbaik yang berbeda). Hasil "Hasil analisis" dan ensemble belum diverifikasi karena arsipnya belum ada. Perlakukan sebagai <b>petunjuk</b>, bukan keputusan akhir.
+          </div></details>
+      </div>
+    </section>
+
     <section id="secLog" data-tab="verifikasi">
-      <div class="sec-title">Log verifikasi — catat kejadian aktual di titik &amp; waktu terpilih</div>
+      <div class="sec-title">Log verifikasi manual — catat kejadian aktual di titik &amp; waktu terpilih</div>
       <form class="logform" id="logForm">
         <div class="form-hint">Mencatat untuk <b id="logTargetLabel">—</b>.</div>
         <div><label>Curah hujan aktual (mm)</label><input type="number" step="0.1" id="fHujan" required></div>
@@ -581,7 +604,9 @@
 <script src="sinoptik.js" onerror="window.__sinoptikMissing=true;"></script>
 <script src="analisis.js"></script>
 <script src="peta_sinoptik.js"></script>
+<script src="verifikasi.js" onerror="window.__verifMissing=true;"></script>
 <script src="taf.js"></script>
+<script src="verif_ui.js"></script>
 
 <script>
 const STATION_POINTS = [
@@ -2584,6 +2609,7 @@ async function init(){
     if(window.initAnalisis) window.initAnalisis();
     if(window.initSinoptik) window.initSinoptik();
     if(window.initTaf) window.initTaf();
+    if(window.initVerif) window.initVerif();
   }catch(err){
     statusEl.textContent = 'Gagal memuat data model: '+err.message+'. Periksa koneksi internet dan muat ulang.';
     statusEl.classList.add('err');

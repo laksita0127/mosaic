@@ -12,3 +12,7 @@ dinamika.js
 sinoptik.js
 waves.js
 waves/
+pipeline/verify_cache.json
+pipeline/verify_result.json
+verifikasi.js
+verif_obs.json

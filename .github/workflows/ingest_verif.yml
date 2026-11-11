@@ -1,0 +1,41 @@
+name: Update verifikasi
+
+# Verifikasi otomatis: prakiraan model (arsip lead time Open-Meteo) vs hujan satelit CMORPH (NOAA CPC) -> verifikasi.js.
+# Inkremental: verif_obs.json (hujan per jam) dipulihkan dari cabang site, hanya jam baru yang diunduh. Run pertama mengisi 45 hari (±10 menit).
+on:
+  schedule:
+    - cron: "37 23 * * *"       # 07:37 WITA
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verif
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install numpy netCDF4
+      - name: Pulihkan toko pengamatan dari cabang site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh --restore verif_obs.json
+      - name: Run
+        run: |
+          for i in 1 2; do
+            python pipeline/ingest_verif.py && break
+            echo "gagal (percobaan $i) — tunggu 3 menit lalu ulang"; sleep 180
+          done
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "verifikasi" verifikasi.js verif_obs.json
