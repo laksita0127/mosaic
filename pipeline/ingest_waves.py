@@ -33,6 +33,7 @@ POINT = {"bima": (-8.54, 118.69), "dompu": (-8.54, 118.46)}
 LON0, LON1, LAT_N, LAT_S = 80.0, 170.0, 10.0, -10.0
 UA = {"User-Agent": "Mozilla/5.0 mosaic-bima-dompu/1.0"}
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "waves.js")
+IMG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "waves")      # salinan gambar NCICS (dilayani dari situs sendiri)
 MIN_SOLID = 45            # piksel minimum agar komponen kontur dianggap garis penuh (putus-putus terpecah jadi potongan kecil)
 NEAR_DEG, APPR_DEG = 3.0, 8.0
 
@@ -129,6 +130,12 @@ def inside_closed(wall, start, limit):
 
 def analyse(kind):
     data, lm = fetch(BASE.format(w=kind))
+    try:
+        os.makedirs(IMG_DIR, exist_ok=True)
+        with open(os.path.join(IMG_DIR, f"olr.cfs.{kind}.indonesia.1.png"), "wb") as f:
+            f.write(data)
+    except OSError as e:
+        print("gagal simpan gambar", kind, e, file=sys.stderr)
     im = np.array(Image.open(io.BytesIO(data)).convert("RGB")).astype(int)
     stamp = email.utils.parsedate_to_datetime(lm).astimezone(dt.timezone.utc) if lm else dt.datetime.now(dt.timezone.utc)
     mask_all = classify(im, kind)
@@ -163,8 +170,20 @@ def analyse(kind):
     return stamp, res
 
 
+def save_all_image():
+    """Gambar gabungan (MJO+Kelvin+ER+Low dalam satu peta) — hanya disalin untuk ditampilkan, tidak dianalisis."""
+    try:
+        data, _ = fetch(BASE.format(w="all"))
+        os.makedirs(IMG_DIR, exist_ok=True)
+        with open(os.path.join(IMG_DIR, "olr.cfs.all.indonesia.1.png"), "wb") as f:
+            f.write(data)
+    except Exception as e:
+        print("gagal simpan gambar all", e, file=sys.stderr)
+
+
 def main():
     days, stamp0, per = {}, None, {}
+    save_all_image()
     for w in WAVES:
         try:
             stamp, res = analyse(w)

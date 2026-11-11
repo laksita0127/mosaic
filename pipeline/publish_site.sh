@@ -33,8 +33,13 @@ for i in 1 2 3 4 5 6; do
   rm -rf "$WORK/s"
   git clone --quiet --depth 1 --branch site "$URL" "$WORK/s" || { echo "gagal clone cabang site"; sleep $((5 * i)); continue; }
   for f in "$@"; do
-    mkdir -p "$WORK/s/$(dirname "$f")"
-    cp -r "$f" "$WORK/s/$f"
+    if [ -d "$f" ]; then
+      mkdir -p "$WORK/s/$f"
+      cp -r "$f/." "$WORK/s/$f/"
+    else
+      mkdir -p "$WORK/s/$(dirname "$f")"
+      cp "$f" "$WORK/s/$f"
+    fi
   done
   (
     cd "$WORK/s" || exit 1

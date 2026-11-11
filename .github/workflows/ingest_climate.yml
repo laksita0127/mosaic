@@ -31,4 +31,4 @@ jobs:
       - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh "indeks iklim" dinamika.js waves.js
+        run: bash pipeline/publish_site.sh "indeks iklim" dinamika.js waves.js waves

@@ -779,11 +779,17 @@ function initWave(){
   const img = $('waveImg'), msg = $('waveMsg');
   const upd = ()=>{
     const v = $('waveVar').value, w = $('waveType').value, a = $('waveAvg').value;
-    const url = `https://ncics.org/pub/mjo/v2/map/${v}.cfs.${w}.indonesia.${a}.png`;
-    msg.innerHTML = `Memuat peta… <a href="${url}" target="_blank" rel="noopener">buka gambar</a>`;
-    img.onload = ()=>{ msg.innerHTML = `Kiri: observasi 4 hari terakhir, kanan: prakiraan CFS 4 hari ke depan; kontur −12/−36 W m⁻² = fase konvektif aktif tiap gelombang (hitam MJO, biru Kelvin, merah ER, ungu Low). Sumber: <a href="https://ncics.org/mjo/" target="_blank" rel="noopener">NCICS/NC State — Carl Schreck</a> (diperbarui harian ±16 UTC). Bukan produk BMKG.`; };
-    img.onerror = ()=>{ msg.innerHTML = `Gambar NCICS tidak dapat dimuat (server NCICS/koneksi). <a href="${url}" target="_blank" rel="noopener">Coba buka langsung</a>.`; };
-    img.src = url + '?h=' + new Date().toISOString().slice(0,13);
+    const remote = `https://ncics.org/pub/mjo/v2/map/${v}.cfs.${w}.indonesia.${a}.png`;
+    const local = (v==='olr' && a==='1' && ['all','mjo','kelvin','er','low'].includes(w)) ? `waves/olr.cfs.${w}.indonesia.1.png` : null;   // salinan di situs sendiri (diperbarui harian)
+    const note = `Kiri: observasi 4 hari terakhir, kanan: prakiraan CFS 4 hari ke depan; kontur −12/−36 W m⁻² = fase konvektif aktif tiap gelombang (hitam MJO, biru Kelvin, merah ER, ungu Low). Sumber: <a href="https://ncics.org/mjo/" target="_blank" rel="noopener">NCICS/NC State — Carl Schreck</a> (diperbarui harian ±16 UTC). Bukan produk BMKG.`;
+    msg.innerHTML = `Memuat peta… <a href="${remote}" target="_blank" rel="noopener">buka gambar</a>`;
+    let triedRemote = !local;
+    img.onload = ()=>{ msg.innerHTML = note + (window.WAVES && local ? ` <span class="dim">Gambar per ${window.WAVES.image_time.replace('T',' ').replace('Z',' UTC')}.</span>` : ''); };
+    img.onerror = ()=>{
+      if(!triedRemote){ triedRemote = true; img.src = remote + '?h=' + new Date().toISOString().slice(0,13); return; }
+      msg.innerHTML = `Gambar tidak dapat dimuat (salinan situs maupun server NCICS). <a href="${remote}" target="_blank" rel="noopener">Buka langsung di NCICS</a>.`;
+    };
+    img.src = local ? local + '?h=' + new Date().toISOString().slice(0,13) : remote + '?h=' + new Date().toISOString().slice(0,13);
   };
   ['waveVar','waveType','waveAvg'].forEach(id=>$(id).addEventListener('change', upd));
   const sync = ()=>{ const w = waveManual($('anDay').value); $('waveKelvin').value = w.kelvin||''; $('waveER').value = w.er||''; };
