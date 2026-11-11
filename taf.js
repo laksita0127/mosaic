@@ -442,7 +442,7 @@ function compareHTML(start, hours, opt, metar, cur){
     return `<div style="margin:6px 0"><div class="si-sub"><b>${it.lab}</b> ${cur===it.k ? '<span style="color:var(--accent)">◀ dipakai di atas</span>' : `<a href="#" data-src="${it.k}">pakai ini</a>`}</div>`
       + `<pre style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-size:12px;white-space:pre-wrap;background:var(--panel-alt);padding:6px 8px;border-radius:var(--radius)">${esc(txt)}</pre></div>`;
   }).join('');
-  return `<details open><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Bandingkan TAF dari semua sumber (kesepakatan + tiap model)</summary>${rows}</details>`;
+  return `<details><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Bandingkan TAF dari semua sumber (kesepakatan + tiap model)</summary>${rows}</details>`;
 }
 function render(){
   const list = cycles(), sel = $('tafCycle');

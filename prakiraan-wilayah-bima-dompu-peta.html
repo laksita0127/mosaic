@@ -271,7 +271,7 @@
     <div id="logoFallback" class="masthead-logo-fallback" style="display:none;">BMKG</div>
     <div class="masthead-text">
       <h1>MOSAIC <span class="masthead-sup">Multi-model Output Spatial Analysis, Interactive Comparison</span></h1>
-      <div class="sub" id="mastheadSub">Wilayah Bima–Dompu — 32 titik kecamatan/bandara + grid — hujan, suhu, angin, kelembapan — per 3 jam</div>
+      <div class="sub" id="mastheadSub">Wilayah Bima–Dompu — prakiraan cuaca per 3 jam</div>
       <div class="masthead-unit">Stasiun Meteorologi Kelas II Sultan Muhammad Salahuddin — Bima</div>
     </div>
   </div>
@@ -2491,14 +2491,17 @@ function estimateLatestRun(modelKey){
 }
 function renderRunInfo(){
   const el = document.getElementById('runInfo');
-  const fetchedAt = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
   const runLines = MODELS.map(m=>{
     const r = estimateLatestRun(m.key);
     const lab = r.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
-    return `<b>${m.label}</b> ~${lab} UTC`;
-  }).join(' <span class="sep">·</span> ');
-  const detNote = state.detSource ? `<span>Data model dari pipeline (dibuat <b>${state.detSource.generated.replace('T',' ').replace('Z',' UTC')}</b>)</span><span class="sep">|</span>` : '';
-  el.innerHTML = `${detNote}<span>Halaman dibuka: <b>${fetchedAt}</b></span><span class="sep">|</span><span>Perkiraan run terpakai: ${runLines}</span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru">⟳</button>`;
+    return `${m.label} ~${lab} UTC`;
+  }).join(' · ');
+  let when;
+  if(state.detSource){
+    const d = new Date(Date.parse(state.detSource.generated.slice(0,16)+':00Z') + 8*3600e3);
+    when = `${d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})} ${String(d.getUTCHours()).padStart(2,'0')}.${String(d.getUTCMinutes()).padStart(2,'0')} WITA`;
+  } else when = new Date().toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}) + ' (ditarik langsung)';
+  el.innerHTML = `<span title="Perkiraan run model terpakai: ${runLines}">Data model diperbarui: <b>${when}</b> <span style="color:var(--text-faint)">ⓘ</span></span><button class="refresh-btn" id="refreshBtn" title="Tarik ulang data terbaru langsung dari penyedia">⟳</button>`;
   document.getElementById('refreshBtn').onclick = refreshData;
 }
 async function refreshData(){
@@ -2527,8 +2530,7 @@ async function init(){
     document.getElementById('timeSlider').max = state.steps.length-1;
     statusEl.style.display='none';
     document.getElementById('content').style.display='block';
-    document.getElementById('mastheadSub').textContent =
-      `Wilayah Bima–Dompu — ${STATION_COUNT} titik kecamatan/bandara + ${GRID_POINTS.length} titik grid (~11km) = ${POINTS.length} sumber data — per 3 jam`;
+    document.getElementById('mastheadSub').textContent = 'Wilayah Bima–Dompu — prakiraan cuaca per 3 jam';
     initMap();
     initProdukControls();
     initEnsembleControls();
