@@ -298,7 +298,12 @@ function buildTaf(start, hours, opt, metar){
     }
     const L = r - h + 1, st = repr(S.slice(h, r+1));
     const returns = r+1 < hours && !signif(ref, S[r+1], opt).length;   // kembali ke keadaan semula setelah rentang ini
-    if(returns && L <= 2){                                             // fluktuasi sementara -> TEMPO (jendela > 2x durasi)
+    // Jenis kejadian menentukan kelompok (bukan hanya durasi):
+    //   TEMPO = fluktuasi SEMENTARA yang kembali ke keadaan semula / berakhir sebelum TAF selesai; khas cuaca konvektif (TS, hujan, CB/TCU) yang datang-pergi.
+    //   BECMG = perubahan kondisi umum yang BERTAHAN (angin berganti arah, kabut/asap, awan rendah menetap, hujan berkepanjangan >4 jam).
+    const convective = st.cls >= 1 || st.ts || (st.conv && st.conv.type);
+    const temporary = (returns || r+1 >= hours) && (L <= 2 || (convective && L <= 4));
+    if(temporary){                                                     // TEMPO (jendela > 2x durasi agar total < setengah periode, sesuai SOP)
       const win = Math.max(2*L+1, 3);
       let from = Math.max(0, h-1), to = Math.min(hours, from + win);
       if(to - from < win) from = Math.max(0, to - win);
@@ -313,6 +318,15 @@ function buildTaf(start, hours, opt, metar){
   }
   // PROB30/40 dinonaktifkan sementara (peluang ensemble belum dikalibrasi) — TAF difokuskan pada BECMG & TEMPO.
   groups.sort((a,b)=>a.from-b.from || (a.type==='PROB') - (b.type==='PROB'));
+  // SOP: hindari periode kelompok perubahan yang tumpang tindih -> rapikan berurutan
+  for(let k=1;k<groups.length;k++){
+    const pv = groups[k-1], g = groups[k];
+    if(g.from < pv.to){
+      if(pv.type==='TEMPO' && g.from > pv.from) pv.to = g.from;                       // jendela TEMPO dipotong di awal kelompok berikutnya
+      else { g.from = pv.to; if(g.to <= g.from) g.to = Math.min(hours, g.from + 1); }   // kelompok berikutnya digeser
+    }
+  }
+  for(let k=groups.length-1;k>=0;k--) if(groups[k].from >= hours || groups[k].to <= groups[k].from) groups.splice(k,1);
   return { S, groups, ref0, notes };
 }
 function repr(arr){                      // keadaan representatif untuk satu rentang jam: unsur terburuk/terpenting
