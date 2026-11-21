@@ -2,7 +2,7 @@
    MOSAIC — DRAF TAF WADB (Bandara Sultan Muhammad Salahuddin, Bima)
    Mengikuti: Peraturan BMKG No. 6/2024 + SOP Aerodrome Forecast BMKG 2025
      • validitas 12/24/30 jam, siklus 00/06/12/18 UTC, dikirim 1 jam sebelum validitas (maks. +15 menit)
-     • angin (VRB <3 kt; hembusan bila ≥10 kt di atas rata²), visibilitas (pembulatan SOP), cuaca signifikan (RA/+RA/TS…), awan <5000 ft + CB/TCU
+     • angin (VRB <3 kt; hembusan bila ≥10 kt di atas rata²; perubahan: arah ≥60° dgn ≥10 kt, kecepatan ≥10 kt, variasi hembusan ≥10 kt dgn rata² ≥15 kt), visibilitas (pembulatan SOP), cuaca signifikan (RA/+RA/TS…), awan <5000 ft + CB/TCU
      • BECMG 1–4 jam, TEMPO (<1 jam tiap kejadian, total < setengah jendela), PROB30/40 hanya bersama TEMPO, ambang perubahan signifikan SOP
    Bahan: konsensus 4 model deterministik (ECMWF·GFS·ICON·AIFS) titik bandara + peluang ensemble gabungan + METAR WADB yang ditempel.
    INI DRAF berbasis model — wajib diperiksa/diubah senior forecaster sebelum diterbitkan.  Ekspor: window.initTaf()
@@ -122,7 +122,8 @@ function stateAt(ms, opt, noClim){
   vis = roundVis(vis);
   if(br && !wx) wx = 'BR';
   // --- awan ---
-  const lcl = (T!=null && Td!=null) ? Math.min(3500, Math.max(1500, Math.round(125*Math.max(0,T-Td)*3.281/100)*100)) : 2000;   // dasar kumulus (LCL), dibatasi 1500–3500 ft
+  const lclRaw = (T!=null && Td!=null) ? Math.round(125*Math.max(0,T-Td)*3.281/100)*100 : 2000;                       // LCL = 125 m x (T - Td), pembulatan 100 ft
+  const lcl = cls>=1 ? Math.min(3500, Math.max(700, lclRaw)) : Math.min(3500, Math.max(1500, lclRaw));              // hujan/TS: dasar awan boleh turun (lantai 700 ft); cuaca baik: min 1500 ft
   let coverLow = cl; if(cls>=1) coverLow = Math.max(coverLow, 60); else if(cls===0.5) coverLow = Math.max(coverLow, 30);
   const layers = [];
   const L1 = layerFrom(coverLow, lcl); if(L1) layers.push(L1);
@@ -234,17 +235,21 @@ function signif(a, b, opt){
   const as = Math.round(a.w.spd), bs = Math.round(b.w.spd);
   if(dirDiff(a.w.dir, b.w.dir)>=60 && (as>=10 || bs>=10) && a.w.R>0.35 && b.w.R>0.35) why.push('arah angin');
   if(Math.abs(as-bs)>=10) why.push('kecepatan angin');
-  const ga = gustOf(a), gb = gustOf(b);
-  if((ga!=null) !== (gb!=null) && Math.max(as,bs)>=15) why.push('hembusan');
+  // SOP 11.i.1.c: variasi hembusan (gust - rata²) berubah >=10 kt DAN kecepatan rata² sebelum/sesudah >=15 kt
+  if(Math.abs(gustVar(a) - gustVar(b)) >= 10 && Math.max(as, bs) >= 15) why.push('hembusan');
   if(bucket(a.vis, VIS_T) !== bucket(b.vis, VIS_T)) why.push('visibilitas');
   const cls = x => opt.light ? x.cls : (x.cls===0.5 ? 0 : x.cls);
   if(cls(a) !== cls(b)) why.push('cuaca');
   if(bucket(a.ceil, CIG_T) !== bucket(b.ceil, CIG_T)) why.push('dasar awan');
   const low = x => x.layers.some(l=>(l.amt==='BKN'||l.amt==='OVC') && l.base<1500);
   if(low(a) !== low(b)) why.push('jumlah awan');
+  // SOP 11.i.4.a: tinggi dasar LAPISAN TERENDAH (berapa pun jumlahnya, termasuk CB/TCU) melewati 100/200/500/1000 (1500) ft
+  if(bucket(lowBase(a), CIG_T) !== bucket(lowBase(b), CIG_T)) why.push('dasar awan terendah');
   if(!!a.conv !== !!b.conv || (a.conv && b.conv && a.conv.type !== b.conv.type)) why.push('CB/TCU');
   return why;
 }
+const gustVar = s => (s.w.gust!=null) ? Math.max(0, s.w.gust - s.w.spd) : 0;
+const lowBase = s => { const b = s.layers.map(l=>l.base).concat(s.conv ? [s.conv.base] : []); return b.length ? Math.min(...b) : 99999; };
 function gustOf(s){ const g = s.w.gust; return (g!=null && g - s.w.spd >= 10 && g >= 15) ? Math.round(g) : null; }
 
 /* ---------------- penyandian ---------------- */
@@ -376,7 +381,7 @@ function formatTaf(res, start, hours, issue, opt){
 // angin dicantumkan di kelompok perubahan hanya bila berubah signifikan menurut SOP (≥60° dengan ≥10 kt, ≥10 kt, atau hembusan)
 function signifWind(a,b){
   const as = Math.round(a.w.spd), bs = Math.round(b.w.spd), both = a.w.R>0.35 && b.w.R>0.35;
-  return (both && dirDiff(a.w.dir,b.w.dir)>=60 && (as>=10 || bs>=10)) || Math.abs(as-bs)>=10 || ((gustOf(a)!=null)!==(gustOf(b)!=null) && Math.max(as,bs)>=15);
+  return (both && dirDiff(a.w.dir,b.w.dir)>=60 && (as>=10 || bs>=10)) || Math.abs(as-bs)>=10 || (Math.abs(gustVar(a)-gustVar(b))>=10 && Math.max(as,bs)>=15);
 }
 /* ---------------- pemeriksa aturan SOP ---------------- */
 function checkTaf(txt, hours){
