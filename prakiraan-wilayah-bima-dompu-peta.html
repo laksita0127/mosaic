@@ -452,6 +452,7 @@
           <label class="chk">Validitas <select id="tafHours"><option value="12">12 jam</option><option value="24" selected>24 jam</option><option value="30">30 jam</option></select></label>
           <label class="chk" title="SOP BMKG 2025 hanya mewajibkan cuaca signifikan: RA/+RA (sedang/lebat), TS, dll. Hujan ringan (-RA) tidak termasuk daftar itu, jadi opsional (awalnya mati). Nyalakan bila praktik stasiun mencantumkannya."><input type="checkbox" id="tafLight"> sertakan -RA (hujan ringan) <span class="dim">ⓘ</span></label>
           <label class="chk"><input type="checkbox" id="tafTX"> sertakan TX/TN</label>
+          <label class="chk" title="Memakai skor atmosfer yang sama dengan tabel produk (kelembapan lapisan, CAPE, angin, geser, konvergensi, gelombang, indeks skala besar) untuk memperketat/melonggarkan syarat RA dan TS"><input type="checkbox" id="tafAtm" checked> sesuaikan dengan analisis atmosfer <span class="dim">ⓘ</span></label>
           <label class="chk"><input type="checkbox" id="tafClim" checked> koreksi lokal dari METAR beberapa hari</label>
         </div>
         <details style="margin-top:8px" open>
@@ -460,9 +461,10 @@
           <button class="produk-btn" id="tafMetarSave" type="button" style="margin-top:6px">Simpan METAR</button>
           <button class="produk-btn" id="tafMetarClear" type="button" style="margin-top:6px">Hapus semua</button>
           <div id="tafMetarInfo" class="si-sub" style="margin-top:4px"></div>
-          <details class="note"><summary>ⓘ Cara METAR dipakai</summary><div class="si-sub dim" style="line-height:1.5">METAR terbaru (≤3,5 jam sebelum validitas) menentukan kondisi awal. METAR beberapa hari (≥3 hari) dipakai untuk koreksi lokal: pola angin & visibilitas yang biasa tercatat per jam, dan frekuensi TS per slot 3 jam (menambah PROB30 TEMPO TSRA bila TS tercatat ≥2 hari pada jam itu). Disimpan di browser ini. METAR bandara lain tidak dipakai.</div></details>
+          <details class="note"><summary>ⓘ Cara METAR dipakai</summary><div class="si-sub dim" style="line-height:1.5">METAR terbaru (≤3,5 jam sebelum validitas) menentukan kondisi awal. METAR beberapa hari (≥3 hari) dipakai untuk koreksi lokal: pola angin & visibilitas yang biasa tercatat per jam, dan frekuensi TS per slot 3 jam (frekuensi TS per slot belum dipakai: kelompok PROB dinonaktifkan sementara, TAF difokuskan pada BECMG dan TEMPO). Disimpan di browser ini. METAR bandara lain tidak dipakai.</div></details>
         </details>
         <div id="tafMeta" class="si-sub" style="color:var(--warn);margin-top:6px"></div>
+        <div id="tafAtmNote" style="margin-top:6px"></div>
         <textarea id="tafOut" spellcheck="false" style="width:100%;box-sizing:border-box;min-height:150px;margin-top:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6"></textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
           <button class="produk-btn" id="tafBuild" type="button">Susun ulang</button>

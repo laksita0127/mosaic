@@ -67,6 +67,30 @@ function layerFrom(cover, base){
   const amt = cover>=87.5 ? 'OVC' : (cover>=50 ? 'BKN' : (cover>=25 ? 'SCT' : (cover>=12.5 ? 'FEW' : null)));
   return amt ? { amt, base } : null;
 }
+/* ---------------- analisis dinamika atmosfer -> syarat cuaca signifikan ----------------
+   Memakai skor atmosfer yang sama dengan tabel produk "Hasil analisis" (analisis.js: window.anEnv) untuk hari WITA dari jam tersebut:
+     menghambat -> syarat RA/TS diperketat ; mendukung -> dilonggarkan ; netral -> aturan dasar.
+   Konvergensi 850 hPa >= 1 (x1e-5/s) di sekitar NTB menurunkan syarat CAPE untuk TS pada hari netral.
+   Hanya memengaruhi hujan/petir (RA, TS, +CB/TCU, visibilitas & awan turunannya) — angin & kondisi dasar tidak diubah. */
+const _atmCache = {};
+function atmFor(ms, opt){
+  if(!opt || !opt.atm || !window.anEnv) return { mode:'neutral', pro:0, con:0, conv:null };
+  const d = new Date(ms + 8*H).toISOString().slice(0,10);
+  if(_atmCache[d] && _atmCache[d].lv === !!window.__anLevels) return _atmCache[d].v;
+  let e = { mode:'neutral', pro:0, con:0 }, conv = null;
+  try{ e = window.anEnv(d, 'KABUPATEN BIMA') || e; }catch(x){}
+  try{ const cs = window.synConvStats && window.synConvStats(d, '850'); conv = cs ? cs.conv : null; }catch(x){}
+  const v = { mode:e.mode, pro:e.pro, con:e.con, conv, date:d, note:e.note||'' };
+  _atmCache[d] = { lv: !!window.__anLevels, v };
+  return v;
+}
+function atmRules(atm){
+  const P = { raMm:2.5, raPoe:0.5, lightMm:0.2, lightPoe:0.5, tsCape:1000, tsMm:1, tsVotes:2, tsPoe:0.35, tsPoeCape:600 };
+  if(atm.mode==='dry') Object.assign(P, { raMm:3.5, raPoe:0.6, lightMm:0.5, lightPoe:0.6, tsCape:1000, tsMm:3, tsVotes:3, tsPoe:0.5, tsPoeCape:800 });
+  else if(atm.mode==='wet') Object.assign(P, { raMm:2.0, raPoe:0.4, lightMm:0.2, lightPoe:0.4, tsCape:800, tsMm:0.5, tsVotes:2, tsPoe:0.25, tsPoeCape:500 });
+  else if(atm.conv!=null && atm.conv>=1) Object.assign(P, { tsCape:800 });         // netral tetapi angin mengumpul di sekitar NTB
+  return P;
+}
 function stateAt(ms, opt, noClim){
   const i = AP.idx.get(ms); if(i==null) return null;
   const j = i+1;                                                   // precip Open-Meteo = jam sebelumnya -> jam [i,i+1) = nilai di i+1
@@ -79,11 +103,14 @@ function stateAt(ms, opt, noClim){
   const tsVotes = codes.filter(c=>c>=95).length;
   const poe = ensPoe(ms);
   // --- cuaca signifikan ---
+  // --- penyesuaian oleh analisis dinamika atmosfer (skor atmosfer hari WITA itu untuk wilayah Bima) ---
+  const atm = atmFor(ms, opt);
+  const P = atmRules(atm);
   let cls = 0, wx = '';                                           // 0 tidak ada, 0.5 ringan, 1 RA, 2 +RA, 3 TSRA
   if(rain >= 7.6 || (poe && poe.p20>=0.5)) cls = 2;
-  else if(rain >= 2.5 || (poe && poe.p5>=0.5)) cls = 1;
-  else if(rain >= 0.2 || (poe && poe.p1>=0.5)) cls = 0.5;
-  const ts = (cape>=1000 && rain>=1) || tsVotes>=2 || (poe && poe.p10>=0.35 && cape>=600);
+  else if(rain >= P.raMm || (poe && poe.p5>=P.raPoe)) cls = 1;
+  else if(rain >= P.lightMm || (poe && poe.p1>=P.lightPoe)) cls = 0.5;
+  const ts = (cape>=P.tsCape && rain>=P.tsMm) || tsVotes>=P.tsVotes || (poe && poe.p10>=P.tsPoe && cape>=P.tsPoeCape);
   if(ts) cls = Math.max(cls, 3);
   wx = cls===3 ? 'TSRA' : cls===2 ? '+RA' : cls===1 ? 'RA' : (cls===0.5 && opt.light) ? '-RA' : '';
   // --- visibilitas ---
@@ -104,6 +131,7 @@ function stateAt(ms, opt, noClim){
   else if(cape>=800 && rain>=0.5) conv = { amt:'FEW', base: lcl, type:'TCU' };
   const ceil = (()=>{ const c = layers.find(l=>l.amt==='BKN'||l.amt==='OVC'); return c ? c.base : 99999; })();
   const st = { ms, w, wx, cls, vis, layers, conv, ceil, cape, rain, poe, T, Td, RH, ts };
+  st.atm = atm.mode;
   return noClim ? st : applyClim(st);
 }
 
@@ -283,25 +311,7 @@ function buildTaf(start, hours, opt, metar){
     }
     h = r+1;
   }
-  // PROB30/40 TEMPO dari ensemble: peluang hujan sedang (>=5 mm/3 jam) 30–49% pada slot yang belum diprakirakan hujan
-  for(let k=0;k<hours;k+=1){
-    const s = S[k];
-    const dd = new Date(s.ms), slotMs = Date.UTC(dd.getUTCFullYear(), dd.getUTCMonth(), dd.getUTCDate(), dd.getUTCHours() - dd.getUTCHours()%3);
-    const p = s.poe || (CLIM ? { p1:0, p5:0, p10:0, p20:0, slot:slotMs } : null); if(!p) continue;
-    const slotIdx = Math.floor((s.ms - start)/H);
-    const tsHist = CLIM ? (CLIM.tsDays[new Date(p.slot).getUTCHours()] || 0) : 0;
-    const byEns = p.p5 >= 0.30 && p.p5 < 0.50, byHist = tsHist >= 2 && s.cls < 3 && (p.p5 >= 0.15 || s.cape >= 600);
-    if(s.cls >= 1 || (!byEns && !byHist) || p.p5 >= 0.50) continue;
-    if(k>0 && S[k-1].poe && S[k-1].poe.slot === p.slot && S[k-1].cls < 1 && S[k-1].poe.p5>=0.30) continue;      // sudah dicakup slot yang sama
-    const from = Math.max(0, Math.floor((p.slot - start)/H)), to = Math.min(hours, from + 3);
-    if(to - from < 1) continue;
-    if(groups.some(g=> g.from < to && g.to > from)) continue;                                              // hindari tumpang tindih
-    const tsl = (p.p10 >= 0.2 && s.cape >= 800) || (byHist && !byEns);
-    const base = ref0; const st = Object.assign({}, base, { cls: tsl ? 3 : 1, wx: tsl ? 'TSRA' : 'RA', vis: tsl ? 4000 : 5000,
-      conv: tsl ? { amt:'FEW', base: s.layers[0] ? s.layers[0].base : 1800, type:'CB' } : null,
-      layers: [{ amt: tsl ? 'SCT' : 'BKN', base: s.layers[0] ? s.layers[0].base : 1800 }] });
-    groups.push({ type:'PROB', pct: (byEns && p.p5 >= 0.40) ? 40 : 30, from, to, st, prev: base, why:[byHist && !byEns ? `METAR ${CLIM.days} hari: TS tercatat ${tsHist} hari pada jam ini` : 'peluang ensemble'] });
-  }
+  // PROB30/40 dinonaktifkan sementara (peluang ensemble belum dikalibrasi) — TAF difokuskan pada BECMG & TEMPO.
   groups.sort((a,b)=>a.from-b.from || (a.type==='PROB') - (b.type==='PROB'));
   return { S, groups, ref0, notes };
 }
@@ -453,7 +463,7 @@ function render(){
   const sset = $('tafSrc');
   if(!sset.options.length){ sset.innerHTML = `<option value="avg">Kesepakatan (rata-rata ${AP.models.length} model)</option>` + AP.models.map(m=>`<option value="${m}">${MODEL_LABEL[m]||m}</option>`).join(''); }
   const src = sset.value === 'avg' ? null : sset.value;
-  const start = +sel.value, hours = +$('tafHours').value, opt = { light: $('tafLight').checked, tx: $('tafTX').checked };
+  const start = +sel.value, hours = +$('tafHours').value, opt = { light: $('tafLight').checked, tx: $('tafTX').checked, atm: $('tafAtm') ? $('tafAtm').checked : false };
   // --- METAR: basis data tersimpan + yang sedang diketik (belum disimpan) ---
   const typed = $('tafMetar').value, typedList = typed.trim() ? parseMetarAll(typed, Date.now()) : [];
   meta.textContent = (typed.trim() && !typedList.length) ? 'METAR WADB tidak terbaca di kotak (pastikan baris diawali METAR/SPECI WADB …).' : '';
@@ -477,15 +487,27 @@ function render(){
   $('tafNote').textContent = (saved && saved.text ? 'Menampilkan versi yang kamu edit (tombol "Susun ulang" untuk kembali ke otomatis). ' : '') + `Sumber: ${src ? (MODEL_LABEL[src]||src) : 'kesepakatan ' + AP.models.length + ' model'}. ` + res.notes.concat(climNotes).join(' ');
   updateChecks(hours);
   agree.innerHTML = agreementHTML(start, hours, opt, src);
+  // catatan: dasar analisis atmosfer yang dipakai
+  const atmEl = $('tafAtmNote');
+  if(atmEl){
+    if(!opt.atm) atmEl.innerHTML = '<span class="dim" style="color:var(--text-faint)">Penyesuaian dengan analisis atmosfer dimatikan.</span>';
+    else {
+      const days = [...new Set(res.S.map(x=>atmFor(x.ms, opt).date))].filter(Boolean);
+      const TXT = { dry:['menghambat hujan','var(--good)','syarat RA & TS diperketat (TS butuh ≥3 model atau CAPE ≥1000 dengan hujan ≥3 mm)'], wet:['mendukung hujan','var(--bad)','syarat RA & TS dilonggarkan (CAPE ≥800 cukup)'], neutral:['netral','var(--text-dim)','aturan dasar'] };
+      const rows = days.map(d=>{ const a = atmFor(Date.parse(d+'T12:00:00Z') - 8*H, opt), t = TXT[a.mode]; const cv = a.conv!=null && a.mode==='neutral' && a.conv>=1 ? ' + angin mengumpul di sekitar NTB (syarat CAPE TS 800)' : '';
+        return `<div><b>${new Date(d+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'})}</b>: <span style="color:${t[1]};font-weight:600">${t[0]}</span> (${a.pro} pendukung / ${a.con} penghambat) → ${t[2]}${cv}.${a.note ? ` <span class="dim" style="color:var(--text-faint)">${esc(a.note)}</span>` : ''}</div>`; }).join('');
+      atmEl.innerHTML = `<div class="si-sub" style="line-height:1.55;padding:6px 8px;border-left:3px solid var(--accent);background:var(--panel-alt)"><b>Dasar analisis dinamika atmosfer</b> (wilayah Bima, sama dengan tabel produk "Hasil analisis"; hanya memengaruhi hujan/petir, tidak mengubah angin):${rows || '<div>belum tersedia</div>'}${window.__anLevels ? '' : '<div class="dim" style="color:var(--text-faint)">Data lapisan atas masih dimuat — penyesuaian akan terpasang otomatis.</div>'}</div>`;
+    }
+  }
   const cmpEl = $('tafCompare');
   if(cmpEl){
     cmpEl.innerHTML = compareHTML(start, hours, opt, metar, sset.value);
     cmpEl.querySelectorAll('a[data-src]').forEach(a=>{ a.onclick = e=>{ e.preventDefault(); sset.value = a.dataset.src; render(); }; });
   }
   // tabel dasar penyusunan
-  const rows = res.S.map((s,k)=>{ const hh = new Date(s.ms).getUTCHours(), c = CLIM && CLIM.byHour[hh]; return `<tr><td>${pad(hh)}Z</td><td>${windCode(s.w)}</td><td>${s.vis}</td><td>${s.wx||'—'}</td><td>${[...cloudCodes(s)].join(' ')||'NSC'}</td><td>${s.poe ? Math.round(s.poe.p5*100)+'%' : '—'}</td><td>${Math.round(s.cape)}</td><td>${s.rain.toFixed(1)}</td><td>${c ? `${c.dir==null?'VRB':pad(Math.round(c.dir/10)*10%360||360,3)}/${Math.round(c.spd)}kt (n=${c.n})` : '—'}</td></tr>`; }).join('');
+  const rows = res.S.map((s,k)=>{ const hh = new Date(s.ms).getUTCHours(), c = CLIM && CLIM.byHour[hh]; return `<tr><td>${pad(hh)}Z</td><td>${windCode(s.w)}</td><td>${s.vis}</td><td>${s.wx||'—'}</td><td>${[...cloudCodes(s)].join(' ')||'NSC'}</td><td>${s.poe ? Math.round(s.poe.p5*100)+'%' : '—'}</td><td>${Math.round(s.cape)}</td><td>${s.rain.toFixed(1)}</td><td>${s.atm==='dry'?'menghambat':(s.atm==='wet'?'mendukung':'netral')}</td><td>${c ? `${c.dir==null?'VRB':pad(Math.round(c.dir/10)*10%360||360,3)}/${Math.round(c.spd)}kt (n=${c.n})` : '—'}</td></tr>`; }).join('');
   basis.innerHTML = `<details><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Dasar penyusunan per jam (${src ? (MODEL_LABEL[src]||src) : 'konsensus '+AP.models.length+' model'}${metar?' + METAR terbaru':''}${CLIM?' + klimatologi METAR':''})</summary>
-    <div class="produk-wrap" style="margin-top:6px"><table class="an-tbl"><thead><tr><th>UTC</th><th>Angin</th><th>Vis</th><th>Cuaca</th><th>Awan</th><th>P(≥5 mm/3j)</th><th>CAPE</th><th>Hujan mm/j</th><th>METAR biasa</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="produk-wrap" style="margin-top:6px"><table class="an-tbl"><thead><tr><th>UTC</th><th>Angin</th><th>Vis</th><th>Cuaca</th><th>Awan</th><th>P(≥5 mm/3j)</th><th>CAPE</th><th>Hujan mm/j</th><th>Atmosfer</th><th>METAR biasa</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="si-sub dim" style="margin-top:4px;line-height:1.5">Visibilitas, dasar awan, dan CB/TCU diturunkan dengan aturan sederhana dari hujan, RH, selisih suhu–titik embun (LCL), tutupan awan, dan CAPE — model tidak memprakirakannya langsung. Kolom terakhir = angin METAR yang biasa tercatat pada jam itu (median kecepatan, arah rata²) bila ≥3 hari METAR tersedia. Periksa terhadap METAR, radar, dan satelit.</div></details>`;
 }
 function updateChecks(hours){
@@ -495,7 +517,7 @@ function updateChecks(hours){
 function init(){
   if(!$('tafSection')) return;
   const refresh = ()=>render();
-  ['tafCycle','tafHours','tafLight','tafTX','tafSrc','tafClim'].forEach(id=>$(id).addEventListener('change', refresh));
+  ['tafCycle','tafHours','tafLight','tafTX','tafSrc','tafClim','tafAtm'].forEach(id=>$(id).addEventListener('change', refresh));
   $('tafMetar').addEventListener('input', ()=>{ clearTimeout(init._t); init._t = setTimeout(render, 400); });
   $('tafMetarSave').onclick = ()=>{ const list = parseMetarAll($('tafMetar').value, Date.now()); if(list.length) mergeDB(list); $('tafMetar').value = ''; render(); flash('tafMetarSave', list.length ? `Tersimpan ${list.length} ✓` : 'Tidak ada METAR terbaca'); };
   $('tafMetarClear').onclick = ()=>{ if(confirm('Hapus semua METAR yang tersimpan di browser ini?')){ save(KEY_DB, []); render(); } };
@@ -508,5 +530,6 @@ function init(){
 }
 function flash(id,msg){ const b = $(id); if(!b) return; const o = b.dataset.o || b.textContent; b.dataset.o = o; b.textContent = msg; setTimeout(()=>{ b.textContent = o; }, 1500); }
 window.initTaf = init;
+window.renderTaf = render;
 window.__taf = { parseMetar, parseMetarAll, checkTaf, computeClim };
 })();

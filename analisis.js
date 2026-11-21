@@ -808,8 +808,10 @@ async function loadLevels(){
   LEVELS_ERR = null; LEVELS = null; render();
   try{ await fetchLevels(); }catch(e){ LEVELS_ERR = e.message; }
   ENV_CACHE = {};
+  window.__anLevels = !!LEVELS;
   render();
   if(typeof renderProdukTable === 'function') try{ renderProdukTable(); }catch(e){}
+  if(window.renderTaf) try{ window.renderTaf(); }catch(e){}
 }
 function initWave(){
   if(!$('anWave')) return;
