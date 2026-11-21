@@ -225,6 +225,22 @@
   .syn-ctl select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:12.5px;}
   .syn-ctl label.chk{font-size:12.5px;color:var(--text-dim);display:flex;gap:4px;align-items:center;}
   @media (max-width:820px){ .an-grid{grid-template-columns:1fr;} }
+  /* tata letak lebar */
+  .wrap{max-width:min(1680px,96vw);}
+  .peta-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(330px,1fr);gap:16px;align-items:start;margin-bottom:14px;}
+  .peta-main > *:last-child, .peta-side > *{margin-bottom:12px;}
+  .peta-side .sec-title{margin-top:4px;}
+  #map{height:clamp(460px,70vh,820px);}
+  @media (max-width:1100px){ .peta-grid{grid-template-columns:minmax(0,1fr);} #map{height:clamp(380px,58vh,560px);} }
+  /* animasi angin ala Windy */
+  .windy-ctl{background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font:12px/1.5 'IBM Plex Sans',sans-serif;color:#1b2530;display:flex;flex-direction:column;gap:2px;}
+  .windy-ctl label{cursor:pointer;user-select:none;white-space:nowrap;}
+  .windy-legend{position:absolute;left:10px;bottom:22px;z-index:700;background:rgba(10,18,28,.78);color:#fff;border-radius:5px;padding:6px 9px;width:200px;pointer-events:none;font-family:'IBM Plex Sans',sans-serif;}
+  .map-dark .leaflet-container{background:#1b2530;}
+  .map-dark .leaflet-control-attribution{background:rgba(20,28,38,.8);color:#9fb0c2;}
+  .map-dark .leaflet-control-attribution a{color:#b9c8d8;}
+  .map-dark .leaflet-tooltip{background:#1b2530;color:#eaf0f6;border-color:#3a4a5a;}
+  .map-dark .leaflet-bar a{background:#2a3644;color:#eaf0f6;border-color:#3a4a5a;}
   .stale-banner{background:rgba(217,112,95,0.14);border:1px solid var(--bad);color:#8a3226;border-radius:3px;padding:8px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.45;}
   .stale-banner[hidden]{display:none;}
   td.justcell{cursor:pointer;}
@@ -326,7 +342,9 @@
     <div class="run-info" id="runInfo"></div>
     <div id="ensStaleBanner" class="stale-banner" hidden></div>
 
-    <div class="map-panel" id="map-panel" data-tab="peta">
+    <div id="petaLayout" class="peta-grid" data-tab="peta">
+      <div class="peta-main">
+    <div class="map-panel" id="map-panel">
       <div id="map"></div>
       <div class="legend-bar">
         <div class="legend-title" id="legendTitle"></div>
@@ -338,7 +356,7 @@
       </div>
     </div>
 
-    <div class="time-panel" data-tab="peta">
+    <div class="time-panel">
       <div class="time-readout">
         <span class="now" id="timeNow">—</span>
         <span class="rel" id="timeRel">—</span>
@@ -352,9 +370,20 @@
       <div class="day-ticks"><span>H+0</span><span>H+1</span><span>H+2</span><span>H+3</span><span>H+4</span><span>H+5</span><span>H+6</span><span>H+7</span></div>
     </div>
 
-    <div class="selected-note" id="selectedNote" data-tab="peta"></div>
+      </div>
+      <aside class="peta-side">
+    <div class="selected-note" id="selectedNote"></div>
 
-    <div class="summary-card" id="summaryCard" data-tab="peta"></div>
+    <div class="summary-card" id="summaryCard"></div>
+
+    <section>
+      <div class="sec-title">Rincian per model — titik terpilih</div>
+      <div class="agree-banner" id="agreeBanner"></div>
+      <div class="model-cards" id="modelCards"></div>
+    </section>
+
+      </aside>
+    </div>
 
     <section id="analisisSection" data-tab="analisis">
       <div class="sec-title">Analisis harian — Kota Bima · Kab. Bima · Kab. Dompu</div>
@@ -431,6 +460,8 @@
               <select id="synDyn"><option value="">Zona: tanpa</option><option value="conv">Zona konvergensi (total)</option><option value="dec">Zona perlambatan angin</option><option value="cnf">Zona konfluensi</option><option value="cyc">Zona belokan siklonik</option></select>
               <label class="chk"><input type="checkbox" id="synStr" checked> Streamline</label>
               <label class="chk"><input type="checkbox" id="synIso"> Isobar MSL</label>
+              <label class="chk"><input type="checkbox" id="synAnim"> 🌬 Animasi angin</label>
+              <label class="chk"><input type="checkbox" id="synDark"> ◐ Mode gelap</label>
               <span id="synInfo" class="si-sub"></span>
             </div>
             <div id="synMap"></div>
@@ -512,12 +543,6 @@
         <table class="produk" id="produkTable"></table>
       </div>
       <div class="produk-legend" id="produkLegend"></div>
-    </section>
-
-    <section data-tab="peta">
-      <div class="sec-title">Rincian per model — titik terpilih</div>
-      <div class="agree-banner" id="agreeBanner"></div>
-      <div class="model-cards" id="modelCards"></div>
     </section>
 
     <section data-tab="peta">
@@ -613,6 +638,7 @@
 <script src="det_data.js" onerror="window.__detMissing=true;"></script>
 <script src="waves.js" onerror="window.__wavesMissing=true;"></script>
 <script src="sinoptik.js" onerror="window.__sinoptikMissing=true;"></script>
+<script src="windy.js"></script>
 <script src="analisis.js"></script>
 <script src="peta_sinoptik.js"></script>
 <script src="verifikasi.js" onerror="window.__verifMissing=true;"></script>
@@ -899,6 +925,7 @@ const PARAM_DEF = {
 
 let state = { pointsData:[], steps:[], stepIdx:0, param:'hujan', modelSel:'avg', selectedIdx:0, playing:false, timer:null, detailDayIdx:0, ensembleCache:{} };
 let map, arrowMarkers=[], gridMarkers=[], gridArrowMarkers=[], overlayLayer=null, bbox;
+let baseTile=null, refTile=null, windyMain=null;
 
 function degToCompass(deg){ const dirs=['U','TL','T','TG','S','BD','B','BL']; return dirs[Math.round(deg/45)%8]; }
 function pointDisplayName(point){
@@ -1111,12 +1138,8 @@ function gridArrowIcon(dirDeg){
 function initMap(){
   computeBbox();
   map = L.map('map',{ scrollWheelZoom:false }).setView([-8.53,118.55], 9);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
-    attribution:'Tiles &copy; Esri', maxZoom:14
-  }).addTo(map);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{
-    maxZoom:14
-  }).addTo(map);
+  baseTile = L.tileLayer(L.windyBase(false).base, { attribution:'Tiles &copy; Esri', maxZoom:14 }).addTo(map);
+  refTile = L.tileLayer(L.windyBase(false).ref, { maxZoom:14 }).addTo(map);
   const bounds=[[bbox.minLat,bbox.minLon],[bbox.maxLat,bbox.maxLon]];
   overlayLayer = L.imageOverlay(buildFieldCanvas(state.steps[0]), bounds, { opacity:0.82, interactive:false }).addTo(map);
 
@@ -1139,6 +1162,30 @@ function initMap(){
     };
     ctl.addTo(map);
   }
+
+  // kontrol: animasi angin (ala Windy) & mode gelap
+  const wctl = L.control({position:'topright'});
+  wctl.onAdd = ()=>{
+    const div = L.DomUtil.create('div','windy-ctl');
+    div.innerHTML = '<label><input type="checkbox" id="mapAnim"> 🌬 Animasi angin</label><label><input type="checkbox" id="mapDark"> ◐ Mode gelap</label>';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  };
+  wctl.addTo(map);
+  const setDark = d=>{
+    const u = L.windyBase(d); baseTile.setUrl(u.base); refTile.setUrl(u.ref);
+    document.getElementById('map').parentElement.classList.toggle('map-dark', d);
+    document.getElementById('mapDark').checked = d;
+  };
+  document.getElementById('mapDark').addEventListener('change', e=>setDark(e.target.checked));
+  document.getElementById('mapAnim').addEventListener('change', e=>{
+    if(e.target.checked){
+      windyMain = new L.WindyLayer({ scale:1.15, vmax:8, getUV:null }).addTo(map);
+      windyMain.setField(mainWindField(state.steps[state.stepIdx]));
+      setDark(true);                                    // gaya Windy: peta gelap
+    } else if(windyMain){ map.removeLayer(windyMain); windyMain = null; setDark(false); }
+  });
+  try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) document.getElementById('mapAnim').title = 'Animasi dimatikan oleh pengaturan "kurangi gerakan" di perangkatmu'; }catch(e){}
 
   STATION_POINTS.forEach((p,i)=>{
     const marker = L.marker([p.lat,p.lon], { icon: dotIcon(i===state.selectedIdx) }).addTo(map);
@@ -1186,6 +1233,25 @@ function initMap(){
   });
 }
 
+// medan angin 10 m dari 77 titik (model terpilih / rata² 4 model) -> fungsi (lat,lon)->[u,v] m/s untuk animasi partikel
+function mainWindField(step){
+  const pu = [], pv = [], pl = [];
+  POINTS.forEach((p,i)=>{
+    const r = readingFor(i, step); if(!r || r.speed==null || r.dir==null) return;
+    const sp = r.speed/3.6, a = r.dir*Math.PI/180;
+    pu.push(-sp*Math.sin(a)); pv.push(-sp*Math.cos(a)); pl.push(p);
+  });
+  const m = 0.55;                                     // lapisan meluas melewati batas titik agar tidak terpotong persegi
+  return (lat, lon)=>{
+    if(lat < bbox.minLat-m || lat > bbox.maxLat+m || lon < bbox.minLon-m || lon > bbox.maxLon+m) return null;
+    let ws = 0, su = 0, sv = 0;
+    for(let i=0;i<pl.length;i++){
+      const dLat = lat-pl[i].lat, dLon = lon-pl[i].lon, w = 1/((dLat*dLat+dLon*dLon)*22+0.0006);
+      ws += w; su += w*pu[i]; sv += w*pv[i];
+    }
+    return ws>0 ? [su/ws, sv/ws] : null;
+  };
+}
 function idwValueAt(lat, lon, step){
   const vals = POINTS.map((p,i)=> paramValueForPoint(i, step));
   let wsum=0, vsum=0;
@@ -1885,6 +1951,7 @@ function render(){
   updateStaleBanner();
   const step = state.steps[state.stepIdx];
   overlayLayer.setUrl(buildFieldCanvas(step));
+  if(windyMain) windyMain.setField(mainWindField(step));
   updateMarkers(step);
   updateLegend();
 

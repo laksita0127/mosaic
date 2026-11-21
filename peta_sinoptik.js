@@ -6,7 +6,7 @@
    ========================================================================== */
 (function(){
 'use strict';
-let map, layer, S, stepSel, levelSel, rhChk, isoChk, strChk, dynSel;
+let map, layer, S, stepSel, levelSel, rhChk, isoChk, strChk, dynSel, baseTile, refTile, windySyn = null;
 const cache = {};
 const $ = id => document.getElementById(id);
 const HARI = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'], BLN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
@@ -248,6 +248,14 @@ function drawStreamlines(ctx, m, U, V, vmax, dark){
   });
 }
 
+function synWindField(){
+  const si = stepSel.selectedIndex, lev = levelSel.value, U = fieldAt('u'+lev, si), V = fieldAt('v'+lev, si);
+  return (lat, lon)=>{ const u = sample(U, lat, lon), v = sample(V, lat, lon); return (u==null || v==null) ? null : [u, v]; };
+}
+function synSetDark(d){
+  const u = L.windyBase(d); baseTile.setUrl(u.base); refTile.setUrl(u.ref);
+  $('synMap').classList.toggle('map-dark', d); $('synDark').checked = d;
+}
 const SynLayer = L.Layer.extend({
   onAdd(m){ this._c = L.DomUtil.create('canvas','syn-canvas'); this._c.style.pointerEvents = 'none'; m.getPanes().overlayPane.appendChild(this._c);
     this._h = ()=>this.redraw(); m.on('moveend zoomend resize', this._h); this.redraw(); },
@@ -263,6 +271,7 @@ const SynLayer = L.Layer.extend({
     if(dynSel.value) drawDyn(ctx, m, dynFields(lev, si)[dynSel.value]);
     if(strChk.checked) drawStreamlines(ctx, m, fieldAt('u'+lev, si), fieldAt('v'+lev, si), VMAX[lev], rhChk.checked);
     if(isoChk.checked) drawIsobars(ctx, m, fieldAt('msl', si));
+    if(windySyn){ windySyn.options.vmax = lev==='200' ? 45 : (lev==='500' ? 30 : 20); windySyn.setField(synWindField()); }
     const grad = `linear-gradient(90deg,${RH_STOPS.map(([v,c])=>`rgb(${c.join(',')}) ${v}%`).join(',')})`;
     $('synLegend').innerHTML = `<b>${LEVNAME[lev]}</b> · ` + (rhChk.checked ? `RH (terhadap air): <span style="display:inline-block;vertical-align:middle;width:150px;height:10px;border:1px solid var(--border);background:${grad}"></span> 0→100% · ` : '')
       + (strChk.checked ? (rhChk.checked ? 'streamline angin (hitam) · ' : `streamline angin, warna = kecepatan: <span style="color:#2f6eb0">■</span> pelan → <span style="color:#28a08c">■</span> → <span style="color:#e2984a">■</span> → <span style="color:#c84637">■</span> ≥${VMAX[lev]} km/jam · `) : '')
@@ -304,14 +313,21 @@ function build(){
   stepSel = $('synStep'); levelSel = $('synLevel'); dynSel = $('synDyn'); rhChk = $('synRH'); isoChk = $('synIso'); strChk = $('synStr');
   populateSteps($('anDay') && $('anDay').value);
   map = L.map('synMap', { scrollWheelZoom:false, minZoom:4, maxZoom:8 }).setView([-6,118], 5);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution:'Tiles &copy; Esri · ECMWF open data (CC BY 4.0)', maxZoom:10 }).addTo(map);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom:10 }).addTo(map);
+  baseTile = L.tileLayer(L.windyBase(false).base, { attribution:'Tiles &copy; Esri · ECMWF open data (CC BY 4.0)', maxZoom:10 }).addTo(map);
+  refTile = L.tileLayer(L.windyBase(false).ref, { maxZoom:10 }).addTo(map);
   [['Bima',-8.5418,118.6922],['Dompu',-8.5401,118.4647]].forEach(([n,la,lo])=>L.circleMarker([la,lo],{radius:4,color:'#b0402f',weight:2,fillColor:'#fff',fillOpacity:1}).bindTooltip(n).addTo(map));
   const fresh = new Date(S.generated.replace('Z',':00Z'));
   $('synInfo').textContent = `${S.model} · run ${S.run.slice(0,10)} ${S.run.slice(11,13)}Z · diperbarui ${fresh.toISOString().slice(0,16).replace('T',' ')} UTC`;
   layer = new SynLayer().addTo(map);
   const refresh = ()=>layer.redraw();
   [stepSel, rhChk, isoChk, strChk, dynSel].forEach(e=>e.addEventListener('change', refresh));
+  $('synDark').addEventListener('change', e=>synSetDark(e.target.checked));
+  $('synAnim').addEventListener('change', e=>{
+    if(e.target.checked){
+      windySyn = new L.WindyLayer({ scale:0.6, vmax:20, density:150 }).addTo(map); windySyn.setField(synWindField());
+      strChk.checked = false; synSetDark(true); refresh();          // gaya Windy: partikel menggantikan streamline, peta gelap
+    } else if(windySyn){ map.removeLayer(windySyn); windySyn = null; synSetDark(false); }
+  });
   levelSel.addEventListener('change', ()=>{ isoChk.checked = levelSel.value==='10'; refresh(); });   // isobar MSL hanya bermakna di permukaan
   isoChk.checked = levelSel.value==='10';
   const day = $('anDay'); if(day) day.addEventListener('change', ()=>{ populateSteps(day.value); refresh(); });

@@ -8,3 +8,4 @@ peta_sinoptik.js
 kecamatan.js
 taf.js
 verif_ui.js
+windy.js
