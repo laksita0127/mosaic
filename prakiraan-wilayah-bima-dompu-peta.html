@@ -1965,6 +1965,22 @@ function renderProdukTable(){
         const e = window.anEnv(date, g), m = MODE[e.mode];
         return `<span style="white-space:nowrap"><b>${g.replace('KABUPATEN','Kab.').replace('KOTA','Kota')}</b>: <span style="color:${m[1]};font-weight:600">${m[0]}</span> (${e.pro} pendukung / ${e.con} penghambat → ${m[2]})</span>`;
       }).join(' · ') + (()=>{ const e = window.anEnv(date,'KABUPATEN BIMA'); return e.note ? `<div style="color:var(--text-faint);margin-top:2px">${e.mode==='dry'?'Penghambat utama':'Pendukung utama'}: ${e.note}</div>` : ''; })();
+    } else if(src==='pens'){
+      const T = Math.round(PENS_THR*100);
+      envEl.innerHTML = `<div style="padding:10px 12px;border-left:4px solid var(--accent);background:var(--panel-alt);border-radius:4px;line-height:1.6;color:var(--text)">`
+        + `<b>Arti angka persen (%) di setiap kotak</b><br>`
+        + `Komputer cuaca dunia (ECMWF, AIFS, GEFS, ICON) masing-masing menghitung puluhan kemungkinan cuaca — total ±170 <b>skenario</b>. `
+        + `Persen = <b>berapa bagian dari skenario itu yang menunjukkan hujan (≥1 mm) di kecamatan tersebut pada jam itu</b>. `
+        + `Contoh: <b>60%</b> = 6 dari 10 skenario hujan pada jam itu.`
+        + `<div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0">`
+        + `<span><b style="color:var(--text-faint)">&lt;20%</b> kecil kemungkinan hujan</span>`
+        + `<span><b style="color:var(--text-dim)">20–${T-1}%</b> mungkin hujan, waspadai (ditulis kondisi awan)</span>`
+        + `<span><b style="color:var(--warn)">≥${T}%</b> ditulis <b>Hujan</b></span>`
+        + `<span><b style="color:var(--bad)">≥70%</b> sangat mungkin hujan</span></div>`
+        + `<b>▸</b> = jam pertama hujan diperkirakan <b>mulai</b>. Lihat juga angka yang naik pelan-pelan sebelumnya — itu tanda hujan mulai mendekat.<br>`
+        + `<b>(±3j xx%)</b> = peluang hujan terjadi di jam itu <i>atau</i> 3 jam sebelum/sesudahnya. Model sering meleset beberapa jam, jadi angka ini menunjukkan seberapa mungkin hujan "sekitar" jam itu.<br>`
+        + `<span style="color:var(--text-dim)">Bukan berarti ${T}% wilayah kecamatan basah atau hujan selama ${T}% waktu — hanya <b>seberapa yakin</b> hujan terjadi. `
+        + `Kecamatan yang berdekatan bisa bernilai sama karena kotak hitung ensemble ±25 km. Ambang ${T}% masih sementara sampai arsip prakiraan cukup untuk diuji.</span></div>`;
     } else envEl.innerHTML = '';
   }
 
