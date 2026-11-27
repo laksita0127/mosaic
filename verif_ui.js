@@ -7,8 +7,9 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const H3 = 3*3600e3;
-const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan (≥2 model)' };
-const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226' };
+const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan (≥2 model)', wavg:'Rata² berbobot', wvote:'Kesepakatan berbobot' };
+const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226', wavg:'#4a5a6a', wvote:'#c0392b' };
+const MW = () => window.MODEL_W || null;
 const LEADTXT = { 0:'0–24 jam', 1:'24–48 jam', 2:'48–72 jam', 3:'72–96 jam' };
 const f2 = v => (v==null || isNaN(v)) ? '—' : v.toFixed(2);
 const pad = n => String(n).padStart(2,'0');
@@ -29,13 +30,20 @@ function build(opts){
       V.models.forEach(k=>{ const v = V.fc[pid][k][String(opts.lead)][i]; if(v==null) ok = false; m[k] = v; });
       if(!ok) continue;
       const wi = winInfo(i), vals = V.models.map(k=>m[k]);
-      rows.push({ o, m, avg: vals.reduce((a,b)=>a+b,0)/vals.length, i, pid, slot: wi.slot, day: wi.day });
+      const r = { o, m, avg: vals.reduce((a,b)=>a+b,0)/vals.length, i, pid, slot: wi.slot, day: wi.day };
+      if(MW()){   // bobot "jujur": dihitung hanya dari pengamatan yang sudah ada saat prakiraan jendela i dibuat
+        const w = MW().rolling(i, opts.lead), P = MW().param; let sw=0, sv=0; r.wwet = 0;
+        MW().keys.forEach(k=>{ const v = m[P[k]]; sw += w[k]; sv += w[k]*v; if(v>=opts.thr) r.wwet += w[k]; });
+        r.wavg = sv/sw;
+      }
+      rows.push(r);
     }
   });
   return rows;
 }
-const evt = (src, r, thr) => src==='avg' ? r.avg>=thr : (src==='vote' ? V.models.filter(k=>r.m[k]>=thr).length>=2 : r.m[src]>=thr);
-const val = (src, r) => src==='avg' || src==='vote' ? r.avg : r.m[src];
+const evt = (src, r, thr) => src==='avg' ? r.avg>=thr : src==='vote' ? V.models.filter(k=>r.m[k]>=thr).length>=2
+  : src==='wavg' ? r.wavg>=thr : src==='wvote' ? r.wwet>=2-1e-9 : r.m[src]>=thr;
+const val = (src, r) => src==='avg' || src==='vote' ? r.avg : (src==='wavg' || src==='wvote') ? r.wavg : r.m[src];
 function scores(rows, src, thr){
   let h=0, mi=0, fa=0, cn=0;
   rows.forEach(r=>{ const o = r.o>=thr, f = evt(src, r, thr); if(o&&f) h++; else if(o&&!f) mi++; else if(!o&&f) fa++; else cn++; });
@@ -48,7 +56,7 @@ function scores(rows, src, thr){
   }
   return { h, mi, fa, cn, pod, far, csi, bias, corr, mae, mean, events:h+mi };
 }
-const SRC = () => V.models.concat(['avg','vote']);
+const SRC = () => V.models.concat(['avg','vote']).concat(MW() ? ['wavg','wvote'] : []);
 const bar = (v, c) => v==null ? '—' : `<div style="position:relative;min-width:84px"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.round(Math.max(0,Math.min(1,v))*100)}%;background:${c};opacity:.22"></div><span style="position:relative">${f2(v)}</span></div>`;
 
 function render(){
@@ -72,19 +80,21 @@ function render(){
       + (close ? 'Selisih antar model <b>kecil</b> (<0,05) — belum cukup untuk menyebut satu model unggul. ' : '')
       + (sc.avg.csi!=null ? `Rata² 4 model: CSI ${f2(sc.avg.csi)}${sc.avg.csi>best.s.csi+0.02 ? ' — <b>lebih baik dari model tunggal mana pun</b>, jadi menggabungkan model memang menolong. ' : (sc.avg.csi>=best.s.csi-0.02 ? ' — setara model terbaik dan biasanya lebih stabil antar musim. ' : '. ')}` : '')
       + (bc.csi!=null ? `Kesepakatan ≥2 model: CSI ${f2(bc.csi)}.` : '')
+      + (sc.wvote && sc.wvote.csi!=null && bc.csi!=null ? ` <b>Kesepakatan berbobot</b>: CSI ${f2(sc.wvote.csi)} (${sc.wvote.csi>bc.csi+0.005 ? '<b style="color:var(--good)">lebih baik</b> dari bobot sama' : (sc.wvote.csi<bc.csi-0.005 ? '<b style="color:var(--bad)">lebih buruk</b> dari bobot sama' : 'setara bobot sama')}; uji jujur — bobot tiap jendela hanya dari data sebelumnya).` : '')
       + (evAll < 30 ? ` <span style="color:var(--warn)">Sampel masih kecil (${evAll} kejadian) — anggap sebagai petunjuk.</span>` : '');
   }
   $('vfVerdict').innerHTML = v;
+  renderWeights(opts.lead);
   // ---- tabel ----
   const best = k => { const arr = srcs.map(s=>sc[s][k]).filter(x=>x!=null); return arr.length ? arr : [0]; };
   const bestCsi = Math.max(...best('csi')), bestPod = Math.max(...best('pod'));
   const bestFar = Math.min(...srcs.map(s=>sc[s].far).filter(x=>x!=null).concat([1]));
   const body = srcs.map(s=>{
     const x = sc[s], biasTxt = x.bias==null ? '—' : f2(x.bias), biasCls = x.bias==null ? '' : (x.bias>1.3 ? 'color:var(--bad)' : (x.bias<0.7 ? 'color:var(--warn)' : ''));
-    const isCons = s==='avg' || s==='vote';
+    const isCons = s==='avg' || s==='vote' || s==='wavg' || s==='wvote';
     return `<tr${isCons?' style="background:var(--panel-alt)"':''}><td style="text-align:left"><b style="color:${CLR[s]}">●</b> <b>${LAB[s]}</b></td>`
       + `<td>${bar(x.csi, CLR[s])}${x.csi===bestCsi && x.csi!=null ? ' <b title="terbaik">★</b>' : ''}</td><td>${bar(x.pod, '#2f7d5a')}</td><td>${bar(x.far, '#b0402f')}</td>`
-      + `<td style="${biasCls}">${biasTxt}</td><td>${s==='vote'?'—':f2(x.corr)}</td><td>${s==='vote'?'—':f2(x.mae)}</td><td class="dim" style="color:var(--text-faint)">${x.h}/${x.mi}/${x.fa}</td></tr>`;
+      + `<td style="${biasCls}">${biasTxt}</td><td>${s==='vote'||s==='wvote'?'—':f2(x.corr)}</td><td>${s==='vote'||s==='wvote'?'—':f2(x.mae)}</td><td class="dim" style="color:var(--text-faint)">${x.h}/${x.mi}/${x.fa}</td></tr>`;
   }).join('');
   $('vfTable').innerHTML = `<table class="an-tbl"><thead><tr><th style="text-align:left">Sumber</th><th title="Critical Success Index: kejadian tepat / (tepat + terlewat + alarm palsu). 1 = sempurna">CSI ↑</th><th title="Probability of Detection: berapa persen hujan yang terjadi berhasil diprakirakan">POD ↑</th><th title="False Alarm Ratio: berapa persen prakiraan hujan yang ternyata tidak hujan">FAR ↓</th><th title="Bias frekuensi: 1 = jumlah prakiraan hujan sama dengan kejadian; >1 terlalu sering, <1 terlalu jarang">Bias</th><th title="Korelasi jumlah hujan 3 jam">Korelasi</th><th title="Selisih rata² mm/3 jam">MAE mm</th><th title="tepat / terlewat / alarm palsu">T/L/AP</th></tr></thead><tbody>${body}</tbody></table>`;
   // ---- per jam (WITA) ----
@@ -119,6 +129,26 @@ function render(){
     const leg = [['Pengamatan (batang)','#8994a0']].concat(V.models.map(k=>[LAB[k],CLR[k]])).concat([['Rata² 4 model',CLR.avg]]).map(([t,c])=>`<span style="margin-right:12px;white-space:nowrap"><b style="color:${c}">●</b> ${t}</span>`).join('');
     $('vfChart').innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" style="width:100%;height:auto;color:var(--text)" role="img" aria-label="Hujan harian: pengamatan vs model">${g}</svg><div class="si-sub" style="margin-top:2px">${leg}</div><div class="si-sub dim" style="color:var(--text-faint)">Hujan harian (mm/hari, hari WITA) rata² ${npt>1?'6 titik':'titik terpilih'}.</div>`;
   }
+}
+function renderWeights(lead){
+  const el = $('vfWeights'); if(!el) return;
+  const mw = MW(); if(!mw){ el.innerHTML = ''; return; }
+  const I = mw.info(lead), on = mw.enabled(), P = mw.param;
+  const cells = mw.keys.map(k=>{
+    const w = I.w[k], c = CLR[P[k]], pct = Math.round(w/4*100);
+    return `<div style="flex:1;min-width:110px"><b style="color:${c}">●</b> <b>${LAB[P[k]]}</b> <span style="font-family:'IBM Plex Mono',monospace">×${w.toFixed(2)}</span>`
+      + `<div style="height:6px;background:var(--panel-alt);border-radius:3px;margin-top:3px"><div style="height:6px;width:${Math.min(100,pct*2)}%;background:${c};border-radius:3px"></div></div>`
+      + `<span class="si-sub" style="color:var(--text-faint)">CSI ${I.csi && I.csi[k]!=null ? f2(I.csi[k]) : '—'}</span></div>`;
+  }).join('');
+  const status = !on ? '<b style="color:var(--warn)">dimatikan</b> — semua model berbobot sama'
+    : I.active ? `<b style="color:var(--good)">aktif</b> — dari ${I.from} s/d ${I.to} (${mw.winDays} hari), ${I.ev} kejadian hujan ≥1 mm/3 jam`
+    : `<b>bobot sama</b> — ${I.reason}`;
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">`
+    + `<div><b>Bobot model yang dipakai sekarang</b> (${LEADTXT[I.lead]}): ${status}</div>`
+    + `<label class="chk"><input type="checkbox" id="vfWOn" ${on?'checked':''}> pakai bobot kinerja di peta, tabel produk &amp; analisis</label></div>`
+    + `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">${cells}</div>`
+    + `<div class="si-sub" style="margin-top:4px;color:var(--text-faint)">Bobot = CSI relatif tiap model (${mw.winDays} hari terakhir, jadi ikut berganti musim), ditarik ke 1 bila sampel kecil, dibatasi 0,5–1,6, rata²nya 1. Dipakai <b>hanya untuk rata² curah hujan</b> (baris "Rata² berbobot"). Suara "≥2 model basah", peluang ensemble, suhu &amp; angin tetap bobot sama — uji menunjukkan suara berbobot justru menurunkan CSI. Baris "Kesepakatan berbobot" ditampilkan sebagai pembanding.</div>`;
+  $('vfWOn').onchange = e => { mw.setEnabled(e.target.checked); renderWeights(lead); if(typeof window.renderProdukTable==='function') window.renderProdukTable(); if(typeof window.render==='function') window.render(); };
 }
 function init(){
   const root = $('verifAuto'); if(!root) return;

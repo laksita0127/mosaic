@@ -578,6 +578,7 @@
           <label class="chk">Titik <select id="vfPt"></select></label>
         </div>
         <div id="vfInfo" class="si-sub" style="margin-top:8px;line-height:1.5"></div>
+        <div id="vfWeights" style="margin:8px 0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius)"></div>
         <div id="vfVerdict" style="margin:8px 0;padding:8px 10px;border-left:3px solid var(--accent);background:var(--panel-alt);line-height:1.55"></div>
         <div class="produk-wrap" id="vfTable"></div>
         <div class="produk-wrap" id="vfSlots" style="margin-top:10px"></div>
@@ -642,6 +643,7 @@
 <script src="analisis.js"></script>
 <script src="peta_sinoptik.js"></script>
 <script src="verifikasi.js" onerror="window.__verifMissing=true;"></script>
+<script src="bobot.js"></script>
 <script src="taf.js"></script>
 <script src="verif_ui.js"></script>
 
@@ -1521,12 +1523,15 @@ function srcHour(rec, src){
     const parts = MODELS.map(m=>rec[m.key]).filter(Boolean);
     if(!parts.length) return null;
     const mean = k => { const v=parts.map(p=>p[k]).filter(x=>x!=null); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; };
+    // curah hujan: rata² BERBOBOT kinerja model (bobot.js, dari tab Verifikasi); bobot sama bila dimatikan / data kurang
+    const W = (window.MODEL_W && rec.date) ? MODEL_W.forDate(rec.date) : null;
+    const wmean = k => { let sw=0, sv=0; MODELS.forEach(m=>{ const p=rec[m.key]; if(p && p[k]!=null){ const w = W ? W[m.key] : 1; sw+=w; sv+=w*p[k]; } }); return sw? sv/sw : null; };
     let sx=0,sy=0,nd=0, wc=null;
     parts.forEach(p=>{
       if(p.dir!=null){ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nd++; }
       wc = worseCode(wc, p.wcode);
     });
-    return { temp:mean('temp'), rh:mean('rh'), precip:mean('precip'), wcode:wc,
+    return { temp:mean('temp'), rh:mean('rh'), precip:wmean('precip'), wcode:wc,
              speed:mean('speed'), dir: nd? (Math.atan2(sx,sy)*180/Math.PI+360)%360 : null };
   }
   return null;
@@ -1632,6 +1637,8 @@ function slotVotes(pi, hidx, dateStr, slotHour){
 const WET_MM = 1.0;
 function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
   const V = slotVotes(pi, hidx, dateStr, slotHour);
+  // suara model TIDAK dibobot: uji jujur 27 Okt–26 Nov 2026 menunjukkan suara berbobot lebih buruk (CSI 0,30 -> 0,27, lead 0)
+  // karena pasangan 2 model basah sering jatuh di bawah ambang 2. Bobot kinerja hanya dipakai pada rata² curah hujan (srcHour).
   const wet = V.filter(v=>v.mm!=null && v.mm>=WET_MM).length;
   const ts = V.filter(v=>v.rainRank>=7).length;
   let poe1 = null;
@@ -1901,6 +1908,10 @@ function renderProdukTable(){
     + (src && src.startsWith('ana:') ? `<br><b>${srcName}</b> = hasil <b>${srcName.split(' +')[0]} saja</b> yang disesuaikan dengan kondisi atmosfer hari itu: bila atmosfer menghambat hujan, kategori hujan model ini hanya dipakai bila hujannya ≥2 mm/3 jam dan peluang ensemble model yang sama ≥35% (atau ≥5 mm); bila mendukung, hujan ≥1 mm/3 jam dengan peluang ≥15% dinaikkan kategorinya. <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding model itu sendiri. ` : '')
     + (src==='ana' ? '<br><b>Hasil analisis</b> = kesepakatan 4 model yang <b>disesuaikan dengan kondisi atmosfer</b> hari itu: bila atmosfer menghambat hujan, kategori hujan hanya dipakai bila peluang ensemble ≥35% dan ≥2 model basah (atau rata² ≥5 mm); bila mendukung, syaratnya dilonggarkan (≥1 model basah dan peluang ≥15%). <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding kesepakatan biasa. Tanda <b style="color:var(--warn)">*</b> = model terbelah. ' : '')
     + ((src==='avg') ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + ((src==='avg' || src==='ana') && window.MODEL_W ? (()=>{ const I = MODEL_W.info(MODEL_W.leadFor(date)), on = MODEL_W.enabled();
+        return '<br><b>Bobot model:</b> ' + (!on ? 'dimatikan (semua model sama).' : I.active
+          ? `rata² curah hujan dibobot kinerja ${MODEL_W.winDays} hari terakhir (suara model tetap sama) — ` + MODEL_W.keys.map(k=>`${MODELS.find(m=>m.key===k).label} ×${I.w[k].toFixed(2)}`).join(', ') + '. Atur di tab Verifikasi.'
+          : `bobot sama (${I.reason}).`) + ' '; })() : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
