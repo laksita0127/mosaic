@@ -1,0 +1,55 @@
+name: Arsip hasil analisis
+
+# Tiap pagi: buka halaman MOSAIC (kode + data dari cabang site) di Chromium tanpa layar, simpan produk "Hasil analisis"
+# (kategori per kecamatan/slot, skor atmosfer per wilayah, hujan mentah tiap model, peluang ensemble) untuk H+0..H+3
+# -> analisis_archive.json di cabang site. ingest_verif.py memasangkannya dengan hujan CMORPH (tab Verifikasi).
+on:
+  schedule:
+    - cron: "13 22 * * *"       # 06:13 WITA — setelah data deterministik 21:41Z & sinoptik 20:25Z
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: arsip-analisis
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ambil halaman + data dari cabang site
+        run: |
+          git fetch --depth 1 origin site
+          mkdir -p "$RUNNER_TEMP/site"
+          git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/site"
+          ls "$RUNNER_TEMP/site" | head -40
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pasang Playwright (Chromium)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.48.2
+          npx playwright install --with-deps chromium
+
+      - name: Pulihkan arsip sebelumnya
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh --restore analisis_archive.json
+
+      - name: Jalankan halaman & arsipkan
+        run: |
+          python3 -m http.server 8799 --bind 127.0.0.1 -d "$RUNNER_TEMP/site" > /dev/null 2>&1 &
+          sleep 2
+          node pipeline/archive_analisis.mjs http://127.0.0.1:8799/prakiraan-wilayah-bima-dompu-peta.html analisis_archive.json
+
+      - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash pipeline/publish_site.sh "arsip analisis" analisis_archive.json

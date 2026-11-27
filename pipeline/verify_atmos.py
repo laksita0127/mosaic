@@ -41,8 +41,16 @@ def levels(d0, d1):
     for k, (la, lo) in LPTS.items():
         q = (f"https://historical-forecast-api.open-meteo.com/v1/forecast?latitude={la}&longitude={lo}&start_date={d0}&end_date={d1}"
              f"&hourly={','.join(VARS)}&models={','.join(LMODELS)}&timezone=Asia%2FMakassar&wind_speed_unit=kmh")
-        with urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "mosaic-verify/1.0"}), timeout=180) as r:
-            out[k] = json.loads(r.read().decode())["hourly"]
+        for i in range(4):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "mosaic-verify/1.0"}), timeout=180) as r:
+                    out[k] = json.loads(r.read().decode())["hourly"]
+                break
+            except Exception as e:      # noqa  (respons kosong / 429 sesaat)
+                print(f"  ulang {k} ({str(e)[:80]})", flush=True)
+                if i == 3:
+                    raise
+                import time; time.sleep(20 * (i + 1))
     return out
 
 
@@ -204,6 +212,24 @@ def main():
             print(f"{td:5d} {tw:5d} {st['csi']:6.3f} {st['pod']:5.2f} {st['far']:5.2f} {st['bias']:5.2f} {nd:5d} {nw:5d}")
     best = max(res)
     print(f"\nterbaik: T_dry={best[1]} T_wet={best[2]} CSI {best[0]:.3f} (aplikasi sekarang: T_dry=-3, T_wet=2)")
+
+    # ---------- varian aturan mode "mendukung" (T_dry=-3) ----------
+    WET = {
+        "A sekarang: >=1 model atau rata²>=1,5": lambda v, mean: v >= 1 or mean >= 1.5,
+        "B: >=2 model atau rata²>=1,5":          lambda v, mean: v >= 2 or mean >= 1.5,
+        "C: >=1 model DAN rata²>=1":             lambda v, mean: v >= 1 and mean >= 1,
+        "D: >=2 model atau rata²>=2":            lambda v, mean: v >= 2 or mean >= 2,
+    }
+    print("\n=== varian aturan mode mendukung (T_dry=-3) ===")
+    for tw in (2, 3):
+        for name, fn in WET.items():
+            f = []
+            for r in rows:
+                vals = list(r[1].values()); votes = sum(v >= 1 for v in vals); mean = float(np.mean(vals))
+                mode = "dry" if r[3] <= -3 else ("wet" if r[3] >= tw else "neutral")
+                f.append(fn(votes, mean) if mode == "wet" else cons_rule(r[1], mode))
+            st = stats(ob, f)
+            print(f"T_wet={tw} {name:40s} CSI {st['csi']:.3f} POD {st['pod']:.2f} FAR {st['far']:.2f} bias {st['bias']:.2f}")
 
 
 if __name__ == "__main__":

@@ -232,3 +232,18 @@ yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & n
   mencari kontur garis-penuh (fase konvektif aktif) terdekat per hari (4 hari obs + 4 hari prakiraan CFS) -> `waves.js`. Estimasi dari gambar (bukan data angka resmi).
 - `taf.js`: draf TAF WADB 12/24/30 jam, siklus 00/06/12/18 UTC, sesuai Peraturan BMKG 6/2024 + SOP Aerodrome Forecast 2025 (kriteria perubahan signifikan, BECMG/TEMPO/PROB, pembulatan,
   pemeriksa aturan). Bahan: konsensus 4 model titik bandara (`det_data.js › airport`), peluang ensemble, METAR WADB yang ditempel. Wajib diperiksa senior forecaster.
+
+### 12. Verifikasi, arsip & kalibrasi (bobot.js, verif_ui.js)
+- `ingest_verif.py` (harian 23:37Z) -> `verifikasi.js`: hujan CMORPH per jendela 3 jam di **semua piksel CMORPH unik** (11 titik) vs prakiraan
+  per lead (Open-Meteo previous runs). Inkremental: `verif_obs.json` (pengamatan) + `verif_fc.json` (prakiraan; hanya ±5 hari terakhir diminta ulang,
+  429 ditunggu). Workflow kini **gagal (merah)** bila skrip gagal 2x — sebelumnya kegagalan tertelan dan data membeku sejak 10 Nov 2026.
+- Arsip (dipulihkan/diterbitkan lewat cabang `site`, tidak bisa diisi mundur):
+  - `ens_archive.json` — peluang gabungan ≥1/≥5 mm per run ensemble (`ingest_openmeteo_ens.py`, 2x/hari, 32 titik, 4 hari).
+  - `analisis_archive.json` — produk **"Hasil analisis" persis seperti halaman** (workflow `archive_analisis.yml`, 06.13 WITA): halaman dari cabang
+    `site` dibuka di Chromium tanpa layar (Playwright), `pipeline/arsip_extract.js` memanggil `slotAgg`/`anEnv` yang sama. Tanpa buletin tempel manual.
+- `bobot.js` (`window.MODEL_W`), semuanya dengan sakelar di tab Verifikasi dan uji jujur (hanya data sebelum prakiraan dibuat):
+  - bobot model (CSI 30 hari) — hanya untuk rata² curah hujan; suara "≥2 model" tetap bobot sama (berbobot lebih buruk).
+  - kalibrasi peluang ensemble ≥1 mm (tabel keandalan + PAV) — aktif otomatis bila ≥300 pasangan & ≥20 kejadian dari `ens_archive.json`.
+  - koreksi bias per jam (quantile mapping per slot) — **bawaan mati**: tidak memperbaiki hujan ≥1 mm pada uji Okt–Nov 2026.
+- Ambang skor atmosfer: `verify_atmos.py` (kisi ambang & varian aturan). Mode "mendukung" kini = rata² 4 model ≥1 mm/3 jam
+  (CSI 0,322 -> 0,330, bias 1,65 -> 1,14 pada musim hujan 13 Okt–26 Nov 2026).

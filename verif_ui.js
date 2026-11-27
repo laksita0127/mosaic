@@ -91,6 +91,7 @@ function render(){
   $('vfVerdict').innerHTML = v;
   renderWeights(opts.lead);
   renderEns(rows, opts);
+  renderArc(rows, opts);
   renderDiur(sc, opts);
   // ---- tabel ----
   const best = k => { const arr = srcs.map(s=>sc[s][k]).filter(x=>x!=null); return arr.length ? arr : [0]; };
@@ -158,6 +159,21 @@ function renderWeights(lead){
   $('vfWOn').onchange = e => { mw.setEnabled(e.target.checked); renderWeights(lead); refreshApp(); };
 }
 // ---- peluang hujan ensemble: keandalan & kalibrasi ----
+// ---- produk terarsip: "Hasil analisis" persis seperti yang tampil di halaman pada hari itu ----
+function renderArc(rows, opts){
+  const el = $('vfArc'); if(!el) return;
+  if(!V.arc){ el.innerHTML = `<b>Hasil analisis (arsip harian)</b>: <b>belum ada arsip</b> — workflow "Arsip hasil analisis" menyimpan produk tiap pagi (06.13 WITA); verifikasi muncul setelah hujan untuk hari-hari itu teramati.`; return; }
+  const ar = rows.map(r=>{ const a = V.arc[r.pid] && V.arc[r.pid][String(opts.lead)]; return a && a.ana[r.i]!=null ? Object.assign({}, r, { ana:a.ana[r.i], avgA:a.avg[r.i], sc:a.sc[r.i] }) : null; }).filter(Boolean);
+  const thr = opts.thr;
+  if(!ar.length){ el.innerHTML = `<b>Hasil analisis (arsip harian)</b>: arsip ${V.arc_issues} hari, belum ada jendela yang pengamatannya sudah tersedia untuk pilihan ini.`; return; }
+  const cs = f => { let h=0,mi=0,fa=0; ar.forEach(r=>{ const o=r.o>=thr, x=f(r); if(o&&x) h++; else if(o) mi++; else if(x) fa++; }); return { csi: h+mi+fa ? h/(h+mi+fa) : null, bias: h+mi ? (h+fa)/(h+mi) : null, h, mi, fa }; };
+  const S = [['Hasil analisis (produk)', cs(r=>r.ana>=4)], ['Kesepakatan (produk)', cs(r=>r.avgA>=4)], ['Kesepakatan ≥2 model (mentah)', cs(r=>evt('vote', r, thr))]];
+  const ev = ar.filter(r=>r.o>=thr).length;
+  el.innerHTML = `<b>Hasil analisis (arsip harian)</b> — ${V.arc_issues} hari terarsip, ${ar.length} jendela terverifikasi, ${ev} kejadian hujan ≥${thr} mm:`
+    + `<table class="an-tbl" style="margin-top:6px"><thead><tr><th style="text-align:left">Sumber</th><th>CSI</th><th>Bias</th><th>T/L/AP</th></tr></thead><tbody>`
+    + S.map(([n,x])=>`<tr><td style="text-align:left">${n}</td><td>${f2(x.csi)}</td><td>${f2(x.bias)}</td><td style="color:var(--text-faint)">${x.h}/${x.mi}/${x.fa}</td></tr>`).join('')
+    + `</tbody></table><div class="si-sub" style="color:var(--text-faint)">Kategori hujan = Hujan Ringan ke atas. Produk diarsipkan apa adanya (termasuk bobot model & skor atmosfer otomatis; tanpa buletin yang ditempel manual).${ev<20 ? ' <b style="color:var(--warn)">Sampel masih kecil.</b>' : ''}</div>`;
+}
 function renderEns(rows, opts){
   const el = $('vfEns'); if(!el) return;
   const mw = MW(); if(!mw){ el.innerHTML = ''; return; }

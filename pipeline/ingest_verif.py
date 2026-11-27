@@ -49,6 +49,7 @@ ROOT = C.PROJECT_DIR
 OBS_STORE = os.path.join(ROOT, "verif_obs.json")
 FC_STORE = os.path.join(ROOT, "verif_fc.json")
 ENS_ARCHIVE = os.path.join(ROOT, "ens_archive.json")
+ANA_ARCHIVE = os.path.join(ROOT, "analisis_archive.json")     # dari archive_analisis.yml (halaman dijalankan di Chromium tanpa layar)
 OUT = os.path.join(ROOT, "verifikasi.js")
 EPOCH = dt.datetime(1970, 1, 1)
 
@@ -210,6 +211,42 @@ def ens_series(wins, pids):
     return out, used
 
 
+def group_of(name):
+    return "KOTA BIMA" if "Kota Bima" in name else ("KABUPATEN DOMPU" if "Dompu" in name else "KABUPATEN BIMA")
+
+
+def ana_series(wins, pts):
+    """produk "Hasil analisis" terarsip per titik/lead/jendela: pangkat kategori (ana, avg; >=4 = hujan), skor atmosfer wilayah, peluang ensemble."""
+    arc = load_json(ANA_ARCHIVE, None)
+    if not arc or not arc.get("issues"):
+        return None, 0
+    widx = {h: i for i, h in enumerate(wins)}
+    n = len(wins)
+    out = {pid: {str(L): {"ana": [None] * n, "avg": [None] * n, "sc": [None] * n, "p1": [None] * n} for L in LEADS} for pid in pts}
+    for issue, rec in sorted(arc["issues"].items()):
+        iss = dt.date.fromisoformat(issue)
+        made = dt.datetime.strptime(rec["made"][:16], "%Y-%m-%dT%H:%M")          # UTC
+        for date, day in rec["days"].items():
+            L = (dt.date.fromisoformat(date) - iss).days
+            if L not in LEADS:
+                continue
+            for pid, (_la, _lo, name, _px) in pts.items():
+                st = day["st"].get(pid)
+                if not st:
+                    continue
+                sc = (day["env"].get(group_of(name)) or {}).get("score")
+                for k, sh in enumerate(rec["slots"]):
+                    st_utc = dt.datetime.fromisoformat(date) + dt.timedelta(hours=sh - 8)
+                    if st_utc < made:                    # jendela sudah lewat saat arsip dibuat
+                        continue
+                    i = widx.get(hour_idx(st_utc))
+                    if i is None:
+                        continue
+                    o = out[pid][str(L)]
+                    o["ana"][i] = st["ana"][k]; o["avg"][i] = st["avg"][k]; o["sc"][i] = sc; o["p1"][i] = st["p1"][k]
+    return out, len(arc["issues"])
+
+
 def main():
     now = dt.datetime.utcnow()
     first_win = (now - dt.timedelta(days=DAYS)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -281,6 +318,8 @@ def main():
 
     ens, n_issues = ens_series(wins, PT_IDS)
     log(f"arsip ensemble: {n_issues} run" + ("" if ens else " (belum ada)"))
+    arc, n_arc = ana_series(wins, pts)
+    log(f"arsip hasil analisis: {n_arc} hari" + ("" if arc else " (belum ada)"))
 
     payload = {
         "generated": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ"),
@@ -289,7 +328,7 @@ def main():
         "start": idx_dt(wins[0]).strftime("%Y-%m-%dT%H:00Z"), "step_h": 3, "n": len(wins),
         "pts": [{"id": pid, "name": pts[pid][2], "lat": pts[pid][0], "lon": pts[pid][1]} for pid in PT_IDS],
         "models": MODELS, "leads": LEADS, "obs": obs3, "fc": out_fc,
-        "ens": ens, "ens_issues": n_issues,
+        "ens": ens, "ens_issues": n_issues, "arc": arc, "arc_issues": n_arc,
     }
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("// dibuat otomatis oleh pipeline/ingest_verif.py - JANGAN diedit tangan" + chr(10))

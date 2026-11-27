@@ -165,7 +165,9 @@ function calRolling(i, lead){
    Per model & slot: faktor pengali f sehingga frekuensi "model ≥1 mm" = frekuensi hujan teramati di slot itu (quantile mapping di
    ambang 1 mm). f dibatasi 0,33..3 dan ditarik ke 1 bila kejadian sedikit (λ = E/(E+20), di ruang log). Butuh ≥40 sampel per slot. */
 const SLOTS = [2,5,8,11,14,17,20,23], DIUR_DAYS = 30, LSD = 'mosaic.koreksiJam';
-const DIUR_DEFAULT = false;                        // diputuskan dari uji jujur (lihat catatan di tab Verifikasi)
+// Bawaan MATI — uji jujur 13 Okt–26 Nov 2026 (11 titik): hujan >=1 mm tidak membaik (CSI kesepakatan 0,32 -> 0,32, rata² 0,35 -> 0,33,
+// alarm palsu naik); hujan >=5 mm sedikit naik (0,03 -> 0,08) tetapi hanya 3 -> 8 kejadian tepat. Prakirawan bisa menyalakannya di tab Verifikasi.
+const DIUR_DEFAULT = false;
 let onDiur = (()=>{ try{ const x = localStorage.getItem(LSD); return x==null ? DIUR_DEFAULT : x==='1'; }catch(e){ return DIUR_DEFAULT; } })();
 function slotOfWin(i){ return new Date(startMs() + i*H3 + 8*3600e3).getUTCHours(); }
 function diurFactors(from, to, lead){
