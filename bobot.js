@@ -214,8 +214,18 @@ function diurRolling(i, lead){
   if(!(key in drc)){ const to = d*8 - (lead+1)*8; drc[key] = diurFactors(to - DIUR_DAYS*8, to, lead).f; }
   return drc[key];
 }
+/* ---------- 4) PENGHALUSAN WAKTU ----------
+   Keputusan hujan pada kesepakatan / Hasil analisis memakai rata² 4 model yang dihaluskan: 0,25 slot sebelumnya + 0,5 slot itu
+   + 0,25 slot sesudahnya, ambang >=1 mm (netral & atmosfer mendukung), >=2 mm (menghambat). Uji 13 Okt–26 Nov 2026
+   (11 titik, 297 kejadian, pipeline/verify_atmos.py): CSI 0,330 -> 0,351, bias 1,14 -> 1,02 — hujan yang hanya muncul sesaat di satu slot model
+   (sering meleset jamnya) tidak langsung jadi "Hujan"; hujan yang konsisten beberapa slot tetap. Bawaan AKTIF. */
+const LSS = 'mosaic.haluskanWaktu';
+let onSmooth = (()=>{ try{ return localStorage.getItem(LSS) !== '0'; }catch(e){ return true; } })();
+const SMOOTH_THR = { neutral:1.0, wet:1.0, dry:2.0 };
 
 window.MODEL_W = {
+  smoothEnabled: () => onSmooth, setSmoothEnabled(b){ onSmooth = !!b; try{ localStorage.setItem(LSS, onSmooth?'1':'0'); }catch(e){} },
+  smoothThr: SMOOTH_THR,
   keys: KEYS, param: PARAM, winDays: WIN_DAYS, calDays: CAL_DAYS, diurDays: DIUR_DAYS, slots: SLOTS, bins: PB,
   enabled: () => on,
   setEnabled(b){ on = !!b; store(false, on ? '1' : '0'); },

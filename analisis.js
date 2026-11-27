@@ -326,21 +326,22 @@ function rainStats(date, reg){
   let pooledUsed = false, ensUsed = false;
   STATION_POINTS.forEach((p,pi)=>{
     const g = stationGroup(p.name); if(!groups.includes(g)) return;
-    let best1=-1, bestSlot=null, best10=-1, rainDet=0, dis=0, cells=0, rainCat=0;
+    let best1=-1, bestSlot=null, best10=-1, rainDet=0, dis=0, cells=0, rainCat=0, bestW=null;
     PRODUK_SLOTS.forEach(sh=>{
       const key = `${date}T${String(sh).padStart(2,'0')}:00`;
       const pooled = ENS_MULTI ? ensPooledAt(p.id, key) : null;
       const e = ecmwfEnsAt(p.id, key);
       let p1=null, p10=null;
-      if(pooled && pooled.nm>=2 && pooled.poe['1']!=null){ p1=pooled.poe['1']; p10=pooled.poe['10']; pooledUsed=true; }
+      let p1w=null;
+      if(pooled && pooled.nm>=2 && pooled.poe['1']!=null){ p1=pooled.poe['1']; p10=pooled.poe['10']; p1w=pooled.poe1w; pooledUsed=true; }
       else if(e && e.precip && e.precip.poe && e.precip.poe['1']!=null){ p1=e.precip.poe['1']; p10=e.precip.poe['10']; ensUsed=true; }
-      if(p1!=null){ if(p1>best1){ best1=p1; bestSlot=sh; } slotAcc[sh].s+=p1; slotAcc[sh].n++; }
+      if(p1!=null){ if(p1>best1){ best1=p1; bestSlot=sh; bestW=p1w; } slotAcc[sh].s+=p1; slotAcc[sh].n++; }
       if(p10!=null && p10>best10) best10=p10;
       const a = slotAgg(pi,hidx,date,sh,'avg');
       if(a){ cells++; if(a.precip3!=null) rainDet=Math.max(rainDet,a.precip3); if(/Hujan/.test(a.wcat.txt)) rainCat++; }
       if(slotDisagree(pi,hidx,date,sh)) dis++;
     });
-    rows.push({ pi, id:p.id, name:shortKec(p.name), grp:g, poe1:best1<0?null:best1, slot:bestSlot, poe10:best10<0?null:best10, rainDet, rainCat, dis, cells, ext:dayExtent(pi,hidx,date,'avg') });
+    rows.push({ pi, id:p.id, name:shortKec(p.name), grp:g, poe1:best1<0?null:best1, slot:bestSlot, poe1w:bestW, poe10:best10<0?null:best10, rainDet, rainCat, dis, cells, ext:dayExtent(pi,hidx,date,'avg') });
   });
   return { rows, slotAcc, src: pooledUsed ? 'gabungan' : (ensUsed ? 'ECMWF' : null) };
 }
@@ -349,12 +350,12 @@ function renderRain(date, reg){
   const el = $('anRain'); if(!el) return null;
   const R = rainStats(date, reg);
   const sorted = R.rows.slice().sort((a,b)=> (b.poe1??-1)-(a.poe1??-1) || b.rainDet-a.rainDet);
-  const body = sorted.map(r=>`<tr><td class="kec"><b>${esc(r.name)}</b></td><td>${poeChip(r.poe1)}</td><td>${r.slot==null?'—':String(r.slot).padStart(2,'0')+'.00'}</td><td>${pct(r.poe10)}</td>`
+  const body = sorted.map(r=>`<tr><td class="kec"><b>${esc(r.name)}</b></td><td>${poeChip(r.poe1)}</td><td>${r.slot==null?'—':String(r.slot).padStart(2,'0')+'.00'}${r.poe1w!=null ? `<br><span class="si-sub" title="peluang hujan ≥1 mm pada slot ini ATAU slot sebelum/sesudahnya (±3 jam)">±3 jam: <b>${pct(r.poe1w)}</b></span>` : ''}</td><td>${pct(r.poe10)}</td>`
     + `<td>${fmt(r.rainDet,1)} mm</td><td>${r.ext.tmin??'—'}–${r.ext.tmax??'—'} °C</td><td>${r.ext.arah} ${r.ext.kts??'—'} km/j</td><td>${r.dis?`<span style="color:var(--warn)">${r.dis}/${r.cells} *</span>`:'0'}</td></tr>`).join('');
   const srcTxt = R.src==='gabungan' ? 'ensemble <b>gabungan</b> ECMWF·AIFS·GEFS·ICON (bobot sama per model)' : (R.src==='ECMWF' ? 'ensemble ECMWF' : '<b>tidak ada data ensemble</b> untuk hari ini (hanya deterministik)');
   el.innerHTML = `<h4>Hujan, suhu &amp; angin per ${reg==='BANDARA' ? 'titik' : 'kecamatan'} — ${REGS[reg]}</h4>
     <div class="produk-wrap"><table class="an-tbl"><thead><tr><th>${reg==='BANDARA' ? 'Titik' : 'Kecamatan'}</th><th>Peluang hujan maks (≥1 mm/3 jam)</th><th>Jam puncak</th><th>Peluang ≥10 mm</th><th>Hujan 3 jam maks (det.)</th><th>Suhu</th><th>Angin maks</th><th>Sel *</th></tr></thead><tbody>${body}</tbody></table></div>
-    <details class="note" style="margin-top:6px"><summary>ⓘ Cara membaca tabel ini</summary><div class="si-sub">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata model deterministik; suhu/angin = rata-rata 4 model; sel * = jumlah slot (dari 8) saat 4 model tak sepakat ada/tidaknya hujan.</div></details>`;
+    <details class="note" style="margin-top:6px"><summary>ⓘ Cara membaca tabel ini</summary><div class="si-sub">Peluang = ${srcTxt}. Hujan 3 jam maks = rata-rata model deterministik; suhu/angin = rata-rata 4 model; sel * = jumlah slot (dari 8) saat 4 model tak sepakat ada/tidaknya hujan. <b>±3 jam</b> = peluang hujan terjadi pada jam puncak <i>atau</i> 3 jam sebelum/sesudahnya — model sering meleset beberapa jam, jadi angka ini menunjukkan seberapa mungkin hujan "di sekitar" jam itu.</div></details>`;
   return R;
 }
 

@@ -141,7 +141,10 @@ def main():
             e = cache[key]
             if e is None:
                 continue
-            rows.append((o, m, e["mode"], e["score"], i))
+            mm = lambda j: (np.mean([V["fc"][pid][k]["0"][j] for k in models]) if 0 <= j < n and all(V["fc"][pid][k]["0"][j] is not None for k in models) else None)
+            nb = [mm(i - 1), mm(i), mm(i + 1)]
+            sm = (0.25 * (nb[0] if nb[0] is not None else nb[1]) + 0.5 * nb[1] + 0.25 * (nb[2] if nb[2] is not None else nb[1]))
+            rows.append((o, m, e["mode"], e["score"], i, sm))
     print(f"sampel {len(rows)}; mode atmosfer: " + ", ".join(f"{k}={sum(1 for r in rows if r[2] == k)}" for k in ("dry", "neutral", "wet")))
     for thr in (1, 5):
         print(f"\n=== peristiwa pengamatan >= {thr} mm/3 jam ===")
@@ -212,6 +215,21 @@ def main():
             print(f"{td:5d} {tw:5d} {st['csi']:6.3f} {st['pod']:5.2f} {st['far']:5.2f} {st['bias']:5.2f} {nd:5d} {nw:5d}")
     best = max(res)
     print(f"\nterbaik: T_dry={best[1]} T_wet={best[2]} CSI {best[0]:.3f} (aplikasi sekarang: T_dry=-3, T_wet=2)")
+
+    # ---------- penghalusan waktu (rata² 0,25/0,5/0,25 slot tetangga) dengan mode atmosfer ----------
+    print("\n=== penghalusan waktu (sm = rata² 4 model dihaluskan) ===")
+    def md(r): return "dry" if r[3] <= -3 else ("wet" if r[3] >= 2 else "neutral")
+    VAR = {
+        "app sekarang (suara; wet: rata²>=1)":            lambda r, M: cons_rule(r[1], M) if M != "wet" else float(np.mean(list(r[1].values()))) >= 1,
+        "tanpa atmosfer: sm>=1":                          lambda r, M: r[5] >= 1,
+        "sm: netral>=1, wet>=0,7, dry>=2":                lambda r, M: r[5] >= {"neutral": 1, "wet": 0.7, "dry": 2}[M],
+        "sm: netral>=1, wet>=1, dry>=2":                  lambda r, M: r[5] >= {"neutral": 1, "wet": 1, "dry": 2}[M],
+        "sm: netral>=1,2, wet>=0,8, dry>=2":              lambda r, M: r[5] >= {"neutral": 1.2, "wet": 0.8, "dry": 2}[M],
+        "sm: netral>=1, wet>=0,8, dry>=1,5":              lambda r, M: r[5] >= {"neutral": 1, "wet": 0.8, "dry": 1.5}[M],
+    }
+    for name, fn in VAR.items():
+        st = stats(ob, [fn(r, md(r)) for r in rows])
+        print(f"{name:42s} CSI {st['csi']:.3f} POD {st['pod']:.2f} FAR {st['far']:.2f} bias {st['bias']:.2f}")
 
     # ---------- varian aturan mode "mendukung" (T_dry=-3) ----------
     WET = {

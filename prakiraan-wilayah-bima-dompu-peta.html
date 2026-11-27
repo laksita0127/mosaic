@@ -833,7 +833,7 @@ function ensPooledAt(pointId, stepTime){
   // kalibrasi peluang >=1 mm dari tabel keandalan (bobot.js; aktif hanya bila arsip ensemble vs CMORPH sudah cukup)
   let cal = false;
   if(window.MODEL_W && poe['1']!=null){ const c = MODEL_W.poeCal(poe['1'], stepTime.slice(0,10)); cal = c!==poe['1']; poe['1'] = c; }
-  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe, cal };
+  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe, cal, poe1w:at('poe1w') };
 }
 function ensTotalMembers(){
   let n = 0;
@@ -1645,6 +1645,24 @@ function slotVotes(pi, hidx, dateStr, slotHour){
 }
 // Ambang "model basah": >= 1 mm per 3 jam (sama dengan ambang peluang ensemble)
 const WET_MM = 1.0;
+// rata² (berbobot) 4 model untuk satu slot 3 jam — sama dengan slotAgg 'avg' tetapi hanya curah hujan (tanpa rekursi ke consensusCat)
+function avgSlotMm(pi, hidx, dateStr, slotHour){
+  let s = 0, n = 0;
+  for(let k=1;k<=3;k++){
+    let hh = slotHour+k, dd = dateStr; if(hh>=24){ hh -= 24; dd = addDays(dateStr, 1); }
+    const r = srcHour(hidx[pi].get(`${dd}T${String(hh).padStart(2,'0')}:00`), 'avg');
+    if(r && r.precip!=null){ s += r.precip; n++; }
+  }
+  return n ? s : null;
+}
+// rata² dihaluskan: 0,25 slot sebelumnya + 0,5 slot ini + 0,25 slot sesudahnya (slot tetangga yang kosong diganti slot ini)
+function smoothSlotMm(pi, hidx, dateStr, slotHour, mm){
+  const c = mm!=null ? mm : avgSlotMm(pi, hidx, dateStr, slotHour); if(c==null) return null;
+  const pd = slotHour-3 < 0 ? addDays(dateStr, -1) : dateStr, ph = (slotHour+21)%24;
+  const nd = slotHour+3 >= 24 ? addDays(dateStr, 1) : dateStr, nh = (slotHour+3)%24;
+  const p = avgSlotMm(pi, hidx, pd, ph), q = avgSlotMm(pi, hidx, nd, nh);
+  return 0.25*(p!=null?p:c) + 0.5*c + 0.25*(q!=null?q:c);
+}
 function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
   const V = slotVotes(pi, hidx, dateStr, slotHour);
   // suara model TIDAK dibobot: uji jujur 27 Okt–26 Nov 2026 menunjukkan suara berbobot lebih buruk (CSI 0,30 -> 0,27, lead 0)
@@ -1663,10 +1681,16 @@ function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
   const strong = mm!=null && mm>=strongMm;
   // mode 'wet': syarat = rata² 4 model >= 1 mm/3 jam (bukan lagi ">=1 model basah"). Uji 13 Okt–26 Nov 2026 (musim hujan, 11 titik,
   // 297 kejadian; pipeline/verify_atmos.py): CSI 0,322 -> 0,330 dan bias 1,65 -> 1,14 (aturan lama terlalu sering memprakirakan hujan).
-  const wetOk = mode==='wet' ? (mm!=null && mm>=1.0) : (wet>=needWet || strong);
+  let wetOk = mode==='wet' ? (mm!=null && mm>=1.0) : (wet>=needWet || strong), mmCat = mm;
+  // penghalusan waktu (bobot.js; sakelar di tab Verifikasi): keputusan hujan dari rata² 4 model yang dihaluskan antar slot
+  if(window.MODEL_W && MODEL_W.smoothEnabled()){
+    const sm = smoothSlotMm(pi, hidx, dateStr, slotHour, mm);
+    wetOk = sm!=null && (sm >= MODEL_W.smoothThr[mode||'neutral'] || strong);
+    if(sm!=null) mmCat = Math.max(mm||0, sm);
+  }
   if(wetOk && (poe1==null || poe1>=poeMin || strong)){
-    let cat = wxFromPrecip3(mm);
-    if(cat){ if(ts>=(mode==='wet'?1:2) && mm>=(mode==='wet'?3:5)) cat = WX_CATS.hujanlebatpetir; return cat; }
+    let cat = wxFromPrecip3(mmCat);
+    if(cat){ if(ts>=(mode==='wet'?1:2) && mmCat>=(mode==='wet'?3:5)) cat = WX_CATS.hujanlebatpetir; return cat; }
   }
   // tanpa hujan signifikan -> kategori awan = median pangkat awan antar model
   const ranks = V.map(v=>v.cloudRank).filter(r=>r>=0).sort((a,b)=>a-b);
@@ -1921,6 +1945,7 @@ function renderProdukTable(){
     + (src && src.startsWith('ana:') ? `<br><b>${srcName}</b> = hasil <b>${srcName.split(' +')[0]} saja</b> yang disesuaikan dengan kondisi atmosfer hari itu: bila atmosfer menghambat hujan, kategori hujan model ini hanya dipakai bila hujannya ≥2 mm/3 jam dan peluang ensemble model yang sama ≥35% (atau ≥5 mm); bila mendukung, hujan ≥1 mm/3 jam dengan peluang ≥15% dinaikkan kategorinya. <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding model itu sendiri. ` : '')
     + (src==='ana' ? '<br><b>Hasil analisis</b> = kesepakatan 4 model yang <b>disesuaikan dengan kondisi atmosfer</b> hari itu: bila atmosfer menghambat hujan, kategori hujan hanya dipakai bila peluang ensemble ≥35% dan ≥2 model basah (atau rata² ≥5 mm); bila mendukung, syaratnya dilonggarkan (rata² 4 model ≥1 mm/3 jam dan peluang ≥15%). <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding kesepakatan biasa. Tanda <b style="color:var(--warn)">*</b> = model terbelah. ' : '')
     + ((src==='avg') ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
+    + ((src==='avg' || src==='ana') && window.MODEL_W && MODEL_W.smoothEnabled() ? '<br><b>Penghalusan waktu aktif:</b> keputusan hujan memakai rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25%–50%–25%); hujan bila ≥1 mm/3 jam (atmosfer menghambat: ≥2 mm). Hujan yang hanya muncul sesaat di satu slot model tidak langsung ditulis hujan. Atur di tab Verifikasi. ' : '')
     + ((src==='avg' || src==='ana') && window.MODEL_W ? (()=>{ const I = MODEL_W.info(MODEL_W.leadFor(date)), on = MODEL_W.enabled();
         return '<br><b>Bobot model:</b> ' + (!on ? 'dimatikan (semua model sama).' : I.active
           ? `rata² curah hujan dibobot kinerja ${MODEL_W.winDays} hari terakhir (suara model tetap sama) — ` + MODEL_W.keys.map(k=>`${MODELS.find(m=>m.key===k).label} ×${I.w[k].toFixed(2)}`).join(', ') + '. Atur di tab Verifikasi.'

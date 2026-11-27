@@ -287,7 +287,7 @@ def wperc(vals, w, qs):
 def pooled_products(mats, thr):
     """mats: list matriks precip3 (M_i, n). Bobot sama per MODEL (bukan per member)."""
     n = mats[0].shape[1]
-    out = {"mean": [], "p10": [], "p50": [], "p90": [], "nm": [],
+    out = {"mean": [], "p10": [], "p50": [], "p90": [], "nm": [], "poe1w": [],
            "poe": {str(t): [] for t in thr}}
     for si in range(n):
         vals, wts, nm = [], [], 0
@@ -302,6 +302,7 @@ def pooled_products(mats, thr):
             for k in ("mean", "p10", "p50", "p90"):
                 out[k].append(None)
             out["nm"].append(0)
+            out["poe1w"].append(None)
             for t in thr:
                 out["poe"][str(t)].append(None)
             continue
@@ -315,6 +316,16 @@ def pooled_products(mats, thr):
         out["nm"].append(nm)
         for t in thr:
             out["poe"][str(t)].append(r2(w[v >= t].sum() / w.sum()))
+        # peluang hujan >=1 mm dalam ±3 jam = skenario yang hujan di slot ini ATAU slot sebelum/sesudahnya (bobot sama per model)
+        ws, wt = 0.0, 0.0
+        for m in mats:
+            lo, hi = max(0, si - 1), min(n, si + 2)
+            blk = m[:, lo:hi]
+            ok = ~np.isnan(m[:, si])
+            if ok.sum():
+                hit = (np.nan_to_num(blk[ok], nan=0.0) >= 1).any(axis=1)
+                ws += hit.mean(); wt += 1
+        out["poe1w"].append(r2(ws / wt) if wt else None)
     return out
 
 

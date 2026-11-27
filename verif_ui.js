@@ -7,8 +7,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const H3 = 3*3600e3;
-const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan (≥2 model)', wavg:'Rata² berbobot', wvote:'Kesepakatan berbobot', cavg:'Rata² + koreksi jam', cvote:'Kesepakatan + koreksi jam' };
-const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226', wavg:'#4a5a6a', wvote:'#c0392b', cavg:'#5d6d3a', cvote:'#9a6a00' };
+const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan (≥2 model)', wavg:'Rata² berbobot', wvote:'Kesepakatan berbobot', cavg:'Rata² + koreksi jam', cvote:'Kesepakatan + koreksi jam', savg:'Rata² halus waktu (dipakai)' };
+const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226', wavg:'#4a5a6a', wvote:'#c0392b', cavg:'#5d6d3a', cvote:'#9a6a00', savg:'#0b7a75' };
 const MW = () => window.MODEL_W || null;
 const LEADTXT = { 0:'0–24 jam', 1:'24–48 jam', 2:'48–72 jam', 3:'72–96 jam' };
 const f2 = v => (v==null || isNaN(v)) ? '—' : v.toFixed(2);
@@ -40,6 +40,10 @@ function build(opts){
         MW().keys.forEach(k=>{ const c = m[P[k]] * (F[k][wi.slot] || 1); cs += c; if(c>=opts.thr) r.cwet++; });
         r.cavg = cs/MW().keys.length;
       }
+      { // penghalusan waktu: 0,25 slot sebelumnya + 0,5 slot ini + 0,25 slot sesudahnya (rata² 4 model)
+        const am = j => { if(j<0 || j>=V.n) return null; const v = V.models.map(k=>V.fc[pid][k][String(opts.lead)][j]); return v.some(x=>x==null) ? null : v.reduce((a,b)=>a+b,0)/v.length; };
+        const p = am(i-1), q = am(i+1), c = r.avg; r.savg = 0.25*(p!=null?p:c) + 0.5*c + 0.25*(q!=null?q:c);
+      }
       r.pe = V.ens && V.ens[pid] && V.ens[pid][String(opts.lead)] ? V.ens[pid][String(opts.lead)][i] : null;
       rows.push(r);
     }
@@ -47,8 +51,8 @@ function build(opts){
   return rows;
 }
 const evt = (src, r, thr) => src==='avg' ? r.avg>=thr : src==='vote' ? V.models.filter(k=>r.m[k]>=thr).length>=2
-  : src==='wavg' ? r.wavg>=thr : src==='wvote' ? r.wwet>=2-1e-9 : src==='cavg' ? r.cavg>=thr : src==='cvote' ? r.cwet>=2 : r.m[src]>=thr;
-const val = (src, r) => src==='avg' || src==='vote' ? r.avg : (src==='wavg' || src==='wvote') ? r.wavg : (src==='cavg' || src==='cvote') ? r.cavg : r.m[src];
+  : src==='savg' ? r.savg>=thr : src==='wavg' ? r.wavg>=thr : src==='wvote' ? r.wwet>=2-1e-9 : src==='cavg' ? r.cavg>=thr : src==='cvote' ? r.cwet>=2 : r.m[src]>=thr;
+const val = (src, r) => src==='savg' ? r.savg : src==='avg' || src==='vote' ? r.avg : (src==='wavg' || src==='wvote') ? r.wavg : (src==='cavg' || src==='cvote') ? r.cavg : r.m[src];
 function scores(rows, src, thr){
   let h=0, mi=0, fa=0, cn=0;
   rows.forEach(r=>{ const o = r.o>=thr, f = evt(src, r, thr); if(o&&f) h++; else if(o&&!f) mi++; else if(!o&&f) fa++; else cn++; });
@@ -61,7 +65,7 @@ function scores(rows, src, thr){
   }
   return { h, mi, fa, cn, pod, far, csi, bias, corr, mae, mean, events:h+mi };
 }
-const SRC = () => V.models.concat(['avg','vote']).concat(MW() ? ['wavg','wvote','cavg','cvote'] : []);
+const SRC = () => V.models.concat(['avg','vote','savg']).concat(MW() ? ['wavg','wvote','cavg','cvote'] : []);
 const bar = (v, c) => v==null ? '—' : `<div style="position:relative;min-width:84px"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.round(Math.max(0,Math.min(1,v))*100)}%;background:${c};opacity:.22"></div><span style="position:relative">${f2(v)}</span></div>`;
 
 function render(){
@@ -214,12 +218,17 @@ function renderDiur(sc, opts){
   const rowsF = !I.active ? '' : mw.keys.map(k=>`<tr><td style="text-align:left"><b style="color:${CLR[P[k]]}">●</b> ${LAB[P[k]]}</td>${mw.slots.map(s=>{ const f = I.f[k][s]; const c = f>1.05 ? 'color:#2f6fb0' : (f<0.95 ? 'color:#b0402f' : 'color:var(--text-faint)'); return `<td style="${c}">×${f.toFixed(2)}</td>`; }).join('')}</tr>`).join('');
   const cmp = sc.cvote && sc.vote && sc.vote.csi!=null && sc.cvote.csi!=null
     ? `Uji jujur pada pilihan ini: kesepakatan ${f2(sc.vote.csi)} → <b>${f2(sc.cvote.csi)}</b> dengan koreksi; rata² 4 model ${f2(sc.avg.csi)} → <b>${f2(sc.cavg.csi)}</b>.` : '';
-  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div><b>Koreksi bias per jam</b> (${LEADTXT[I.lead]}): ${!on ? '<b>tidak dipakai</b>' : (I.active ? '<b style="color:var(--good)">dipakai</b>' : '<b>tidak aktif</b> — '+I.reason)}</div>`
+  const son = mw.smoothEnabled();
+  const smTxt = sc.savg && sc.vote ? ` Uji pada pilihan ini: kesepakatan ≥2 model ${f2(sc.vote.csi)} → <b>${f2(sc.savg.csi)}</b> dengan penghalusan waktu.` : '';
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)"><div><b>Penghalusan waktu</b> (kesepakatan &amp; Hasil analisis): ${son ? '<b style="color:var(--good)">aktif</b>' : '<b style="color:var(--warn)">dimatikan</b>'} — hujan diputuskan dari rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25–50–25%), karena model sering meleset ±3 jam.${smTxt}</div>`
+    + `<label class="chk"><input type="checkbox" id="vfSmOn" ${son?'checked':''}> pakai</label></div>`
+    + `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div><b>Koreksi bias per jam</b> (${LEADTXT[I.lead]}): ${!on ? '<b>tidak dipakai</b>' : (I.active ? '<b style="color:var(--good)">dipakai</b>' : '<b>tidak aktif</b> — '+I.reason)}</div>`
     + `<label class="chk"><input type="checkbox" id="vfDiurOn" ${on?'checked':''}> pakai koreksi di peta, tabel produk &amp; analisis</label></div>`
     + `<div class="si-sub" style="margin-top:4px">${cmp}</div>`
     + (rowsF ? `<details style="margin-top:4px"><summary class="si-sub" style="cursor:pointer">Faktor pengali curah hujan per slot (${mw.diurDays} hari terakhir)</summary><table class="an-tbl" style="margin-top:4px"><thead><tr><th style="text-align:left">Model</th>${head}</tr></thead><tbody>${rowsF}</tbody></table>`
       + `<div class="si-sub" style="color:var(--text-faint)">×>1 = model biasanya kurang hujan di slot itu (dinaikkan), ×<1 = terlalu sering hujan (diturunkan). Dihitung agar frekuensi "model ≥1 mm" sama dengan frekuensi hujan teramati; dibatasi 0,33–3 dan ditarik ke 1 bila kejadian sedikit.</div></details>` : '');
   $('vfDiurOn').onchange = e => { mw.setDiurEnabled(e.target.checked); refreshApp(); render(); };
+  $('vfSmOn').onchange = e => { mw.setSmoothEnabled(e.target.checked); refreshApp(); render(); };
 }
 function refreshApp(){ try{ if(typeof window.renderProdukTable==='function') window.renderProdukTable(); if(typeof window.render==='function') window.render(); }catch(e){ console.warn(e); } }
 function init(){
