@@ -4,7 +4,7 @@
      • validitas 12/24/30 jam, siklus 00/06/12/18 UTC, dikirim 1 jam sebelum validitas (maks. +15 menit)
      • angin (VRB <3 kt; hembusan bila ≥10 kt di atas rata²; perubahan: arah ≥60° dgn ≥10 kt, kecepatan ≥10 kt, variasi hembusan ≥10 kt dgn rata² ≥15 kt), visibilitas (pembulatan SOP), cuaca signifikan (RA/+RA/TS…), awan <5000 ft + CB/TCU
      • BECMG 1–4 jam, TEMPO (<1 jam tiap kejadian, total < setengah jendela), PROB30/40 hanya bersama TEMPO, ambang perubahan signifikan SOP
-   Bahan: konsensus 4 model deterministik (ECMWF·GFS·ICON·AIFS) titik bandara + peluang ensemble gabungan + METAR WADB yang ditempel.
+   Bahan: konsensus 4 model deterministik (ECMWF·GFS·JMA·AIFS; JMA tanpa hembusan & CAPE -> rata² 3 model lain) titik bandara + peluang ensemble gabungan + METAR WADB yang ditempel.
    INI DRAF berbasis model — wajib diperiksa/diubah senior forecaster sebelum diterbitkan.  Ekspor: window.initTaf()
    ========================================================================== */
 (function(){
@@ -23,7 +23,7 @@ const hhmmUTC = ms => { const d = new Date(ms); return `${pad(d.getUTCDate())}/$
 const witaStr = ms => { const d = new Date(ms + 8*H); return `${pad(d.getUTCDate())}/${pad(d.getUTCHours())}.00 WITA`; };
 
 /* ---------------- data bandara ---------------- */
-const MODEL_LABEL = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS' };
+const MODEL_LABEL = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', jma_gsm:'JMA', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS' };
 const ENSKEY = { ecmwf_ifs025:'ecmwf', ecmwf_aifs025_single:'aifs', gfs_seamless:'gefs', icon_seamless:'icon' };
 let ACTIVE = null;                                // model yang dipakai (null = semua / kesepakatan)
 const ACT = () => ACTIVE || AP.models;

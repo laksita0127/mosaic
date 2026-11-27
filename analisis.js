@@ -1,7 +1,7 @@
 /* ==========================================================================
    MOSAIC — ANALISIS HARIAN (Kota Bima · Kab. Bima · Kab. Dompu)
    A. Dinamika atmosfer : buletin BMKG ditempel prakirawan + interpretasi berbasis aturan
-   B. Kelembapan lapisan 850/700/500/200 hPa (Open-Meteo, ECMWF·GFS·ICON)
+   B. Kelembapan lapisan 850/700/500/200 hPa (Open-Meteo, ECMWF·GFS·JMA·AIFS; JMA tanpa RH 200 hPa & CAPE)
    C. Hujan / suhu / angin per kecamatan (ensemble gabungan bila ada)
    D. Narasi otomatis berbasis aturan — boleh diedit prakirawan
    Dimuat sebelum skrip utama; memakai global halaman utama (MODELS, state, ENS_MULTI, slotAgg, …)

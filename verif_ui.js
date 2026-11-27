@@ -7,8 +7,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const H3 = 3*3600e3;
-const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan (≥2 model)', wavg:'Rata² berbobot', wvote:'Kesepakatan berbobot', cavg:'Rata² + koreksi jam', cvote:'Kesepakatan + koreksi jam', savg:'Rata² halus waktu (dipakai)' };
-const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226', wavg:'#4a5a6a', wvote:'#c0392b', cavg:'#5d6d3a', cvote:'#9a6a00', savg:'#0b7a75' };
+const LAB = { ecmwf_ifs025:'ECMWF', gfs_seamless:'GFS', jma_gsm:'JMA', icon_seamless:'ICON', ecmwf_aifs025_single:'AIFS', avg:'Rata² 4 model', vote:'Kesepakatan ≥2 model (dipakai besok dst.)', wavg:'Rata² berbobot', wvote:'Kesepakatan berbobot', cavg:'Rata² + koreksi jam', cvote:'Kesepakatan + koreksi jam', savg:'Rata² halus waktu (dipakai utk hari ini)' };
+const CLR = { ecmwf_ifs025:'#2b6cb0', gfs_seamless:'#c9702a', jma_gsm:'#b5487a', icon_seamless:'#2f9e6e', ecmwf_aifs025_single:'#7c5cbf', avg:'#1b2530', vote:'#8a3226', wavg:'#4a5a6a', wvote:'#c0392b', cavg:'#5d6d3a', cvote:'#9a6a00', savg:'#0b7a75' };
 const MW = () => window.MODEL_W || null;
 const LEADTXT = { 0:'0–24 jam', 1:'24–48 jam', 2:'48–72 jam', 3:'72–96 jam' };
 const f2 = v => (v==null || isNaN(v)) ? '—' : v.toFixed(2);
@@ -220,7 +220,7 @@ function renderDiur(sc, opts){
     ? `Uji jujur pada pilihan ini: kesepakatan ${f2(sc.vote.csi)} → <b>${f2(sc.cvote.csi)}</b> dengan koreksi; rata² 4 model ${f2(sc.avg.csi)} → <b>${f2(sc.cavg.csi)}</b>.` : '';
   const son = mw.smoothEnabled();
   const smTxt = sc.savg && sc.vote ? ` Uji pada pilihan ini: kesepakatan ≥2 model ${f2(sc.vote.csi)} → <b>${f2(sc.savg.csi)}</b> dengan penghalusan waktu.` : '';
-  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)"><div><b>Penghalusan waktu</b> (kesepakatan &amp; Hasil analisis): ${son ? '<b style="color:var(--good)">aktif</b>' : '<b style="color:var(--warn)">dimatikan</b>'} — hujan diputuskan dari rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25–50–25%), karena model sering meleset ±3 jam.${smTxt}</div>`
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)"><div><b>Penghalusan waktu</b> (kesepakatan &amp; Hasil analisis, <b>hari ini saja</b>): ${son ? '<b style="color:var(--good)">aktif</b>' : '<b style="color:var(--warn)">dimatikan</b>'} — hujan diputuskan dari rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25–50–25%), karena model sering meleset ±3 jam.${smTxt}</div>`
     + `<label class="chk"><input type="checkbox" id="vfSmOn" ${son?'checked':''}> pakai</label></div>`
     + `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div><b>Koreksi bias per jam</b> (${LEADTXT[I.lead]}): ${!on ? '<b>tidak dipakai</b>' : (I.active ? '<b style="color:var(--good)">dipakai</b>' : '<b>tidak aktif</b> — '+I.reason)}</div>`
     + `<label class="chk"><input type="checkbox" id="vfDiurOn" ${on?'checked':''}> pakai koreksi di peta, tabel produk &amp; analisis</label></div>`

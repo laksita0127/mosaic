@@ -4,7 +4,7 @@ ingest_verif.py — data verifikasi otomatis: prakiraan model vs hujan pengamata
 
 Pengamatan  : CMORPH V0.x ADJ, per jam, 0,25° (NOAA CPC, publik, tanpa akun, latensi ±1–2 jam)
               https://ftp.cpc.ncep.noaa.gov/precip/CMORPH_RT/ICDR/0.25deg-HLY/   (file jam H = hujan jam H:00–H:59 UTC, mm/jam)
-Prakiraan   : Open-Meteo "previous runs" — prakiraan per lead time (hari 0 = run terbaru, hari-1, hari-2, hari-3 sebelumnya) untuk ECMWF, GFS, ICON, AIFS
+Prakiraan   : Open-Meteo "previous runs" — prakiraan per lead time (hari 0 = run terbaru, hari-1, hari-2, hari-3 sebelumnya) untuk ECMWF, GFS, JMA, AIFS
 Ensemble    : ens_archive.json (diisi ingest_openmeteo_ens.py tiap run) — peluang hujan gabungan per titik, dipasangkan per jendela & lead (hari)
 Jendela     : 3 jam UTC kelipatan 3 (T, T+3j) = slot produk 02,05,08,...,23 WITA.  Obs = jumlah file T,T+1,T+2 ; prakiraan = nilai jam T+1..T+3
               (precipitation Open-Meteo = jumlah jam SEBELUMNYA).
@@ -41,7 +41,7 @@ WORKERS = int(os.environ.get("VERIF_WORKERS", "12"))
 API_KEY = os.environ.get("OPENMETEO_API_KEY", "").strip()
 PREV_API = ("https://customer-previous-runs-api.open-meteo.com/v1/forecast" if API_KEY
             else "https://previous-runs-api.open-meteo.com/v1/forecast")
-MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless", "ecmwf_aifs025_single"]
+MODELS = ["ecmwf_ifs025", "gfs_seamless", "jma_gsm", "ecmwf_aifs025_single"]
 LEADS = [0, 1, 2, 3]
 PREFERRED = ["bandara", "sape", "dompu", "lambu", "tambora", "wera"]    # titik lama — tetap jadi wakil pikselnya
 FC_REFETCH_DAYS = 5          # prakiraan lead 0..3 untuk jam yang sudah lewat tidak berubah -> cukup minta ulang beberapa hari terakhir
@@ -159,7 +159,7 @@ def get_forecasts(pts, d0, d1, store):
     vars_ = ",".join("precipitation" + ("" if L == 0 else f"_previous_day{L}") for L in LEADS)
     recent = (dt.date.fromisoformat(d1) - dt.timedelta(days=FC_REFETCH_DAYS)).isoformat()
     for pid, (la, lo, _n, _px) in pts.items():
-        have = store.get(pid)
+        have = store.get(pid) and all(m in store[pid] for m in MODELS)
         start = max(d0, recent) if have else d0                # titik baru -> isi penuh; titik lama -> hanya beberapa hari terakhir
         q = (f"{PREV_API}?latitude={la}&longitude={lo}&hourly={vars_}&models={','.join(MODELS)}"
              f"&start_date={start}&end_date={d1}&timezone=UTC" + (f"&apikey={API_KEY}" if API_KEY else ""))

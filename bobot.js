@@ -16,7 +16,7 @@
    ========================================================================== */
 (function(){
 'use strict';
-const PARAM = { ecmwf:'ecmwf_ifs025', gfs:'gfs_seamless', icon:'icon_seamless', aifs:'ecmwf_aifs025_single' };
+const PARAM = { ecmwf:'ecmwf_ifs025', gfs:'gfs_seamless', jma:'jma_gsm', aifs:'ecmwf_aifs025_single' };
 const KEYS = Object.keys(PARAM);
 const WIN_DAYS = 30, THR = 1.0, K_SHRINK = 40, MIN_EV = 10, W_MIN = 0.5, W_MAX = 1.6, STALE_DAYS = 10;
 const LS = 'mosaic.bobotModel';
@@ -218,7 +218,9 @@ function diurRolling(i, lead){
    Keputusan hujan pada kesepakatan / Hasil analisis memakai rata² 4 model yang dihaluskan: 0,25 slot sebelumnya + 0,5 slot itu
    + 0,25 slot sesudahnya, ambang >=1 mm (netral & atmosfer mendukung), >=2 mm (menghambat). Uji 13 Okt–26 Nov 2026
    (11 titik, 297 kejadian, pipeline/verify_atmos.py): CSI 0,330 -> 0,351, bias 1,14 -> 1,02 — hujan yang hanya muncul sesaat di satu slot model
-   (sering meleset jamnya) tidak langsung jadi "Hujan"; hujan yang konsisten beberapa slot tetap. Bawaan AKTIF. */
+   (sering meleset jamnya) tidak langsung jadi "Hujan"; hujan yang konsisten beberapa slot tetap. Bawaan AKTIF.
+   DIPAKAI HANYA UNTUK HARI INI (H+0): untuk H+1..H+3 aturan suara ">=2 dari 4 model" lebih baik (uji dengan JMA: suara
+   0,362/0,321/0,329 vs halus 0,317/0,315/0,311). */
 const LSS = 'mosaic.haluskanWaktu';
 let onSmooth = (()=>{ try{ return localStorage.getItem(LSS) !== '0'; }catch(e){ return true; } })();
 const SMOOTH_THR = { neutral:1.0, wet:1.0, dry:2.0 };

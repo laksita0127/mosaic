@@ -12,7 +12,7 @@
   :root{
     --bg:#f5f7f9; --panel:#ffffff; --panel-alt:#eef1f4; --border:#d7dde3;
     --text:#1b2530; --text-dim:#57626d; --text-faint:#8994a0;
-    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --aifs:#1f9d8a; --accent:#2b6cb0;
+    --ecmwf:#2b6cb0; --gfs:#c9702a; --icon:#2f9e6e; --jma:#b5487a; --aifs:#1f9d8a; --accent:#2b6cb0;
     --good:#5fbf8f; --warn:#e2984a; --bad:#d9705f;
     --radius:3px;
   }
@@ -301,7 +301,7 @@
         <ul style="margin:0;padding-left:18px;">
           <li><b>Peta warna</b> = perkiraan (hujan/suhu/angin/kelembapan) pada jam yang dipilih di penggeser waktu. Warna dihaluskan antar 32 titik kecamatan — bukan grid model asli.</li>
           <li><b>Penggeser waktu</b> bergerak <b>per 3 jam</b>, dari sekarang (H+0) sampai 7 hari ke depan (H+7).</li>
-          <li><b>Kartu model</b> (ECMWF, GFS, ICON, AIFS) = 4 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
+          <li><b>Kartu model</b> (ECMWF, GFS, JMA, AIFS) = 4 model cuaca berbeda. Kalau ketiganya mirip → perkiraan lebih bisa dipegang. Kalau jauh berbeda → ketidakpastian tinggi.</li>
           <li><b>Ensemble / "skenario"</b> = satu model dijalankan puluhan kali dengan sedikit variasi kondisi awal, menghasilkan <b>rentang</b> kemungkinan, bukan satu angka. "Peluang hujan 70%" artinya 70% dari skenario menghasilkan hujan.</li>
           <li><b>Kotak "Ringkasan"</b> di bawah menerjemahkan semua itu jadi satu kalimat untuk titik &amp; jam yang dipilih.</li>
           <li>Halaman ini alat bantu analisis internal — <b>bukan produk prakiraan resmi BMKG</b>.</li>
@@ -325,7 +325,8 @@
           <option value="avg">Rata-rata 4 model</option>
           <option value="ecmwf">ECMWF</option>
           <option value="gfs">GFS</option>
-          <option value="icon">ICON</option>
+          <option value="jma">JMA</option>
+          <option value="aifs">AIFS</option>
         </select>
       </div>
       <div class="field grow search-box">
@@ -522,11 +523,11 @@
             <option value="pens">Peluang ensemble (persen per jam — kapan hujan mulai)</option>
             <option value="ana:ecmwf">ECMWF + kondisi atmosfer</option>
             <option value="ana:gfs">GFS + kondisi atmosfer</option>
-            <option value="ana:icon">ICON + kondisi atmosfer</option>
+            <option value="ana:jma">JMA + kondisi atmosfer</option>
             <option value="ana:aifs">AIFS + kondisi atmosfer</option>
             <option value="ecmwf">ECMWF</option>
             <option value="gfs">GFS</option>
-            <option value="icon">ICON</option>
+            <option value="jma">JMA</option>
             <option value="aifs">AIFS</option>
             <option value="ens">Ensemble ECMWF (rata-rata 51 skenario)</option>
           </select>
@@ -625,7 +626,7 @@
   </div>
 
   <footer>
-    Data model deterministik + ensemble GFS/ICON: Open-Meteo (ECMWF IFS · NOAA GFS · DWD ICON). <b>Ensemble ECMWF IFS ENS (51 member)</b> ditarik terpisah dari ECMWF Open Data (lisensi CC-BY-4.0) lewat <code>pipeline/ingest_ecmwf_ens.py</code> dan dibaca dari <code>ecmwf_ens.js</code> di folder yang sama — bukan produk resmi BMKG. Curah hujan = akumulasi 3 jam ke depan dari waktu terpilih; suhu/kelembapan/angin bersifat sesaat. Log verifikasi memakai penyimpanan yang sama dengan versi sebelumnya.
+    Data model deterministik + ensemble GFS/ICON: Open-Meteo (ECMWF IFS · NOAA GFS · JMA GSM · ECMWF AIFS; ensemble DWD ICON-EPS). <b>Ensemble ECMWF IFS ENS (51 member)</b> ditarik terpisah dari ECMWF Open Data (lisensi CC-BY-4.0) lewat <code>pipeline/ingest_ecmwf_ens.py</code> dan dibaca dari <code>ecmwf_ens.js</code> di folder yang sama — bukan produk resmi BMKG. Curah hujan = akumulasi 3 jam ke depan dari waktu terpilih; suhu/kelembapan/angin bersifat sesaat. Log verifikasi memakai penyimpanan yang sama dengan versi sebelumnya.
   </footer>
 </div>
 
@@ -762,7 +763,7 @@ const GRID_LABELS = (function(){
 const MODELS = [
   { key:'ecmwf', param:'ecmwf_ifs025', label:'ECMWF', cls:'ecmwf' },
   { key:'gfs',   param:'gfs_seamless', label:'GFS',   cls:'gfs' },
-  { key:'icon',  param:'icon_seamless',label:'ICON',  cls:'icon' },
+  { key:'jma',   param:'jma_gsm',      label:'JMA',   cls:'jma' },     // JMA menggantikan ICON di kesepakatan 4 model (uji 13 Okt–26 Nov 2026, 11 titik, 297 kejadian: CSI kesepakatan naik di semua lead, 0,315->0,320 / 0,347->0,360 / 0,314->0,319 / 0,296->0,327). Ensemble ICON-EPS tetap dipakai.
   { key:'aifs',  param:'ecmwf_aifs025_single', label:'AIFS', cls:'aifs' }
 ];
 // True ensemble (many perturbed members per model), fetched separately/on-demand — heavier than the
@@ -1553,7 +1554,7 @@ function ensSlot(stationId, dateStr, slotHour){
   return ecmwfEnsAt(stationId, `${dateStr}T${String(slotHour).padStart(2,'0')}:00`);
 }
 // kunci model di data ensemble (ens_multi.js) untuk tiap model deterministik
-const ENS_KEY_OF = { ecmwf:'ecmwf', aifs:'aifs', gfs:'gefs', icon:'icon' };
+const ENS_KEY_OF = { ecmwf:'ecmwf', aifs:'aifs', gfs:'gefs' };     // JMA tidak punya ensemble di Open-Meteo
 // Satu model + kondisi atmosfer: syarat kategori hujan dari model itu sendiri diperketat/dilonggarkan sesuai penilaian atmosfer,
 // dengan peluang ensemble model yang sama (bila ada) sebagai penentu tambahan.
 function modelCatWithEnv(pi, hidx, dateStr, slotHour, mk, base, mode){
@@ -1702,7 +1703,8 @@ function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
   // 297 kejadian; pipeline/verify_atmos.py): CSI 0,322 -> 0,330 dan bias 1,65 -> 1,14 (aturan lama terlalu sering memprakirakan hujan).
   let wetOk = mode==='wet' ? (mm!=null && mm>=1.0) : (wet>=needWet || strong), mmCat = mm;
   // penghalusan waktu (bobot.js; sakelar di tab Verifikasi): keputusan hujan dari rata² 4 model yang dihaluskan antar slot
-  if(window.MODEL_W && MODEL_W.smoothEnabled()){
+  // HANYA hari ini (H+0): uji 13 Okt–26 Nov (11 titik) — H+0 halus 0,342 vs suara 0,320; H+1..3 suara lebih baik (0,362/0,321/0,329 vs 0,317/0,315/0,311)
+  if(window.MODEL_W && MODEL_W.smoothEnabled() && MODEL_W.leadFor(dateStr)===0){
     const sm = smoothSlotMm(pi, hidx, dateStr, slotHour, mm);
     wetOk = sm!=null && (sm >= MODEL_W.smoothThr[mode||'neutral'] || strong);
     if(sm!=null) mmCat = Math.max(mm||0, sm);
@@ -1756,7 +1758,7 @@ function loadJust(){ try{ return JSON.parse(localStorage.getItem(JUST_KEY)||'{}'
 function saveJust(){ try{ localStorage.setItem(JUST_KEY, JSON.stringify(JUST)); }catch(e){} }
 function justKey(date, pi, sh){ return `${date}|${pi}|${sh}`; }
 let JUST = loadJust();
-const JUST_DASAR = ['Kesepakatan model','ECMWF','GFS','ICON','Ensemble ECMWF','Nowcasting / radar','Observasi terkini','Klimatologi','Lainnya'];
+const JUST_DASAR = ['Kesepakatan model','ECMWF','GFS','JMA','AIFS','Ensemble ECMWF','Nowcasting / radar','Observasi terkini','Klimatologi','Lainnya'];
 
 function openJustModal(pi, sh){
   const daySel = document.getElementById('produkDay');
@@ -1770,7 +1772,7 @@ function openJustModal(pi, sh){
   const fmtmm = v => v==null ? '—' : v.toFixed(1)+' mm';
 
   // baris perbandingan model deterministik
-  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['icon','ICON'],['aifs','AIFS'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
+  const detRows = [['ecmwf','ECMWF'],['gfs','GFS'],['jma','JMA'],['aifs','AIFS'],['avg','Kesepakatan (rata²)']].map(([k,lab])=>{
     const a = slotAgg(pi, hidx, date, sh, k);
     return `<tr><td>${lab}</td><td>${a?fmtmm(a.precip3):'—'}</td><td>${a?(a.wcat||WX_CATS.berawan).txt:'—'}</td></tr>`;
   }).join('');
@@ -1990,7 +1992,7 @@ function renderProdukTable(){
     + (src && src.startsWith('ana:') ? `<br><b>${srcName}</b> = hasil <b>${srcName.split(' +')[0]} saja</b> yang disesuaikan dengan kondisi atmosfer hari itu: bila atmosfer menghambat hujan, kategori hujan model ini hanya dipakai bila hujannya ≥2 mm/3 jam dan peluang ensemble model yang sama ≥35% (atau ≥5 mm); bila mendukung, hujan ≥1 mm/3 jam dengan peluang ≥15% dinaikkan kategorinya. <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding model itu sendiri. ` : '')
     + (src==='ana' ? '<br><b>Hasil analisis</b> = kesepakatan 4 model yang <b>disesuaikan dengan kondisi atmosfer</b> hari itu: bila atmosfer menghambat hujan, kategori hujan hanya dipakai bila peluang ensemble ≥35% dan ≥2 model basah (atau rata² ≥5 mm); bila mendukung, syaratnya dilonggarkan (rata² 4 model ≥1 mm/3 jam dan peluang ≥15%). <sup style="color:var(--bad)">▲</sup> = dinaikkan, <sup style="color:var(--good)">▼</sup> = diturunkan dibanding kesepakatan biasa. Tanda <b style="color:var(--warn)">*</b> = model terbelah. ' : '')
     + ((src==='avg') ? '<br><b>Aturan kesepakatan:</b> kategori hujan dipakai bila ≥2 dari 4 model memprakirakan ≥1 mm/3 jam (atau rata² ≥3 mm) dan peluang ensemble gabungan ≥20%; selain itu ditampilkan sebagai kondisi awan (median 4 model). <br>Sel bertanda <b style="color:var(--warn)">*</b> = model terbelah (2–3 dari 4 model ≥1 mm/3 jam, atau 1 model ≥3 mm) — <b>klik sel</b> untuk lihat semua model + ensemble dan catat keputusan. Sel dengan <b>✎</b> = sudah dijustifikasi prakirawan. ' : '')
-    + ((src==='avg' || src==='ana') && window.MODEL_W && MODEL_W.smoothEnabled() ? '<br><b>Penghalusan waktu aktif:</b> keputusan hujan memakai rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25%–50%–25%); hujan bila ≥1 mm/3 jam (atmosfer menghambat: ≥2 mm). Hujan yang hanya muncul sesaat di satu slot model tidak langsung ditulis hujan. Atur di tab Verifikasi. ' : '')
+    + ((src==='avg' || src==='ana') && window.MODEL_W && MODEL_W.smoothEnabled() ? '<br><b>Penghalusan waktu aktif (hari ini saja):</b> untuk hari ini keputusan hujan memakai rata² 4 model yang ikut menimbang slot sebelum &amp; sesudahnya (25%–50%–25%); hujan bila ≥1 mm/3 jam (atmosfer menghambat: ≥2 mm). Hujan yang hanya muncul sesaat di satu slot model tidak langsung ditulis hujan. Besok dan seterusnya memakai aturan ≥2 dari 4 model (lebih tepat untuk prakiraan lebih jauh). Atur di tab Verifikasi. ' : '')
     + ((src==='avg' || src==='ana') && window.MODEL_W ? (()=>{ const I = MODEL_W.info(MODEL_W.leadFor(date)), on = MODEL_W.enabled();
         return '<br><b>Bobot model:</b> ' + (!on ? 'dimatikan (semua model sama).' : I.active
           ? `rata² curah hujan dibobot kinerja ${MODEL_W.winDays} hari terakhir (suara model tetap sama) — ` + MODEL_W.keys.map(k=>`${MODELS.find(m=>m.key===k).label} ×${I.w[k].toFixed(2)}`).join(', ') + '. Atur di tab Verifikasi.'
@@ -2637,7 +2639,7 @@ async function renderHistory(){
   wrap.innerHTML = `<div class="param-panel"><table>
     <thead><tr><th style="text-align:left">Tgl</th><th style="text-align:left">Titik</th>
       <th>Hujan akt.</th><th>Suhu akt.</th><th>RH akt.</th><th style="text-align:left">Angin akt.</th>
-      <th>Δ ECMWF</th><th>Δ GFS</th><th>Δ ICON</th><th></th></tr></thead>
+      ${MODELS.map(m=>`<th>Δ ${m.label}</th>`).join('')}<th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
   wrap.querySelectorAll('.del-btn').forEach(btn=>{
     btn.onclick = async ()=>{
@@ -2719,8 +2721,8 @@ searchInput.addEventListener('input', ()=>{
 });
 document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-box')) searchResults.style.display='none'; });
 
-const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], icon:[0,6,12,18], aifs:[0,6,12,18] };
-const RUN_LAG_HOURS = { ecmwf:8, gfs:5, icon:3, aifs:6 };
+const RUN_SCHEDULE = { ecmwf:[0,12], gfs:[0,6,12,18], jma:[0,6,12,18], aifs:[0,6,12,18] };
+const RUN_LAG_HOURS = { ecmwf:8, gfs:5, jma:5, aifs:6 };
 function estimateLatestRun(modelKey){
   const now = new Date();
   const avail = new Date(now.getTime() - RUN_LAG_HOURS[modelKey]*3600000);

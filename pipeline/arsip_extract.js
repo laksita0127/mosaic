@@ -4,7 +4,7 @@
    Hasil: satu objek per tanggal terbit (hari ini WITA) untuk H+0..H+3:
      env[grup]          = { mode, score, pro, con }        skor kondisi atmosfer per wilayah
      st[id].ana / .avg  = pangkat kategori cuaca per slot (02..23 WITA) untuk "Hasil analisis" & "Kesepakatan"  (>=4 = hujan)
-     st[id].mm          = hujan 3 jam MENTAH tiap model [ECMWF,GFS,ICON,AIFS] per slot
+     st[id].mm          = hujan 3 jam MENTAH tiap model [ECMWF,GFS,JMA,AIFS] (urutan = out.models) per slot
      st[id].p1          = peluang gabungan ensemble >=1 mm MENTAH (sebelum kalibrasi) per slot
    Catatan: buletin BMKG yang ditempel manual tidak ada di server — skor atmosfer di arsip hanya memakai indeks otomatis.
    Uji manual di browser: muat halaman, lalu jalankan isi berkas ini di konsol -> await window.__mosaicArsip()

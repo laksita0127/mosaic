@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-ingest_deterministic.py — model deterministik (ECMWF IFS, GFS, ICON, AIFS) untuk 77 titik, 8 hari, per jam -> det_data.js
+ingest_deterministic.py — model deterministik (ECMWF IFS, GFS, JMA GSM, AIFS) untuk 77 titik, 8 hari, per jam -> det_data.js
 
 Tujuan: halaman TIDAK lagi memanggil Open-Meteo dari browser tiap pengguna (batas laju gratis per IP kantor!).
 Pipeline memanggil Open-Meteo SEKALI per run dari GitHub, halaman cukup membaca berkas statis.
@@ -20,7 +20,8 @@ import urllib.request
 
 import config as C
 
-MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless", "ecmwf_aifs025_single"]
+# JMA menggantikan ICON (2026-11-27): CSI kesepakatan lebih baik di semua lead. JMA tidak punya RH 200 hPa, CAPE, hembusan -> null.
+MODELS = ["ecmwf_ifs025", "gfs_seamless", "jma_gsm", "ecmwf_aifs025_single"]
 VARS = ["temperature_2m", "relative_humidity_2m", "precipitation", "weather_code", "wind_speed_10m", "wind_direction_10m"]
 LEVEL_VARS = ["relative_humidity_850hPa", "relative_humidity_700hPa", "relative_humidity_500hPa", "relative_humidity_200hPa",
               "temperature_200hPa", "wind_speed_850hPa", "wind_direction_850hPa", "wind_speed_200hPa", "wind_direction_200hPa",
