@@ -268,6 +268,7 @@
 
   @media print{
     body{padding:0;background:#fff;}
+    .tsmark{display:none !important;}
     .wrap>*:not(#produkSection){display:none !important;}
     #produkSection{margin:0;}
     #produkSection .sec-title,.produk-controls,.produk-legend{display:none !important;}
@@ -1606,10 +1607,9 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
     const p1 = pp.poe['1'];
     // hujan bila >= PENS_THR skenario memprakirakan >=1 mm/3 jam; intensitas dari skenario tengah (median)
     let wcat = p1 >= thr ? wxFromPrecip3(Math.max(pp.p50 || 0, 0.5)) : cloudCatOf(pi, hidx, dateStr, slotHour);
-    if(wcat.rank>=4 && env.mode!=='dry' && thunderVotes(pi, hidx, dateStr, slotHour)>=1) wcat = withThunder(wcat);
     // tanda ▲/▼ = hasil berubah karena kondisi atmosfer dibanding ambang biasa 50%
     const shift = src==='pensana' && (p1>=thr) !== (p1>=PENS_THR) ? (p1>=thr ? 'up' : 'down') : null;
-    return Object.assign({}, base, { wcat, shift, env, pens:p1, pensW:pp.poe1w, pens10:pp.poe['10'], pensThr:thr });
+    return Object.assign({}, base, { wcat, shift, env, pens:p1, pensW:pp.poe1w, pens10:pp.poe['10'], pensThr:thr, tsPot: tsPotential(pi, hidx, dateStr, slotHour, wcat, env.mode) });
   }
   if(src==='ana'){                                    // kesepakatan model + penyesuaian oleh analisis kondisi atmosfer
     const base = slotAgg(pi, hidx, dateStr, slotHour, 'avg'); if(!base) return null;
@@ -1620,6 +1620,7 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
       out.wcat = consensusCat(pi, hidx, dateStr, slotHour, base.precip3, env.mode);
       const dr = out.wcat.rank - base.wcat.rank; if(dr>0) out.shift = 'up'; else if(dr<0) out.shift = 'down';
     }
+    out.tsPot = tsPotential(pi, hidx, dateStr, slotHour, out.wcat, env.mode);
     return out;
   }
   if(src==='ens'){
@@ -1641,7 +1642,7 @@ function slotAgg(pi, hidx, dateStr, slotHour, src){
   }
   if(pn===0 && temp==null) return null;
   const mm = pn?precip3:null;
-  if(src==='avg') return { precip3:mm, wcat: consensusCat(pi, hidx, dateStr, slotHour, mm), temp, speed, dir };
+  if(src==='avg'){ const wcat = consensusCat(pi, hidx, dateStr, slotHour, mm); return { precip3:mm, wcat, temp, speed, dir, tsPot: tsPotential(pi, hidx, dateStr, slotHour, wcat, 'neutral') }; }
   return { precip3:mm, wcat: wxCombine(wxFromCode(wcode), wxFromPrecip3(mm), mm), temp, speed, dir };
 }
 // Suara per model untuk satu slot 3-jam: jumlah hujan 3 jam + pangkat kategori kode cuaca tertinggi (hujan & awan dipisah)
@@ -1671,11 +1672,15 @@ const PENS_THR = 0.5;
 // "Peluang ensemble + kondisi atmosfer": ambang peluang menurut penilaian atmosfer (SEMENTARA, belum teruji — arsip ensemble baru mulai)
 const PENS_THR_ENV = { dry:0.65, neutral:0.5, wet:0.4 };
 // POTENSI PETIR (pengganti kode petir ICON): semua model yang punya CAPE (ECMWF & GFS) menunjukkan CAPE >=1000 J/kg dalam slot ini
-// DAN minimal satu di antaranya memprakirakan hujan >=3 mm/3 jam. Diuji terhadap laporan petir SYNOP Bima (WMO 97270, ww 17/29/91–99)
-// 31 Jul–26 Nov 2026, lead 0, titik bandara (pipeline/verify_petir.py): 5 dari 7 hari petir tertangkap, 6 hari alarm palsu, CSI harian
-// 0,38 (ambang 1500 sebelumnya: 0 dari 7). Sampel masih kecil (9 slot / 7 hari petir) — uji ulang tiap bulan dengan arsip SYNOP.
-const TS_MM = 3, TS_CAPE = 1000;
+// DAN minimal satu di antaranya memprakirakan hujan >=2 mm/3 jam, hanya slot siang–sore. Diuji terhadap laporan petir SYNOP
+// (ww 17/29/91–99) Bima + Denpasar, Sumbawa Besar, Maumere, Waingapu, Kupang, 31 Jul–26 Nov 2026, lead 0 (pipeline/verify_petir.py):
+// 57 hari petir; aturan ini menangkap 68% hari petir, 46% tanda petir alarm palsu, CSI harian 0,43 (hujan >=3 mm: 0,32; CAPE 1500: 0,07).
+// Bima + Sumbawa Besar saja: 75% tertangkap, CSI 0,41. Lifted Index tidak menambah. Uji ulang berkala (arsip SYNOP bertambah tiap hari).
+const TS_MM = 2, TS_CAPE = 1000;
+// Jam petir: SYNOP Bima Agu–Nov 2026 -> petir hanya 13–18 WITA, CB 12–19 WITA -> tanda petir hanya slot 11.00, 14.00, 17.00 WITA
+const TS_SLOTS = [11, 14, 17];
 function thunderVotes(pi, hidx, dateStr, slotHour){
+  if(!TS_SLOTS.includes(slotHour)) return 0;
   let capeMin = null, heavy = false;
   MODELS.forEach(m=>{
     let s = 0, capeMax = null;
@@ -1692,6 +1697,12 @@ function thunderVotes(pi, hidx, dateStr, slotHour){
   });
   return (capeMin!=null && capeMin>=TS_CAPE && heavy) ? 1 : 0;
 }
+// POTENSI PETIR ditampilkan sebagai PENANDA ⚡ (kategori tetap hujan): kotak hujan (bukan sudah petir), atmosfer tidak menghambat, aturan CAPE terpenuhi.
+// Tidak dijadikan kategori karena ±separuh tanda tidak disertai petir & jamnya sulit ditebak — keputusan 'Hujan Petir' di tangan prakirawan (justifikasi ✎).
+function tsPotential(pi, hidx, dateStr, slotHour, wcat, mode){
+  return !!(wcat && wcat.rank>=4 && wcat.rank<7 && mode!=='dry' && thunderVotes(pi, hidx, dateStr, slotHour)>=1);
+}
+const TS_TIP = "Potensi petir (siang–sore): CAPE ECMWF & GFS ≥1000 J/kg dan hujan model ≥2 mm/3 jam. Bukan kepastian — dari uji SYNOP, sekitar separuh tanda ⚡ tidak disertai petir. Klik kotak untuk menetapkan 'Hujan Petir' bila yakin (radar/satelit/pengalaman).";
 // kategori hujan + petir: hujan lebat -> Hujan Lebat+Petir, selainnya -> Hujan Petir
 const withThunder = cat => cat.rank>=6 ? WX_CATS.hujanlebatpetir : WX_CATS.hujanpetir;
 // kategori awan (tanpa hujan) = median pangkat awan antar model — sama dengan bagian akhir consensusCat
@@ -1748,7 +1759,6 @@ function consensusCat(pi, hidx, dateStr, slotHour, mm, mode){
     let cat = wxFromPrecip3(mmCat);
     if(cat){
       if(ts>=(mode==='wet'?1:2) && mmCat>=(mode==='wet'?3:5)) cat = WX_CATS.hujanlebatpetir;
-      else if(mode!=='dry' && thunderVotes(pi, hidx, dateStr, slotHour)>=1) cat = withThunder(cat);   // potensi petir dari CAPE + hujan deras
       return cat;
     }
   }
@@ -1956,7 +1966,7 @@ function renderProdukTable(){
     <tr>${PRODUK_SLOTS.map(h=>`<th>${String(h).padStart(2,'0')}.00</th>`).join('')}
         <th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Arah</th><th>km/j</th></tr></thead>`;
 
-  let body = '';
+  let body = '', nTs = 0;
   groups.forEach(g=>{
     if(!byGrp[g].length) return;
     body += `<tr class="grp"><td colspan="15">► ${g}</td></tr>`;
@@ -1984,12 +1994,14 @@ function renderProdukTable(){
           w = Object.values(WX_CATS).find(c=>c.txt===jr.kategori) || w;
           cls += ' just-set'; badge = ' <span style="opacity:.7">✎</span>';
         }
-        const clickable = dis || jr;
+        const tsMark = (a.tsPot && !jr) ? `<span class="tsmark" title="${TS_TIP}" style="margin-left:3px;cursor:help">⚡</span>` : '';
+        if(a.tsPot && !jr) nTs++;
+        const clickable = dis || jr || (a.tsPot && !jr);
         if(clickable) cls += ' justcell';
         const tip = jr
           ? `Justifikasi prakirawan (${jr.dasar||'-'}): ${jr.kategori}${jr.catatan?' — '+jr.catatan:''}`
-          : (a.pens!=null ? `Peluang hujan ≥1 mm: ${Math.round(a.pens*100)}%` + (a.pensW!=null ? ` · dalam ±3 jam: ${Math.round(a.pensW*100)}%` : '') + (a.pens10!=null ? ` · ≥10 mm: ${Math.round(a.pens10*100)}%` : '') + '. ' : '') + (dis?'Model terbelah — klik untuk justifikasi. ':'') + (a.shift ? (a.shift==='up' ? 'Dinaikkan oleh analisis atmosfer (mendukung hujan). ' : 'Diturunkan oleh analisis atmosfer (menghambat hujan). ') : '') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
-        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}">${startMark}<span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${a.shift==='up'?' <sup style="color:var(--bad)">▲</sup>':(a.shift==='down'?' <sup style="color:var(--good)">▼</sup>':'')}${badge}${pctHtml}</td>`;
+          : (a.tsPot ? '⚡ ' + TS_TIP + ' ' : '') + (a.pens!=null ? `Peluang hujan ≥1 mm: ${Math.round(a.pens*100)}%` + (a.pensW!=null ? ` · dalam ±3 jam: ${Math.round(a.pensW*100)}%` : '') + (a.pens10!=null ? ` · ≥10 mm: ${Math.round(a.pens10*100)}%` : '') + '. ' : '') + (dis?'Model terbelah — klik untuk justifikasi. ':'') + (a.shift ? (a.shift==='up' ? 'Dinaikkan oleh analisis atmosfer (mendukung hujan). ' : 'Diturunkan oleh analisis atmosfer (menghambat hujan). ') : '') + (a.precip3!=null?`hujan 3j ≈ ${a.precip3.toFixed(1)} mm`:'');
+        return `<td class="${cls.trim()}"${clickable?` data-pi="${pi}" data-sh="${sh}"`:''} title="${tip.replace(/"/g,'&quot;')}">${startMark}<span class="wx ${w.cls}"><span class="dot" style="background:currentColor"></span>${w.txt}</span>${tsMark}${a.shift==='up'?' <sup style="color:var(--bad)">▲</sup>':(a.shift==='down'?' <sup style="color:var(--good)">▼</sup>':'')}${badge}${pctHtml}</td>`;
       }).join('');
       body += `<tr><td class="kec">${shortKec(STATION_POINTS[pi].name)}</td>${cells}` +
         `<td class="num">${ext.tmin??'—'}</td><td class="num">${ext.tmax??'—'}</td>` +
@@ -2025,10 +2037,19 @@ function renderProdukTable(){
         + `<span style="color:var(--text-dim)">Bukan berarti ${T}% wilayah kecamatan basah atau hujan selama ${T}% waktu — hanya <b>seberapa yakin</b> hujan terjadi. `
         + `Kecamatan yang berdekatan bisa bernilai sama karena kotak hitung ensemble ±25 km. Ambang ${T}% masih sementara sampai arsip prakiraan cukup untuk diuji.</span>`
         + (src==='pensana' ? `<div style="margin-top:6px"><b>+ kondisi atmosfer:</b> ambang hujan mengikuti penilaian atmosfer wilayah — <b>menghambat ≥${Math.round(PENS_THR_ENV.dry*100)}%</b>, netral ≥${Math.round(PENS_THR_ENV.neutral*100)}%, <b>mendukung ≥${Math.round(PENS_THR_ENV.wet*100)}%</b>. <sup style="color:var(--bad)">▲</sup>/<sup style="color:var(--good)">▼</sup> = kotak berubah karena kondisi atmosfer.</div>` : '')
-        + `<div style="margin-top:6px"><b>Hujan Petir</b> = kotak hujan saat <b>CAPE ECMWF dan GFS sama-sama ≥${TS_CAPE} J/kg</b> (energi untuk awan badai) dan salah satunya memprakirakan <b>hujan deras ≥${TS_MM} mm/3 jam</b>, dan atmosfer tidak menghambat. Hujan lebat + syarat itu = Hujan Lebat+Petir. Uji dengan laporan petir SYNOP Bima (Jul–Nov 2026): 5 dari 7 hari petir tertangkap, tetapi juga 6 hari alarm palsu — sampel masih kecil.</div></div>`;
+        + `</div>`;
     }
   }
 
+  if(envEl && nTs){
+    envEl.innerHTML += `<div style="margin-top:8px;padding:8px 12px;border-left:4px solid #d4a017;background:var(--panel-alt);border-radius:4px;line-height:1.6;color:var(--text)">`
+      + `<b>⚡ = potensi petir</b> (${nTs} kotak hari ini). Kategori di kotak tetap kategori hujannya; ⚡ hanya penanda bahwa <b>atmosfer cukup labil untuk badai guntur</b> pada jam itu: `
+      + `CAPE (energi awan badai) ECMWF dan GFS sama-sama ≥${TS_CAPE} J/kg <b>dan</b> salah satu model memprakirakan hujan ≥${TS_MM} mm/3 jam, hanya pukul 11.00–20.00 WITA (petir di Bima teramati 13.00–18.00), dan atmosfer tidak menghambat.<br>`
+      + `<b>Seberapa bisa dipercaya?</b> Diuji dengan laporan petir SYNOP 6 stasiun (Bima, Sumbawa Besar, Denpasar, Maumere, Waingapu, Kupang; Jul–Nov 2026, 57 hari petir): `
+      + `<b>±7 dari 10 hari petir tertangkap</b>, tetapi <b>±separuh tanda ⚡ ternyata tanpa petir</b>, dan jam tepatnya sulit ditebak. Jadi ⚡ = "waspadai petir siang–sore", bukan kepastian.<br>`
+      + `<b>Menetapkan Hujan Petir:</b> bila yakin (radar, satelit, CB teramati, pengalaman), klik kotaknya dan pilih kategori <b>Hujan Petir</b> — tersimpan sebagai justifikasi ✎. `
+      + `<span style="color:var(--text-dim)">Salin TSV & Cetak tidak memuat ⚡ (hanya kategori resmi).</span></div>`;
+  }
   const srcName = srcSel.selectedOptions[0].textContent;
   document.getElementById('produkLegend').innerHTML =
     `<b>Sumber:</b> ${srcName}. &nbsp; <b>Suhu / RH Min–Max</b> = rentang sepanjang hari itu. &nbsp; <b>Angin km/j</b> = kecepatan maksimum harian (km/jam); <b>VRB</b> = arah berubah-ubah. `
@@ -2042,6 +2063,7 @@ function renderProdukTable(){
           : `bobot sama (${I.reason}).`) + ' '; })() : '')
     + (src==='pens' ? `<br><b>Peluang ensemble</b> = dari ±170 skenario 4 model ensemble (ECMWF, AIFS, GEFS, ICON-EPS; bobot sama per model). Angka di bawah kategori = <b>peluang hujan ≥1 mm dalam slot 3 jam itu</b>; kotak ditulis hujan bila peluang ≥${Math.round(PENS_THR*100)}%, intensitas dari skenario tengah. <b>▸</b> = slot pertama hujan (perkiraan <b>mulai hujan</b>). "(±3j xx%)" = peluang hujan terjadi di slot itu atau 3 jam sebelum/sesudahnya — model sering meleset beberapa jam. Ambang ${Math.round(PENS_THR*100)}% bersifat sementara sampai arsip ensemble cukup untuk diuji. Hari tanpa data ensemble memakai Hasil analisis. Salin TSV tetap tanpa persen (format produk). ` : '')
     + (src==='ens' ? '<br>ECMWF ENS: RH tidak tersedia; kalau data ENS terakhir belum sinkron gridnya, jam bisa geser ±1. ' : '')
+    + `<br><b>⚡</b> = potensi petir siang–sore (CAPE ECMWF & GFS ≥${TS_CAPE} J/kg + hujan model ≥${TS_MM} mm/3 jam; ±separuh tanda tanpa petir) — penanda, bukan kategori; tidak ikut Salin TSV/Cetak.`
     + `<br><b>Legenda cuaca:</b> ${WX_LEGEND}. Dari curah hujan 3-jam + kode cuaca model. <b>Bukan produk resmi BMKG</b> — alat bantu keputusan.`;
 
   document.getElementById('produkPrintHead').innerHTML =
@@ -2050,7 +2072,7 @@ function renderProdukTable(){
 }
 function produkTSV(){
   return [...document.querySelectorAll('#produkTable tr')].map(tr =>
-    [...tr.children].map(td => { const c = td.cloneNode(true); c.querySelectorAll('.pct').forEach(e=>e.remove()); return c.textContent.replace(/[▸]/g,'').replace(/\s+/g,' ').trim(); }).join('\t')
+    [...tr.children].map(td => { const c = td.cloneNode(true); c.querySelectorAll('.pct,.tsmark').forEach(e=>e.remove()); return c.textContent.replace(/[▸]/g,'').replace(/\s+/g,' ').trim(); }).join('\t')
   ).join('\n');
 }
 function flashBtn(id,msg){ const b=document.getElementById(id); if(!b) return; const o=b.dataset.o||b.textContent; b.dataset.o=o; b.textContent=msg; setTimeout(()=>{ b.textContent=o; },1500); }

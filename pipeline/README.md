@@ -252,6 +252,9 @@ yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & n
 - `ingest_synop.py` (langkah di workflow *Update verifikasi*, 1x/hari): SYNOP per jam dari Ogimet (publik, tanpa akun) -> `synop_97270.json`
   (arsip 400 hari) + `synop.js` (15 hari, `window.SYNOP_WADB`). Diurai: angin, jarak pandang, T/Td, ww/W, hujan 6RRRtR, CB, Tx/Tn.
   METAR WADB tidak tersedia publik (web-aviation/INASIAM/BMKG Satu dilindungi Cloudflare, AWC/Ogimet tidak punya WADB) -> SYNOP penggantinya.
-- `verify_petir.py`: aturan "Hujan Petir" vs laporan petir SYNOP (ww 17/29/91–99). Jul–Nov 2026: CAPE (ECMWF & GFS) >=1000 + hujan >=3 mm/3 jam
-  menangkap 5/7 hari petir (CSI harian 0,38); ambang 1500 menangkap 0/7 -> aplikasi memakai 1000. Sampel kecil, uji ulang berkala.
+- Stasiun tetangga beriklim serupa (Denpasar 97230, Sumbawa Besar 97260, Maumere 97300, Waingapu 97340, Kupang 97372) ikut diarsipkan
+  HANYA untuk memperbanyak sampel uji (Mataram 97240 & Ruteng 97284 tidak ada di Ogimet).
+- `verify_petir.py`: aturan "Hujan Petir" vs laporan petir SYNOP (ww 17/29/91–99) 6 stasiun. Jul–Nov 2026, 57 hari petir:
+  CAPE (ECMWF & GFS) >=1000 + hujan >=2 mm/3 jam, slot 11–17 WITA -> 68% hari petir tertangkap, CSI harian 0,43 (>=3 mm: 0,32; CAPE 1500: 0,07).
+  Petir di Bima teramati 13–18 WITA -> tanda petir hanya slot 11.00/14.00/17.00. Lifted Index tidak menambah. Uji ulang berkala.
 

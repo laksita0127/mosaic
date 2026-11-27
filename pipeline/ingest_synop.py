@@ -5,7 +5,8 @@ ingest_synop.py — arsip SYNOP Stasiun Meteorologi Sultan Muhammad Salahuddin B
 SYNOP dikirim BMKG ke jaringan WMO (GTS) sehingga tersedia publik di Ogimet (tanpa akun). Dipakai untuk:
   - verifikasi hujan dengan penakar asli (kelompok 6RRRtR: 6/12/24 jam) dan uji aturan "Hujan Petir" (ww 17, 29, 91–99; awan CB)
   - pengamatan terkini otomatis untuk tab TAF (angin, jarak pandang, cuaca, awan) — pengganti tempel METAR manual
-Penyimpanan inkremental: synop_97270.json (dipulihkan dari cabang `site`). Keluaran halaman: synop.js (window.SYNOP_WADB, 15 hari terakhir).
+Penyimpanan inkremental: synop_<wmo>.json per stasiun (dipulihkan dari cabang `site`). Keluaran halaman: synop.js (Bima, 15 hari terakhir).
+Stasiun tetangga (Denpasar, Sumbawa Besar, Maumere, Waingapu, Kupang) hanya untuk memperbanyak sampel uji aturan.
 
     python pipeline/ingest_synop.py              # ambil yang belum ada (pertama kali: 120 hari)
     SYNOP_DAYS=30 python pipeline/ingest_synop.py
@@ -20,12 +21,17 @@ import urllib.request
 
 import config as C
 
-STATION = "97270"
+STATION = "97270"                                   # Bima — keluaran halaman (synop.js)
+# Stasiun tetangga beriklim serupa (NTB/NTT): HANYA untuk memperbanyak sampel uji aturan petir/hujan (verify_petir.py).
+# (Mataram 97240 & Ruteng 97284 tidak ada di Ogimet; Ruteng juga dataran tinggi 1.170 m — iklim berbeda)
+NEIGHBORS = {"97230": ("Denpasar", -8.749, 115.167), "97260": ("Sumbawa Besar", -8.489, 117.412),
+             "97300": ("Maumere", -8.641, 122.237), "97340": ("Waingapu", -9.669, 120.302), "97372": ("Kupang", -10.172, 123.671)}
+ALL = {STATION: ("Bima", -8.540, 118.687), **NEIGHBORS}
 URL = "https://www.ogimet.com/cgi-bin/getsynop?block={st}&begin={b}&end={e}"
 UA = {"User-Agent": "mosaic-bima-dompu/1.0 (verifikasi prakiraan Stamet Bima; github.com/laksita0127/mosaic)"}
 DAYS = int(os.environ.get("SYNOP_DAYS", "120"))
 KEEP_DAYS = 400
-STORE = os.path.join(C.PROJECT_DIR, "synop_97270.json")
+STORE_FMT = os.path.join(C.PROJECT_DIR, "synop_{st}.json")
 OUT = os.path.join(C.PROJECT_DIR, "synop.js")
 TS_WW = {17, 29} | set(range(91, 100))          # badai guntur / petir (pada jam pengamatan atau jam sebelumnya)
 
@@ -70,10 +76,10 @@ def rrr(g):
     return (mm, hrs)
 
 
-def parse(msg):
+def parse(msg, station=STATION):
     """satu pesan AAXX -> dict (None bila tak terbaca)"""
     g = msg.replace("=", " ").split()
-    if len(g) < 5 or g[0] != "AAXX" or g[2] != STATION: return None
+    if len(g) < 5 or g[0] != "AAXX" or g[2] != station: return None
     iw = g[1][4]
     i3 = g[3]; iR, ix, vv = i3[0], i3[1], i3[3:]
     nd = g[4]
@@ -113,26 +119,25 @@ def parse(msg):
     return rec
 
 
-def main():
+def update_station(st, now):
+    path = STORE_FMT.format(st=st)
     try:
-        store = json.load(open(STORE, encoding="utf-8"))
+        store = json.load(open(path, encoding="utf-8"))
     except Exception:
-        store = {"station": STATION, "hours": {}}
+        store = {"station": st, "name": ALL[st][0], "lat": ALL[st][1], "lon": ALL[st][2], "hours": {}}
     hrs = store["hours"]
-    now = dt.datetime.utcnow().replace(minute=0, second=0, microsecond=0)
     start = now - dt.timedelta(days=DAYS)
     if hrs:
         start = max(start, dt.datetime.strptime(max(hrs), "%Y-%m-%dT%H:%MZ") - dt.timedelta(days=2))
-    log(f"ambil SYNOP {STATION} {start:%Y-%m-%d %H} .. {now:%Y-%m-%d %H} UTC (tersimpan {len(hrs)} jam)")
     b = start; new = 0
     while b < now:
         e = min(b + dt.timedelta(days=30), now)
-        txt = http(URL.format(st=STATION, b=b.strftime("%Y%m%d%H%M"), e=e.strftime("%Y%m%d%H%M")))
+        txt = http(URL.format(st=st, b=b.strftime("%Y%m%d%H%M"), e=e.strftime("%Y%m%d%H%M")))
         for line in txt.splitlines():
             f = line.strip().split(",", 6)
-            if len(f) < 7 or f[0] != STATION: continue
+            if len(f) < 7 or f[0] != st: continue
             key = f"{f[1]}-{f[2]}-{f[3]}T{f[4]}:{f[5]}Z"
-            r = parse(f[6])
+            r = parse(f[6], st)
             if r is None: continue
             r["raw"] = f[6].strip()
             if key not in hrs: new += 1
@@ -141,17 +146,31 @@ def main():
         time.sleep(10)
     cut = (now - dt.timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%dT%H:%MZ")
     store["hours"] = {k: v for k, v in sorted(hrs.items()) if k >= cut}
-    json.dump(store, open(STORE, "w", encoding="utf-8"), separators=(",", ":"))
+    json.dump(store, open(path, "w", encoding="utf-8"), separators=(",", ":"))
+    nts = sum(1 for v in store["hours"].values() if v.get("ts"))
+    log(f"{st} {ALL[st][0]}: {new} jam baru; tersimpan {len(store['hours'])} jam ({nts} jam petir)")
+    return store
+
+
+def main():
+    now = dt.datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    bima = None
+    for st in ALL:
+        try:
+            s_ = update_station(st, now)
+            if st == STATION: bima = s_
+        except Exception as e:  # noqa — stasiun tetangga gagal tidak menggagalkan Bima
+            log(f"!! {st} gagal: {str(e)[:120]}")
+            if st == STATION: return 1
     recent_cut = (now - dt.timedelta(days=15)).strftime("%Y-%m-%dT%H:%MZ")
-    recent = {k: {kk: vv for kk, vv in v.items() if kk != "manned_ww"} for k, v in store["hours"].items() if k >= recent_cut}
+    recent = {k: {kk: vv for kk, vv in v.items() if kk != "manned_ww"} for k, v in bima["hours"].items() if k >= recent_cut}
     payload = {"generated": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ"), "station": STATION, "name": "Bima (WADB)",
                "src": "SYNOP WMO 97270 via Ogimet", "hours": recent}
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("// dibuat otomatis oleh pipeline/ingest_synop.py - JANGAN diedit tangan" + chr(10))
         f.write("window.SYNOP_WADB = " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";" + chr(10))
-    nts = sum(1 for v in store["hours"].values() if v.get("ts"))
-    log(f"{new} jam baru; tersimpan {len(store['hours'])} jam ({nts} jam dengan laporan petir); tulis {OUT} ({len(recent)} jam)")
-    return 0 if store["hours"] else 1
+    log(f"tulis {OUT} ({len(recent)} jam)")
+    return 0
 
 
 if __name__ == "__main__":

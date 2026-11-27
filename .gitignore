@@ -20,5 +20,5 @@ verif_fc.json
 ens_archive.json
 analisis_archive.json
 node_modules/
-synop_97270.json
+synop_9*.json
 synop.js
