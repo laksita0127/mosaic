@@ -28,7 +28,10 @@ jobs:
       - name: Pulihkan toko pengamatan dari cabang site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh --restore verif_obs.json verif_fc.json ens_archive.json analisis_archive.json
+        run: bash pipeline/publish_site.sh --restore verif_obs.json verif_fc.json ens_archive.json analisis_archive.json synop_97270.json
+      - name: SYNOP Bima (WMO 97270) dari Ogimet
+        continue-on-error: true          # Ogimet gangguan -> verifikasi CMORPH tetap jalan
+        run: python pipeline/ingest_synop.py
       - name: Run
         env:
           OPENMETEO_API_KEY: ${{ secrets.OPENMETEO_API_KEY }}
@@ -42,4 +45,4 @@ jobs:
       - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh "verifikasi" verifikasi.js verif_obs.json verif_fc.json
+        run: bash pipeline/publish_site.sh "verifikasi" verifikasi.js verif_obs.json verif_fc.json $(ls synop.js synop_97270.json 2>/dev/null)

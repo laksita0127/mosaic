@@ -247,3 +247,11 @@ yang bisa diedit. Ambang kering/lembap ada di `TH` di `analisis.js`. Buletin & n
   - koreksi bias per jam (quantile mapping per slot) — **bawaan mati**: tidak memperbaiki hujan ≥1 mm pada uji Okt–Nov 2026.
 - Ambang skor atmosfer: `verify_atmos.py` (kisi ambang & varian aturan). Mode "mendukung" kini = rata² 4 model ≥1 mm/3 jam
   (CSI 0,322 -> 0,330, bias 1,65 -> 1,14 pada musim hujan 13 Okt–26 Nov 2026).
+
+### 13. SYNOP Bima (WMO 97270) & uji petir
+- `ingest_synop.py` (langkah di workflow *Update verifikasi*, 1x/hari): SYNOP per jam dari Ogimet (publik, tanpa akun) -> `synop_97270.json`
+  (arsip 400 hari) + `synop.js` (15 hari, `window.SYNOP_WADB`). Diurai: angin, jarak pandang, T/Td, ww/W, hujan 6RRRtR, CB, Tx/Tn.
+  METAR WADB tidak tersedia publik (web-aviation/INASIAM/BMKG Satu dilindungi Cloudflare, AWC/Ogimet tidak punya WADB) -> SYNOP penggantinya.
+- `verify_petir.py`: aturan "Hujan Petir" vs laporan petir SYNOP (ww 17/29/91–99). Jul–Nov 2026: CAPE (ECMWF & GFS) >=1000 + hujan >=3 mm/3 jam
+  menangkap 5/7 hari petir (CSI harian 0,38); ambang 1500 menangkap 0/7 -> aplikasi memakai 1000. Sampel kecil, uji ulang berkala.
+

@@ -1670,11 +1670,11 @@ const WET_MM = 1.0;
 const PENS_THR = 0.5;
 // "Peluang ensemble + kondisi atmosfer": ambang peluang menurut penilaian atmosfer (SEMENTARA, belum teruji — arsip ensemble baru mulai)
 const PENS_THR_ENV = { dry:0.65, neutral:0.5, wet:0.4 };
-// POTENSI PETIR (pengganti kode petir ICON): semua model yang punya CAPE (ECMWF & GFS) menunjukkan CAPE >=1500 J/kg dalam slot ini
-// DAN minimal satu di antaranya memprakirakan hujan >=3 mm/3 jam. CAPE ECMWF di Bima–Dompu hampir selalu >1500 (median ±2.200),
-// jadi syarat "semua model" membuat CAPE GFS — yang lebih bervariasi — ikut menentukan. Contoh 27–30 Nov 2026: 8–45% kotak hujan
-// bertanda petir (aturan "1 model saja" 17–84%, "keduanya hujan deras" 1–3%). BELUM TERUJI (tidak ada data petir pengamatan otomatis).
-const TS_MM = 3, TS_CAPE = 1500;
+// POTENSI PETIR (pengganti kode petir ICON): semua model yang punya CAPE (ECMWF & GFS) menunjukkan CAPE >=1000 J/kg dalam slot ini
+// DAN minimal satu di antaranya memprakirakan hujan >=3 mm/3 jam. Diuji terhadap laporan petir SYNOP Bima (WMO 97270, ww 17/29/91–99)
+// 31 Jul–26 Nov 2026, lead 0, titik bandara (pipeline/verify_petir.py): 5 dari 7 hari petir tertangkap, 6 hari alarm palsu, CSI harian
+// 0,38 (ambang 1500 sebelumnya: 0 dari 7). Sampel masih kecil (9 slot / 7 hari petir) — uji ulang tiap bulan dengan arsip SYNOP.
+const TS_MM = 3, TS_CAPE = 1000;
 function thunderVotes(pi, hidx, dateStr, slotHour){
   let capeMin = null, heavy = false;
   MODELS.forEach(m=>{
@@ -2025,7 +2025,7 @@ function renderProdukTable(){
         + `<span style="color:var(--text-dim)">Bukan berarti ${T}% wilayah kecamatan basah atau hujan selama ${T}% waktu — hanya <b>seberapa yakin</b> hujan terjadi. `
         + `Kecamatan yang berdekatan bisa bernilai sama karena kotak hitung ensemble ±25 km. Ambang ${T}% masih sementara sampai arsip prakiraan cukup untuk diuji.</span>`
         + (src==='pensana' ? `<div style="margin-top:6px"><b>+ kondisi atmosfer:</b> ambang hujan mengikuti penilaian atmosfer wilayah — <b>menghambat ≥${Math.round(PENS_THR_ENV.dry*100)}%</b>, netral ≥${Math.round(PENS_THR_ENV.neutral*100)}%, <b>mendukung ≥${Math.round(PENS_THR_ENV.wet*100)}%</b>. <sup style="color:var(--bad)">▲</sup>/<sup style="color:var(--good)">▼</sup> = kotak berubah karena kondisi atmosfer.</div>` : '')
-        + `<div style="margin-top:6px"><b>Hujan Petir</b> = kotak hujan saat <b>CAPE ECMWF dan GFS sama-sama ≥${TS_CAPE} J/kg</b> (energi untuk awan badai) dan salah satunya memprakirakan <b>hujan deras ≥${TS_MM} mm/3 jam</b>, dan atmosfer tidak menghambat. Hujan lebat + syarat itu = Hujan Lebat+Petir. Aturan ini belum teruji dengan data petir.</div></div>`;
+        + `<div style="margin-top:6px"><b>Hujan Petir</b> = kotak hujan saat <b>CAPE ECMWF dan GFS sama-sama ≥${TS_CAPE} J/kg</b> (energi untuk awan badai) dan salah satunya memprakirakan <b>hujan deras ≥${TS_MM} mm/3 jam</b>, dan atmosfer tidak menghambat. Hujan lebat + syarat itu = Hujan Lebat+Petir. Uji dengan laporan petir SYNOP Bima (Jul–Nov 2026): 5 dari 7 hari petir tertangkap, tetapi juga 6 hari alarm palsu — sampel masih kecil.</div></div>`;
     }
   }
 
