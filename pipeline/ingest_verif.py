@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -117,18 +118,24 @@ def choose_points(lat, lon):
     return pts
 
 
+# netCDF4/HDF5 dari pip TIDAK aman dipakai beberapa thread sekaligus (di GitHub: "HDF error" lalu Segmentation fault, verifikasi
+# membeku sejak 10 Nov 2026). Unduhan tetap paralel; membuka/membaca berkas dilakukan satu per satu.
+NC_LOCK = threading.Lock()
+
+
 def read_hour(ts, pix):
     import netCDF4
     data = http(f"{BASE}/{FNAME.format(ts=ts)}")
-    ds = netCDF4.Dataset("mem.nc", memory=data)
-    try:
-        a = np.ma.filled(ds["cmorph"][0], np.nan)
-        res = {}
-        for pid, (i, j) in pix.items():
-            v = float(a[i, j]); res[pid] = None if (np.isnan(v) or v < 0 or v > 400) else round(v, 2)
-        return res
-    finally:
-        ds.close()
+    with NC_LOCK:
+        ds = netCDF4.Dataset(f"mem_{ts}.nc", memory=data)
+        try:
+            a = np.ma.filled(ds["cmorph"][0], np.nan)
+            res = {}
+            for pid, (i, j) in pix.items():
+                v = float(a[i, j]); res[pid] = None if (np.isnan(v) or v < 0 or v > 400) else round(v, 2)
+            return res
+        finally:
+            ds.close()
 
 
 def load_json(path, default):
