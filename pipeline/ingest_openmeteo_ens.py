@@ -60,7 +60,7 @@ MODELS = [
     ("ecmwf", "ECMWF IFS ENS", "ECMWF", "ecmwf_ifs025", "ecmwf_ifs025_ensemble", RAIN, False),
     ("aifs", "ECMWF AIFS ENS", "AIFS", "ecmwf_aifs025", "ecmwf_aifs025_ensemble", RAIN, False),
     ("gefs", "NOAA GEFS", "GEFS", "ncep_gefs025", "ncep_gefs025", RAIN, False),
-    ("icon", "DWD ICON-EPS", "ICON", "icon_seamless", "dwd_icon_eps", RAIN, False),
+    ("icon", "DWD ICON-EPS", "ICON-EPS", "icon_seamless", "dwd_icon_eps", RAIN, False),   # ensemble ICON tetap (yang diganti JMA = ICON deterministik)
 ]
 HOURLY = ALL_VARS
 SLOTS = [2, 5, 8, 11, 14, 17, 20, 23]          # sama dengan tabel produk BMKG & HTML
@@ -144,13 +144,40 @@ def http_json(url, tries=6, base=15):
     raise RuntimeError(last)
 
 
+# Jadwal run & jeda ketersediaan (jam) — dipakai bila meta.json Open-Meteo macet (ICON-EPS: meta berhenti 2026-10-06 padahal
+# datanya terus diperbarui). Run diperkirakan = siklus terakhir yang sudah lewat jeda ketersediaannya; ditandai run_est=True.
+RUN_SCHED = {"dwd_icon_eps": ([0, 12], 5), "ncep_gefs025": ([0, 6, 12, 18], 6), "ecmwf_ifs025_ensemble": ([0, 12], 9),
+             "ecmwf_aifs025_ensemble": ([0, 12], 9)}
+
+
+def estimate_run(meta_name):
+    sched = RUN_SCHED.get(meta_name)
+    if not sched: return None
+    hours, lag = sched
+    t = dt.datetime.now(UTC) - dt.timedelta(hours=lag)
+    for back in range(0, 48):
+        c = (t - dt.timedelta(hours=back)).replace(minute=0, second=0, microsecond=0)
+        if c.hour in hours:
+            return c.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return None
+
+
 def get_run(meta_name):
     try:
         m = http_json(META.format(name=meta_name), tries=3, base=5)
-        return {"run": iso(m.get("last_run_initialisation_time")),
-                "avail": iso(m.get("last_run_availability_time"))}
+        out = {"run": iso(m.get("last_run_initialisation_time")), "avail": iso(m.get("last_run_availability_time")), "run_est": False}
     except Exception:  # noqa
-        return {"run": None, "avail": None}
+        out = {"run": None, "avail": None, "run_est": False}
+    try:
+        old = out["run"] is None or (dt.datetime.now(UTC) - dt.datetime.strptime(out["run"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)).total_seconds() > 48 * 3600
+    except Exception:  # noqa
+        old = True
+    if old:
+        est = estimate_run(meta_name)
+        if est:
+            log(f"  meta {meta_name} macet/tak ada ({out['run']}) -> run diperkirakan {est}")
+            out = {"run": est, "avail": None, "run_est": True}
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +432,7 @@ def main():
                 meta_before = meta_after
             models_out[key] = {
                 "label": label, "short": short, "n_members": n_members,
-                "run": meta_before["run"], "avail": meta_before["avail"],
+                "run": meta_before["run"], "avail": meta_before["avail"], "run_est": meta_before.get("run_est", False),
                 "source": "Open-Meteo Ensemble API",
                 "points": {pid: e for pid, (e, _p3) in results.items()},
             }

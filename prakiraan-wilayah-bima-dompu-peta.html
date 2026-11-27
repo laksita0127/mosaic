@@ -844,11 +844,12 @@ function ensTotalMembers(){
   if(ENS_MULTI) ENS_ORDER.forEach(k=>{ const M = ENS_MULTI.models[k]; if(M && !M.stale) n += M.n_members; });
   return n;
 }
-function fmtRunTag(iso){
+// est = true: info run dari Open-Meteo macet, run diperkirakan dari jadwal model (data tetap terbaru)
+function fmtRunTag(iso, est){
   if(!iso) return 'run ?';
   const d = new Date(iso);
   const bln = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  return `${String(d.getUTCDate()).padStart(2,'0')} ${bln[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2,'0')}Z`;
+  return `${est ? '±' : ''}${String(d.getUTCDate()).padStart(2,'0')} ${bln[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2,'0')}Z`;
 }
 // umur data ensemble (jam) berdasarkan waktu file terakhir ditulis pipeline
 function ensAgeHours(){
@@ -1844,7 +1845,7 @@ function openJustModal(pi, sh){
       const em = ENS_ORDER.filter(k=>k!=='ecmwf' && ENS_MULTI.models[k]).map(k=>{
         const x = ensModelAt(k, stationId, slotKey), M = ENS_MULTI.models[k];
         if(!x || x.precip.mean==null) return `<tr><td>${M.short} (${M.n_members})</td><td colspan="2" style="color:var(--text-faint)">tidak tersedia untuk sel ini</td></tr>`;
-        return `<tr><td>${M.short} (${M.n_members})<br><span style="color:var(--text-faint);font-size:10.5px">${fmtRunTag(M.run)}${M.stale?' · lama':''}</span></td>`
+        return `<tr><td>${M.short} (${M.n_members})<br><span style="color:var(--text-faint);font-size:10.5px">${fmtRunTag(M.run, M.run_est)}${M.stale?' · lama':''}</span></td>`
           + `<td>rata² ${fmtmm(x.precip.mean)}<br><span style="color:var(--text-faint)">P10–P90 ${fmtmm(x.precip.p10)}–${fmtmm(x.precip.p90)}</span></td>`
           + `<td>Peluang hujan<br>≥1mm ${pct(x.precip.poe['1'])} · ≥10 ${pct(x.precip.poe['10'])} · ≥20 ${pct(x.precip.poe['20'])}</td></tr>`;
       }).join('');
@@ -2024,7 +2025,7 @@ function renderProdukTable(){
       const T = Math.round(PENS_THR*100);
       envEl.innerHTML = (src==='pensana' ? envEl.innerHTML + '<div style="height:8px"></div>' : '') + `<div style="padding:10px 12px;border-left:4px solid var(--accent);background:var(--panel-alt);border-radius:4px;line-height:1.6;color:var(--text)">`
         + `<b>Arti angka persen (%) di setiap kotak</b><br>`
-        + `Komputer cuaca dunia (ECMWF, AIFS, GEFS, ICON) masing-masing menghitung puluhan kemungkinan cuaca — total ±170 <b>skenario</b>. `
+        + `Komputer cuaca dunia (ensemble ECMWF, AIFS, GEFS, dan ICON-EPS Jerman) masing-masing menghitung puluhan kemungkinan cuaca — total ±170 <b>skenario</b>. <span style="color:var(--text-dim)">(ICON-EPS = ensemble 40 skenario; berbeda dari ICON deterministik yang di kesepakatan 4 model sudah diganti JMA.)</span> `
         + `Persen = <b>berapa bagian dari skenario itu yang menunjukkan hujan (≥1 mm) di kecamatan tersebut pada jam itu</b>. `
         + `Contoh: <b>60%</b> = 6 dari 10 skenario hujan pada jam itu.`
         + `<div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0">`
@@ -2502,7 +2503,7 @@ function renderEnsMulti(){
   const head = keys.map(k=>{
     const M = ENS_MULTI.models[k];
     return `<th><span style="color:${ENS_CLR[k]}">${M.short}</span> (${M.n_members})<br>`
-      + `<span style="font-weight:400;color:var(--text-faint)">${fmtRunTag(M.run)}${M.stale?' · <b style="color:var(--bad)">lama</b>':''}</span></th>`;
+      + `<span style="font-weight:400;color:var(--text-faint)">${fmtRunTag(M.run, M.run_est)}${M.stale?' · <b style="color:var(--bad)">lama</b>':''}</span></th>`;
   }).join('') + (hasPooled ? `<th><span style="color:${ENS_CLR.pooled}">Gabungan</span><br><span style="font-weight:400;color:var(--text-faint)">peluang hujan</span></th>` : '');
 
   const rows = daySteps.map(s=>{
@@ -2535,12 +2536,12 @@ function renderEnsMulti(){
     return `<tr><td>${String(s.hour).padStart(2,'0')}:00</td>${cells}${pooledCell}</tr>`;
   }).join('');
 
-  const runs = keys.map(k=>{ const M=ENS_MULTI.models[k]; return `${M.short} ${fmtRunTag(M.run)}`; }).join(' · ');
+  const runs = keys.map(k=>{ const M=ENS_MULTI.models[k]; return `${M.short} ${fmtRunTag(M.run, M.run_est)}`; }).join(' · ');
   wrap.innerHTML = `
     <div class="param-head">Sebaran skenario antar model — ${def.label} (${unit}) · ${pointDisplayName(point)} · ${fmtDateShort(date)}</div>
     <div style="padding:8px 14px 0;font-size:11px;color:var(--text-faint);line-height:1.5;">
       Batang = kisaran wajar (P10–P90, 8 dari 10 skenario); garis tegak = rata-rata. Skala per baris — batang antar jam tidak dibandingkan lurus.
-      <b>Gabungan</b> = peluang dari 4 model, bobot sama per model (bukan per skenario). Run: ${runs}.
+      <b>Gabungan</b> = peluang dari 4 model, bobot sama per model (bukan per skenario). Run: ${runs}.${keys.some(k=>ENS_MULTI.models[k].run_est) ? ' <b>±</b> = jam run diperkirakan dari jadwal model, karena info run dari penyedia (Open-Meteo) tidak diperbarui — datanya sendiri tetap yang terbaru.' : ''}
       ${isRain ? '' : '<br>Suhu & angin ensemble hanya tersedia untuk ECMWF (dari ECMWF Open Data).'}
     </div>
     <table class="ens-table">
