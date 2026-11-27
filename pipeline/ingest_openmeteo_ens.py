@@ -75,6 +75,35 @@ META = "https://api.open-meteo.com/data/{name}/static/meta.json"
 UA = "mosaic-bima-dompu/1.0 (BMKG Stamet Bima; github.com/laksita0127/mosaic)"
 POE = [1, 5, 10, 20]            # ambang peluang hujan 3-jam (mm) — cukup untuk UI, hemat ukuran file
 OUT_DEFAULT = os.path.join(C.PROJECT_DIR, "ens_multi.js")
+# Arsip peluang hujan gabungan per run (titik bernama, 4 hari pertama) -> dipasangkan dengan hujan CMORPH oleh ingest_verif.py
+# untuk menguji & mengkalibrasi peluang ensemble (Open-Meteo tidak menyimpan arsip ensemble per lead time).
+ARCHIVE = os.path.join(C.PROJECT_DIR, "ens_archive.json")
+ARCHIVE_STEPS = 32               # 32 langkah 3 jam = 4 hari (lead 0..3)
+ARCHIVE_KEEP_DAYS = 75
+
+
+def append_archive(payload, fresh):
+    """Tambahkan peluang gabungan run ini ke ens_archive.json (dipulihkan dari cabang site oleh workflow)."""
+    if len(fresh) < 2 or not payload["steps"]:
+        log("arsip: gabungan bukan dari data baru — tidak diarsipkan")
+        return
+    try:
+        arc = json.load(open(ARCHIVE, encoding="utf-8"))
+    except Exception:
+        arc = {"schema": "mosaic-ens-archive/1", "issues": {}}
+    pts = {}
+    for pid, q in payload["pooled"]["points"].items():
+        if pid not in C.STATION_IDS:
+            continue
+        pr = q["precip3"]
+        pts[pid] = {"p1": pr["poe"]["1"][:ARCHIVE_STEPS], "p5": pr["poe"]["5"][:ARCHIVE_STEPS], "mean": pr["mean"][:ARCHIVE_STEPS]}
+    issue = payload["generated"]
+    arc["issues"][issue] = {"step0": payload["steps"][0], "models": fresh, "pts": pts}
+    cut = (dt.datetime.now(UTC) - dt.timedelta(days=ARCHIVE_KEEP_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    arc["issues"] = {k: v for k, v in sorted(arc["issues"].items()) if k >= cut}
+    with open(ARCHIVE, "w", encoding="utf-8") as f:
+        json.dump(arc, f, separators=(",", ":"))
+    log(f"arsip: {len(arc['issues'])} run tersimpan ({os.path.getsize(ARCHIVE) / 1024:.0f} KB)")
 
 
 def log(msg):
@@ -413,6 +442,8 @@ def main():
         f.write(js)
     log(f"tulis {args.out} ({len(js) / 1024:.0f} KB, {len(models_out)} model, "
         f"{len(steps)} langkah) dalam {time.time() - t_start:.0f} dtk")
+    if not args.limit_points:
+        append_archive(payload, fresh)
     return 0
 
 

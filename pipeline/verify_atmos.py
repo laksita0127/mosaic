@@ -10,7 +10,7 @@ TIDAK direkonstruksi (arsipnya tidak ada): konvergensi/konfluensi, gelombang MJO
 Aturan satu model:  tanpa atmosfer: hujan bila model >= 0,5 mm/3 jam (ambang kategori "Hujan Ringan")
                     atmosfer menghambat : hujan bila >= 2 mm (>=5 mm lolos otomatis) ; netral/mendukung: >= 0,5 mm
 Aturan kesepakatan: tanpa atmosfer: >=2 dari 4 model >= 1 mm ;  menghambat: >=2 model >= 1 mm DAN rata² >= 2 mm
-    python pipeline/verify_atmos.py
+    python pipeline/verify_atmos.py            (+ uji kisi ambang skor: mode menghambat <= T_dry, mendukung >= T_wet)
 """
 import datetime as dt
 import json
@@ -118,7 +118,7 @@ def main():
     cache = {}
     rows = []
     for pid in [p["id"] for p in V["pts"]]:
-        lp = LEVEL_PT[pid]
+        lp = LEVEL_PT.get(pid) or ("dompu" if "Dompu" in next(p["name"] for p in V["pts"] if p["id"] == pid) else "bima")
         for i in range(n):
             o = V["obs"][pid][i]
             if o is None:
@@ -133,7 +133,7 @@ def main():
             e = cache[key]
             if e is None:
                 continue
-            rows.append((o, m, e["mode"], e["score"]))
+            rows.append((o, m, e["mode"], e["score"], i))
     print(f"sampel {len(rows)}; mode atmosfer: " + ", ".join(f"{k}={sum(1 for r in rows if r[2] == k)}" for k in ("dry", "neutral", "wet")))
     for thr in (1, 5):
         print(f"\n=== peristiwa pengamatan >= {thr} mm/3 jam ===")
@@ -149,7 +149,7 @@ def main():
 
     def rule_single(k, with_atm):
         out = []
-        for o, m, mode, _ in rows:
+        for o, m, mode, *_ in rows:
             v = m[k]
             if with_atm and mode == "dry":
                 out.append(v >= 5 or v >= 2)
@@ -159,7 +159,7 @@ def main():
 
     def rule_cons(with_atm):
         out = []
-        for o, m, mode, _ in rows:
+        for o, m, mode, *_ in rows:
             vals = list(m.values()); votes = sum(v >= 1 for v in vals); mean = float(np.mean(vals))
             ok = votes >= 2
             if with_atm and mode == "dry":
@@ -173,6 +173,37 @@ def main():
     for atm in (False, True):
         s = stats([o >= thr for o in obs], rule_cons(atm))
         print(f"{'Kesepakatan' + (' + atmosfer' if atm else ''):22s} {s['csi']:5.2f} {s['pod']:5.2f} {s['far']:5.2f} {s['bias']:5.2f} {s['fa']:11d} {s['mi']:8d}")
+
+    # ---------- skor -> frekuensi hujan teramati (apakah skor bermakna?) ----------
+    print("\n=== skor atmosfer vs hujan teramati (>=1 mm/3 jam) ===")
+    for sc in sorted(set(r[3] for r in rows)):
+        rr = [r for r in rows if r[3] == sc]
+        ev = sum(1 for r in rr if r[0] >= 1)
+        fc2 = sum(1 for r in rr if sum(v >= 1 for v in r[1].values()) >= 2)
+        print(f"skor {sc:+d}: {len(rr):5d} jendela, hujan {ev:4d} ({100 * ev / len(rr):5.1f}%), kesepakatan memprakirakan hujan {fc2:4d}")
+
+    # ---------- kisi ambang: aturan kesepakatan seperti consensusCat (tanpa gerbang peluang ensemble, arsipnya belum ada) ----------
+    def cons_rule(m, mode):
+        vals = list(m.values()); votes = sum(v >= 1 for v in vals); mean = float(np.mean(vals))
+        if mode == "dry":
+            return (votes >= 2 and mean >= 2) or mean >= 5
+        if mode == "wet":
+            return votes >= 1 or mean >= 1.5
+        return votes >= 2 or mean >= 3
+    ob = [r[0] >= 1 for r in rows]
+    base = stats(ob, [cons_rule(r[1], "neutral") for r in rows])
+    print(f"\n=== kisi ambang (kesepakatan; tanpa atmosfer: CSI {base['csi']:.3f}, bias {base['bias']:.2f}) ===")
+    print(f"{'T_dry':>5s} {'T_wet':>5s} {'CSI':>6s} {'POD':>5s} {'FAR':>5s} {'bias':>5s} {'#dry':>5s} {'#wet':>5s}")
+    res = []
+    for td in (-1, -2, -3, -4, -99):
+        for tw in (1, 2, 3, 99):
+            f = [cons_rule(r[1], "dry" if r[3] <= td else ("wet" if r[3] >= tw else "neutral")) for r in rows]
+            st = stats(ob, f)
+            nd = sum(1 for r in rows if r[3] <= td); nw = sum(1 for r in rows if r[3] >= tw)
+            res.append((st["csi"], td, tw))
+            print(f"{td:5d} {tw:5d} {st['csi']:6.3f} {st['pod']:5.2f} {st['far']:5.2f} {st['bias']:5.2f} {nd:5d} {nw:5d}")
+    best = max(res)
+    print(f"\nterbaik: T_dry={best[1]} T_wet={best[2]} CSI {best[0]:.3f} (aplikasi sekarang: T_dry=-3, T_wet=2)")
 
 
 if __name__ == "__main__":

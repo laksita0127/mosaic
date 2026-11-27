@@ -99,10 +99,130 @@ function rolling(i, lead){
   return (rcache[key] = toWeights(sc) || EQUAL());
 }
 
+/* ---------- 2) KALIBRASI PELUANG HUJAN ENSEMBLE (≥1 mm/3 jam) ----------
+   Pasangan (peluang gabungan, hujan CMORPH) dari ens_archive.json -> tabel keandalan per kelas peluang.
+   Frekuensi teramati tiap kelas ditarik ke diagonal (A_SHR sampel semu), dibuat monoton (PAV), lalu dipakai sebagai peta
+   peluang mentah -> peluang terkalibrasi (interpolasi linear). Aktif bila ≥300 pasangan & ≥20 kejadian; selain itu peluang mentah. */
+const PB = [0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.8, 0.9, 1.0001], A_SHR = 10, CAL_MIN_N = 300, CAL_MIN_EV = 20, CAL_DAYS = 45;
+const LSC = 'mosaic.kalibrasiPeluang';
+let onCal = (()=>{ try{ return localStorage.getItem(LSC) !== '0'; }catch(e){ return true; } })();
+function relRange(from, to, lead){
+  const v = V(); if(!v || !v.ens) return null;
+  const nb = PB.length-1, n = Array(nb).fill(0), k = Array(nb).fill(0), sp = Array(nb).fill(0); let N = 0, E = 0;
+  v.pts.forEach(p=>{
+    const e = v.ens[p.id] && v.ens[p.id][String(lead)], o = v.obs[p.id]; if(!e) return;
+    for(let i=Math.max(0,from); i<Math.min(to, v.n); i++){
+      const f = e[i], ob = o[i]; if(f==null || ob==null) continue;
+      let b = 0; while(b < nb-1 && f >= PB[b+1]) b++;
+      n[b]++; sp[b] += f; N++; if(ob >= THR){ k[b]++; E++; }
+    }
+  });
+  return { n, k, sp, N, E };
+}
+function fitCal(r){
+  if(!r || r.N < CAL_MIN_N || r.E < CAL_MIN_EV) return null;
+  const blocks = [];
+  r.n.forEach((n,b)=>{
+    const x = n ? r.sp[b]/n : (PB[b]+Math.min(1,PB[b+1]))/2;
+    blocks.push({ y:(r.k[b] + A_SHR*x)/(n + A_SHR), w:n + A_SHR, xs:[x] });
+    while(blocks.length>1 && blocks[blocks.length-2].y > blocks[blocks.length-1].y){
+      const b2 = blocks.pop(), a = blocks.pop();
+      blocks.push({ y:(a.y*a.w + b2.y*b2.w)/(a.w+b2.w), w:a.w+b2.w, xs:a.xs.concat(b2.xs) });
+    }
+  });
+  const xy = []; blocks.forEach(b=>b.xs.forEach(x=>xy.push([x, b.y])));
+  return [[0, xy[0][1]]].concat(xy, [[1, xy[xy.length-1][1]]]);
+}
+function applyCal(xy, p){
+  if(!xy || p==null) return p;
+  for(let j=1;j<xy.length;j++) if(p <= xy[j][0]){
+    const [x0,y0] = xy[j-1], [x1,y1] = xy[j]; return Math.max(0, Math.min(1, x1>x0 ? y0 + (y1-y0)*(p-x0)/(x1-x0) : y1));
+  }
+  return xy[xy.length-1][1];
+}
+const ccache = {};
+function calInfo(lead){
+  lead = Math.max(0, Math.min(3, lead|0)); if(ccache[lead]) return ccache[lead];
+  const v = V(), res = { lead, active:false, reason:'', N:0, E:0, rel:null, xy:null, days:0 };
+  if(!v || !v.ens){ res.reason = 'arsip peluang ensemble belum ada (mulai terkumpul sejak pipeline ensemble menyimpannya)'; return (ccache[lead] = res); }
+  const last = lastObsIdx(), r = relRange(last + 1 - CAL_DAYS*8, last + 1, lead);
+  res.N = r.N; res.E = r.E; res.rel = r; res.issues = v.ens_issues || 0;
+  if((Date.now() - (startMs() + last*H3))/86400e3 > STALE_DAYS){ res.reason = 'data verifikasi lama'; return (ccache[lead] = res); }
+  res.xy = fitCal(r);
+  if(!res.xy){ res.reason = `mengumpulkan arsip — ${r.N} pasangan / ${r.E} kejadian (perlu ≥${CAL_MIN_N} & ≥${CAL_MIN_EV})`; return (ccache[lead] = res); }
+  res.active = true; return (ccache[lead] = res);
+}
+function poeCal(p, dateStr){ if(!onCal || p==null) return p; const I = calInfo(leadFor(dateStr)); return I.active ? applyCal(I.xy, p) : p; }
+// uji jujur: kalibrasi untuk jendela i hanya dari pasangan yang pengamatannya sudah ada saat prakiraan dibuat
+const crc = {};
+function calRolling(i, lead){
+  const d = Math.floor(i/8), key = d+':'+lead;
+  if(!(key in crc)){ const to = d*8 - (lead+1)*8 + 8; crc[key] = fitCal(relRange(to - CAL_DAYS*8, to - 8, lead)); }
+  return crc[key];
+}
+
+/* ---------- 3) KOREKSI BIAS PER JAM (slot WITA) ----------
+   Per model & slot: faktor pengali f sehingga frekuensi "model ≥1 mm" = frekuensi hujan teramati di slot itu (quantile mapping di
+   ambang 1 mm). f dibatasi 0,33..3 dan ditarik ke 1 bila kejadian sedikit (λ = E/(E+20), di ruang log). Butuh ≥40 sampel per slot. */
+const SLOTS = [2,5,8,11,14,17,20,23], DIUR_DAYS = 30, LSD = 'mosaic.koreksiJam';
+const DIUR_DEFAULT = false;                        // diputuskan dari uji jujur (lihat catatan di tab Verifikasi)
+let onDiur = (()=>{ try{ const x = localStorage.getItem(LSD); return x==null ? DIUR_DEFAULT : x==='1'; }catch(e){ return DIUR_DEFAULT; } })();
+function slotOfWin(i){ return new Date(startMs() + i*H3 + 8*3600e3).getUTCHours(); }
+function diurFactors(from, to, lead){
+  const v = V(), L = String(lead), acc = {};
+  KEYS.forEach(k=>{ acc[k] = {}; SLOTS.forEach(s=>acc[k][s] = { fc:[], ev:0 }); });
+  v.pts.forEach(p=>{
+    const o = v.obs[p.id];
+    for(let i=Math.max(0,from); i<Math.min(to, v.n); i++){
+      if(o[i]==null) continue; const s = slotOfWin(i);
+      KEYS.forEach(k=>{ const a = v.fc[p.id][PARAM[k]], f = a && a[L] ? a[L][i] : null; if(f==null) return; const r = acc[k][s]; r.fc.push(f); if(o[i]>=THR) r.ev++; });
+    }
+  });
+  const out = {}, ev = {};
+  KEYS.forEach(k=>{ out[k] = {}; ev[k] = {}; SLOTS.forEach(s=>{
+    const r = acc[k][s], n = r.fc.length; let f = 1; ev[k][s] = r.ev;
+    if(n >= 40){
+      const fo = (r.ev + 0.5)/(n + 1), srt = r.fc.slice().sort((a,b)=>b-a), q = srt[Math.min(n-1, Math.floor(fo*n))];
+      const raw = q > 0.05 ? THR/q : 3, lam = r.ev/(r.ev + 20);
+      f = Math.exp(lam*Math.log(Math.max(0.33, Math.min(3, raw))));
+    }
+    out[k][s] = f;
+  }); });
+  return { f: out, ev };
+}
+const dcache = {};
+function diurInfo(lead){
+  lead = Math.max(0, Math.min(3, lead|0)); if(dcache[lead]) return dcache[lead];
+  const v = V(); if(!v || !v.fc) return (dcache[lead] = { lead, active:false, f:null, reason:'data verifikasi belum tersedia' });
+  const last = lastObsIdx();
+  if(last < 0 || (Date.now() - (startMs() + last*H3))/86400e3 > STALE_DAYS) return (dcache[lead] = { lead, active:false, f:null, reason:'data verifikasi lama' });
+  const r = diurFactors(last + 1 - DIUR_DAYS*8, last + 1, lead);
+  return (dcache[lead] = { lead, active:true, f:r.f, ev:r.ev, reason:'' });
+}
+// faktor untuk model k pada slot (jam mulai WITA) tanggal dateStr; 1 bila dimatikan / data tidak cukup
+function diur(k, dateStr, slotHour){
+  if(!onDiur) return 1; const I = diurInfo(leadFor(dateStr));
+  return I.active && I.f[k] ? (I.f[k][slotHour] || 1) : 1;
+}
+// jam data per jam Open-Meteo (presipitasi jam SEBELUMNYA) -> slot 3 jam yang memuatnya: jendela [T,T+3) = jam T+1..T+3
+function slotOfHour(H){ const t = H - 1 - (((H - 1 - 2) % 3) + 3) % 3; return (t + 24) % 24; }
+const drc = {};
+function diurRolling(i, lead){
+  const d = Math.floor(i/8), key = d+':'+lead;
+  if(!(key in drc)){ const to = d*8 - (lead+1)*8; drc[key] = diurFactors(to - DIUR_DAYS*8, to, lead).f; }
+  return drc[key];
+}
+
 window.MODEL_W = {
-  keys: KEYS, param: PARAM, winDays: WIN_DAYS,
+  keys: KEYS, param: PARAM, winDays: WIN_DAYS, calDays: CAL_DAYS, diurDays: DIUR_DAYS, slots: SLOTS, bins: PB,
   enabled: () => on,
   setEnabled(b){ on = !!b; store(false, on ? '1' : '0'); },
   get, forDate, rolling, info, leadFor,
+  // kalibrasi peluang ensemble
+  calEnabled: () => onCal, setCalEnabled(b){ onCal = !!b; try{ localStorage.setItem(LSC, onCal?'1':'0'); }catch(e){} },
+  calInfo, poeCal, calRolling, applyCal,
+  // koreksi per jam
+  diurEnabled: () => onDiur, setDiurEnabled(b){ onDiur = !!b; try{ localStorage.setItem(LSD, onDiur?'1':'0'); }catch(e){} },
+  diurInfo, diur, diurRolling, slotOfHour, slotOfWin,
 };
 })();

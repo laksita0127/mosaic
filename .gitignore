@@ -16,3 +16,5 @@ pipeline/verify_cache.json
 pipeline/verify_result.json
 verifikasi.js
 verif_obs.json
+verif_fc.json
+ens_archive.json

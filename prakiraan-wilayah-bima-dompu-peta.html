@@ -582,6 +582,8 @@
         <div id="vfVerdict" style="margin:8px 0;padding:8px 10px;border-left:3px solid var(--accent);background:var(--panel-alt);line-height:1.55"></div>
         <div class="produk-wrap" id="vfTable"></div>
         <div class="produk-wrap" id="vfSlots" style="margin-top:10px"></div>
+        <div id="vfDiur" style="margin:10px 0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius)"></div>
+        <div id="vfEns" style="margin:10px 0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius)"></div>
         <div id="vfChart" style="margin-top:10px"></div>
         <details class="note" style="margin-top:8px"><summary>ⓘ Uji awal: apakah "+ kondisi atmosfer" memperbaiki prakiraan?</summary>
           <div class="si-sub" style="line-height:1.6;margin-top:4px">
@@ -827,7 +829,10 @@ function ensPooledAt(pointId, stepTime){
   const q = P.precip3, at = k => (q[k] && q[k][si]!=null) ? q[k][si] : null;
   const poe = {};
   (ENS_MULTI.thresholds_mm||[]).forEach(t=>{ poe[t] = q.poe && q.poe[String(t)] ? q.poe[String(t)][si] : null; });
-  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe };
+  // kalibrasi peluang >=1 mm dari tabel keandalan (bobot.js; aktif hanya bila arsip ensemble vs CMORPH sudah cukup)
+  let cal = false;
+  if(window.MODEL_W && poe['1']!=null){ const c = MODEL_W.poeCal(poe['1'], stepTime.slice(0,10)); cal = c!==poe['1']; poe['1'] = c; }
+  return { nm:at('nm'), mean:at('mean'), p10:at('p10'), p50:at('p50'), p90:at('p90'), poe, cal };
 }
 function ensTotalMembers(){
   let n = 0;
@@ -1525,7 +1530,10 @@ function srcHour(rec, src){
     const mean = k => { const v=parts.map(p=>p[k]).filter(x=>x!=null); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; };
     // curah hujan: rata² BERBOBOT kinerja model (bobot.js, dari tab Verifikasi); bobot sama bila dimatikan / data kurang
     const W = (window.MODEL_W && rec.date) ? MODEL_W.forDate(rec.date) : null;
-    const wmean = k => { let sw=0, sv=0; MODELS.forEach(m=>{ const p=rec[m.key]; if(p && p[k]!=null){ const w = W ? W[m.key] : 1; sw+=w; sv+=w*p[k]; } }); return sw? sv/sw : null; };
+    // + koreksi bias per jam (bila diaktifkan di tab Verifikasi): curah hujan tiap model x faktor slot 3 jam yang memuat jam ini
+    const slot = (window.MODEL_W && rec.hour!=null) ? MODEL_W.slotOfHour(rec.hour) : null;
+    const cf = k => (k==='precip' && slot!=null) ? (m => MODEL_W.diur(m, rec.date, slot)) : (() => 1);
+    const wmean = k => { const f = cf(k); let sw=0, sv=0; MODELS.forEach(m=>{ const p=rec[m.key]; if(p && p[k]!=null){ const w = W ? W[m.key] : 1; sw+=w; sv+=w*p[k]*f(m.key); } }); return sw? sv/sw : null; };
     let sx=0,sy=0,nd=0, wc=null;
     parts.forEach(p=>{
       if(p.dir!=null){ const r=p.dir*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); nd++; }
@@ -1629,7 +1637,8 @@ function slotVotes(pi, hidx, dateStr, slotHour){
       const c = wxFromCode(r.wcode);
       if(c){ if(c.rank>=4) rainRank = Math.max(rainRank, c.rank); else cloudRank = Math.max(cloudRank, c.rank); }
     }
-    if(n || rainRank>=0 || cloudRank>=0) out.push({ key:m.key, mm: n?s:null, rainRank, cloudRank });
+    const f = window.MODEL_W ? MODEL_W.diur(m.key, dateStr, slotHour) : 1;     // koreksi bias per jam (1 bila tidak dipakai)
+    if(n || rainRank>=0 || cloudRank>=0) out.push({ key:m.key, mm: n?s*f:null, rainRank, cloudRank });
   });
   return out;
 }

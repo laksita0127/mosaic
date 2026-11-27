@@ -39,19 +39,21 @@ jobs:
       - name: Pulihkan data sebelumnya dari cabang site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh --restore ens_multi.js
+        run: bash pipeline/publish_site.sh --restore ens_multi.js ens_archive.json
 
       - name: Run pipeline
         env:
           # opsional: kunci API berbayar Open-Meteo (Settings > Secrets > OPENMETEO_API_KEY)
           OPENMETEO_API_KEY: ${{ secrets.OPENMETEO_API_KEY }}
         run: |
+          ok=0
           for i in 1 2 3; do
-            python pipeline/ingest_openmeteo_ens.py && break
-            echo "gagal (percobaan $i) — tunggu 3 menit lalu ulang"; sleep 180
+            python pipeline/ingest_openmeteo_ens.py && { ok=1; break; }
+            echo "gagal (percobaan $i)"; [ "$i" -lt 3 ] && sleep 180
           done
+          [ "$ok" = 1 ] || { echo "::error::ingest_openmeteo_ens.py gagal 3x — ens_multi.js TIDAK diperbarui"; exit 1; }
 
       - name: Terbitkan ke cabang site (tanpa menambah riwayat git)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash pipeline/publish_site.sh "multi-model ENS" ens_multi.js
+        run: bash pipeline/publish_site.sh "multi-model ENS" ens_multi.js ens_archive.json
